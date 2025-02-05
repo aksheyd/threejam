@@ -135,6 +135,10 @@
     <ClCompile Include="Game-Engine.cpp" />
     <ClCompile Include="glad.c" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="3.3.shader.frag" />
+    <None Include="3.3.shader.vert" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
