@@ -1,2 +1,6 @@
 # Game-Engine
- OpenGL C++ Engine using GLFW and Glad
+- Graphics API: OpenGL
+- OpenGL loader: GLAD
+- OpenGL contexts: GLFW
+- Image processing: STB
+- Math: GLM
