@@ -132,6 +132,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Bin\Include\Camera\camera.h" />
     <ClCompile Include="Game-Engine.cpp" />
     <ClCompile Include="glad.c" />
     <ClCompile Include="stb.cpp" />

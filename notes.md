@@ -20,6 +20,13 @@ Coordinate System:
 	- mapped over viewport by openGL called viewport transform
 
 - openGL is righthanded system (except for NDC) -> pos x is right, pos y is up and pos z is backwrds (RIGHT HAND RULE LMAO)
+
+Camera:
+- has a position, direction facing, right, and up (like transform handles in Unity)
+- these are found using the diff of origin from vec3 position normalized, normalized cross product for right with direction and a up vector (just pointing straight up), and actual up axis crossing right with direction 
+- lookAt function does this all for us and stores it in a matrix (view matrix becomes camera)
+- 
+
 Todo:
 - implement a texture class
 - implement a transformation / rotation / scale class
