@@ -27,6 +27,14 @@ Camera:
 - lookAt function does this all for us and stores it in a matrix (view matrix becomes camera)
 - 
 
+From class (composition -> flexible alternative to inheritance):
+- LECTURE 9!
+- gameobject are entities that are containers of components
+
+- vector of cpomnents with update (itearet through and call each components update)
+- template class T to add new component then hit start
+- for ex: make gameobject, add renderer and transform, they set them or u set them, then run update through object (which updates all components)
+
 Todo:
 - implement a texture class
 - implement a transformation / rotation / scale class
