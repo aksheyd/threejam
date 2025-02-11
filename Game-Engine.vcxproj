@@ -139,6 +139,8 @@
     <ClCompile Include="Test-Engine.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\2dshader.frag" />
+    <None Include="shaders\2dshader.vert" />
     <None Include="shaders\3.3.shader.frag" />
     <None Include="shaders\3.3.shader.vert" />
     <None Include="shaders\3.4.shader.frag" />

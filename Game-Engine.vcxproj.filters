@@ -37,6 +37,8 @@
     <None Include="shaders\3.4.shader.vert" />
     <None Include="shaders\3.4.shader.frag" />
     <None Include="shaders\3d.shader.vert" />
+    <None Include="shaders\2dshader.frag" />
+    <None Include="shaders\2dshader.vert" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\awesomeface.png">
