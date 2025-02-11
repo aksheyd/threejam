@@ -136,6 +136,7 @@
     <ClCompile Include="Game-Engine.cpp" />
     <ClCompile Include="glad.c" />
     <ClCompile Include="stb.cpp" />
+    <ClCompile Include="Test-Engine.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\3.3.shader.frag" />
@@ -147,6 +148,10 @@
   <ItemGroup>
     <Image Include="textures\awesomeface.png" />
     <Image Include="textures\container.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Component.h" />
+    <ClInclude Include="GameObject.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

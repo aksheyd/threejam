@@ -27,6 +27,9 @@
     <ClCompile Include="Bin\Include\Camera\camera.h">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Test-Engine.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\3.3.shader.frag" />
@@ -42,5 +45,13 @@
     <Image Include="textures\container.jpg">
       <Filter>Resource Files</Filter>
     </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="GameObject.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Component.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
