@@ -6,13 +6,19 @@
 class Component
 {
 public:
-	unsigned int ID;
+	//Component();
+	//~Component();
 
-	Component() : ID(0) {}
+	virtual void Start() {
 
-	Component(unsigned int input) {
-		ID = input;
-		std::cout << "Created component with ID: " << ID << std::endl;
+	}
+
+	virtual void Update() {
+
+	}
+
+	virtual void Destroy() {
+
 	}
 };
 

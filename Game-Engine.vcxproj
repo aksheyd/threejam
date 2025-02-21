@@ -132,9 +132,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Bin\Include\Camera\camera.h" />
+    <ClCompile Include="camera.h" />
     <ClCompile Include="Game-Engine.cpp" />
     <ClCompile Include="glad.c" />
+    <ClCompile Include="New-Engine.cpp" />
     <ClCompile Include="stb.cpp" />
     <ClCompile Include="Test-Engine.cpp" />
   </ItemGroup>
@@ -154,6 +155,9 @@
   <ItemGroup>
     <ClInclude Include="Component.h" />
     <ClInclude Include="GameObject.h" />
+    <ClInclude Include="Renderer.h" />
+    <ClInclude Include="shader_s.h" />
+    <ClInclude Include="Transform.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
