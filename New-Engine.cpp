@@ -8,6 +8,7 @@
 #include "shader_s.h"
 //#include "camera.h"
 
+#include "Object.h"
 #include "GameObject.h"
 #include "Component.h"
 #include "Renderer.h"
@@ -25,6 +26,8 @@ void processInput(GLFWwindow* window);
 
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
+
+int Object::_idCounter = 0;
 
 //// camera
 //Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -67,6 +70,10 @@ int main()
 
 	// enter logic here
 	GameObject e;
+	std::cout << e.GetInstanceId() << std::endl;
+
+	GameObject y;
+	std::cout << y.GetInstanceId() << std::endl;
 
 	// FIXME: this isn't a file error here but is a file error in the Renderer.h file
 	//Shader test = Shader("shaders/2dshader.vert", "shaders/2dshader.frag");

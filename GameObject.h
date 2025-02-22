@@ -2,15 +2,32 @@
 #define GAME_OBJECT
 
 #include <vector>
+#include <string>
 //#include <glm/glm.hpp>
 //#include <glm/gtc/matrix_transform.hpp>
 //#include <glm/gtc/type_ptr.hpp>
+#include "Object.h"
 #include "Component.h"
+#include "Transform.h"
+class Transform;
 
-class GameObject {
+class GameObject : public Object {
 	std::vector<Component*> components;
+	bool active = true;
 
 public:
+	// layer
+	// scene
+	// monobehaviour / update life cycle
+	Transform transform = Transform(); // every game object needs a transform
+
+	// Construct GameObject with name or not
+	GameObject() : Object("") {}
+	GameObject(const std::string& _name) : Object(_name)  { }
+
+	// TODO: move this to behaviour / monobehaviour
+	// myGameObject.Update(); 
+	// Call individual components's Update() 
 	void Update() {
 		size_t num_components = components.size();
 
@@ -25,9 +42,9 @@ public:
     template<class T>
     Component* AddComponent() {
         // Check if a component of type T already exists in vector
-		//if (GetComponent<T>() != nullptr) { 
-		//	return nullptr; 
-		//}
+		if (GetComponent<T>() != nullptr) { 
+			return nullptr; 
+		}
 
         // If no component of type T exists, create a new one
         Component* new_component = new T;
@@ -50,6 +67,9 @@ public:
 		return nullptr;
 	}
 
+	void SetActive(bool _newActive) {
+		active = _newActive;
+	}
 
 	//float Shape[15] = {
 	//	// positions         // tex coords

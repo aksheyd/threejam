@@ -2,13 +2,19 @@
 #define COMPONENT_H
 
 #include <iostream>
+#include <string>
+#include "Object.h"
 
-class Component
+class Component : public Object
 {
 public:
-	//Component();
+	//GameObject gameObject;
+	//Transform transform;
+
+	Component(const std::string& _name) : Object(_name) { }
 	//~Component();
 
+	// these are behaviours -> monobehaviours
 	virtual void Start() {
 
 	}

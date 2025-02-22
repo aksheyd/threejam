@@ -24,7 +24,7 @@
     <ClCompile Include="stb.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="camera.h">
+    <ClCompile Include="Camera.h">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Test-Engine.cpp">
@@ -42,6 +42,7 @@
     <None Include="shaders\3d.shader.vert" />
     <None Include="shaders\2dshader.frag" />
     <None Include="shaders\2dshader.vert" />
+    <None Include="Object.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\awesomeface.png">

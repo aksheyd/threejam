@@ -132,7 +132,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="camera.h" />
+    <ClCompile Include="Camera.h" />
     <ClCompile Include="Game-Engine.cpp" />
     <ClCompile Include="glad.c" />
     <ClCompile Include="New-Engine.cpp" />
@@ -140,6 +140,7 @@
     <ClCompile Include="Test-Engine.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Object.h" />
     <None Include="shaders\2dshader.frag" />
     <None Include="shaders\2dshader.vert" />
     <None Include="shaders\3.3.shader.frag" />
