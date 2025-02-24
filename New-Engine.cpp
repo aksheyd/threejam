@@ -64,45 +64,30 @@ int main()
 	glfwMakeContextCurrent(window);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-	// glad: load all OpenGL function pointers
-// ---------------------------------------
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
 		std::cout << "Failed to initialize GLAD" << std::endl;
 		return -1;
 	}
 
-	//glfwSetCursorPosCallback(window, mouse_callback);
-	//glfwSetScrollCallback(window, scroll_callback);
-
-	// enter logic here
+	// user logic *inserted* here
 	GameObject e;
 	e.AddComponent<Transform>();
 	e.AddComponent<MeshRenderer>();
 	e.AddComponent<MeshFilter>();
 
-	Transform* eT = e.GetComponent<Transform>();
-	MeshRenderer* eR = e.GetComponent<MeshRenderer>();
-	eT->SetPosition(glm::vec3(0.0f, 0.0f, 0.0f));
-
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
 		std::cout << "Failed to initialize GLAD" << std::endl;
 		return -1;
 	}
 
-	//glEnable(GL_DEPTH_TEST);
 	while (!glfwWindowShouldClose(window))
 	{
-		//float currentFrame = static_cast<double>(glfwGetTime());
-		//deltaTime = currentFrame - lastFrame;
-		//lastFrame = currentFrame;
-
-		processInput(window);
-
+		processInput(window); // esc to exit
 
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT /*| GL_DEPTH_BUFFER_BIT*/);
+		glClear(GL_COLOR_BUFFER_BIT);
 
 		e.Update();
 
