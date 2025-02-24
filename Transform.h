@@ -6,7 +6,6 @@
 #include "./Bin/Include/glm/gtc/type_ptr.hpp"
 #include "Component.h"
 #include "GameObject.h"
-class GameObject;
 
 class Transform : public Component
 {

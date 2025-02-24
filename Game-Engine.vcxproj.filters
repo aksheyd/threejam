@@ -43,6 +43,7 @@
     <None Include="shaders\2dshader.frag" />
     <None Include="shaders\2dshader.vert" />
     <None Include="Object.h" />
+    <None Include="todo.md" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\awesomeface.png">
@@ -66,6 +67,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Renderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MeshRenderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Mesh.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MeshFilter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

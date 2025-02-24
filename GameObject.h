@@ -3,9 +3,6 @@
 
 #include <vector>
 #include <string>
-//#include <glm/glm.hpp>
-//#include <glm/gtc/matrix_transform.hpp>
-//#include <glm/gtc/type_ptr.hpp>
 #include "Object.h"
 #include "Component.h"
 #include "Transform.h"
@@ -19,11 +16,18 @@ public:
 	// layer
 	// scene
 	// monobehaviour / update life cycle
-	Transform transform = Transform(); // every game object needs a transform
+	Transform* transform; // every game object needs a transform
 
 	// Construct GameObject with name or not
-	GameObject() : Object("") {}
-	GameObject(const std::string& _name) : Object(_name)  { }
+	GameObject() : Object("") { 
+		this->AddComponent<Transform>();
+		transform = this->GetComponent<Transform>();
+	}
+
+	GameObject(const std::string& _name) : Object(_name)  { 
+		this->AddComponent<Transform>();
+		transform = this->GetComponent<Transform>();
+	}
 
 	// TODO: move this to behaviour / monobehaviour
 	// myGameObject.Update(); 
@@ -48,6 +52,11 @@ public:
 
         // If no component of type T exists, create a new one
         Component* new_component = new T;
+
+		// Link gameobject and transforms to this object
+		new_component->gameObject = this;
+		new_component->transform = transform;
+
         components.push_back(new_component);
         new_component->Start();
         return new_component;
@@ -70,49 +79,6 @@ public:
 	void SetActive(bool _newActive) {
 		active = _newActive;
 	}
-
-	//float Shape[15] = {
-	//	// positions         // tex coords
-	//	 0.5f, -0.5f, 1.0f,  0.0f, 0.0f,
-	//	-0.5f, -0.5f, 1.0f,  1.0f, 0.0f,
-	//	 0.0f,  0.5f, 1.0f,  0.5f, 1.0f,
-	//};
-
-	//unsigned int VBO, VAO;
-
-	//GameObject() {
-	//	components[0] = Component();
-
-	//	glGenVertexArrays(1, &VAO);
-	//	glGenBuffers(1, &VBO);
-	//	glBindVertexArray(VAO);
-	//	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	//	glBufferData(GL_ARRAY_BUFFER, sizeof(Shape), Shape, GL_STATIC_DRAW);
-
-	//	// position attribute
-	//	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-	//	glEnableVertexAttribArray(0);
-	//	// color attribute
-	//	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-	//	glEnableVertexAttribArray(1);
-	//}
-
-	//void BindVertexArray() {
-	//	glBindVertexArray(VAO);
-	//}
-
-	//~GameObject() {
-	//	glDeleteVertexArrays(1, &VAO);
-	//	glDeleteBuffers(1, &VBO);
-	//}
-
-	//void Scale(glm::vec3 factor) {
-	//	glm::mat4 scale = glm::mat4(1.0f);
-
-	//	scale = glm::scale(scale, factor);
-
-	//	Shape = Shape * scale;
-	//}
 };
 
 #endif

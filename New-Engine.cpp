@@ -12,6 +12,8 @@
 #include "GameObject.h"
 #include "Component.h"
 #include "Renderer.h"
+#include "MeshRenderer.h"
+#include "MeshFilter.h"
 #include "Transform.h"
 
 #include <iostream>
@@ -27,6 +29,7 @@ void processInput(GLFWwindow* window);
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
+// so we can initiate incremental id's
 int Object::_idCounter = 0;
 
 //// camera
@@ -46,6 +49,10 @@ int main()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+#ifdef __APPLE__
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
 
 	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
 	if (window == NULL)
@@ -70,21 +77,13 @@ int main()
 
 	// enter logic here
 	GameObject e;
-	std::cout << e.GetInstanceId() << std::endl;
-
-	GameObject y;
-	std::cout << y.GetInstanceId() << std::endl;
-
-	// FIXME: this isn't a file error here but is a file error in the Renderer.h file
-	//Shader test = Shader("shaders/2dshader.vert", "shaders/2dshader.frag");
 	e.AddComponent<Transform>();
-	e.AddComponent<Renderer>();
+	e.AddComponent<MeshRenderer>();
+	e.AddComponent<MeshFilter>();
 
 	Transform* eT = e.GetComponent<Transform>();
-	Renderer* eR = e.GetComponent<Renderer>();
-
-	eT->SetPosition(glm::vec3(1.0f, 1.0f, 1.0f));
-	std::cout << "Num: " << eT->GetPosition().x << std::endl;
+	MeshRenderer* eR = e.GetComponent<MeshRenderer>();
+	eT->SetPosition(glm::vec3(0.0f, 0.0f, 0.0f));
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
@@ -101,8 +100,11 @@ int main()
 
 		processInput(window);
 
+
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT /*| GL_DEPTH_BUFFER_BIT*/);
+
+		e.Update();
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();

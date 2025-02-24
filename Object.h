@@ -17,7 +17,7 @@ public:
 		return _instanceId;
 	}
 
-	std::string ToString() {
+	const std::string ToString() {
 		return name;
 	}
 

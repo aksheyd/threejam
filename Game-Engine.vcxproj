@@ -148,6 +148,7 @@
     <None Include="shaders\3.4.shader.frag" />
     <None Include="shaders\3.4.shader.vert" />
     <None Include="shaders\3d.shader.vert" />
+    <None Include="todo.md" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\awesomeface.png" />
@@ -156,6 +157,9 @@
   <ItemGroup>
     <ClInclude Include="Component.h" />
     <ClInclude Include="GameObject.h" />
+    <ClInclude Include="Mesh.h" />
+    <ClInclude Include="MeshFilter.h" />
+    <ClInclude Include="MeshRenderer.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="shader_s.h" />
     <ClInclude Include="Transform.h" />
