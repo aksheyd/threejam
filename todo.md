@@ -1,8 +1,9 @@
 TODO
-1. Mesh -> MeshFilter is a component with Mesh objects 
-	a. clean up code
-2. every game object needs a transform
-1. every component needs a gameobject and transform (how do i do this cyclic linking?)
+1. meshs should have multiple types (square, triangle, cube)
+# 1. every game object needs a transform (tree-like)
+# 2. every component needs a gameobject and transform
+3. need a camera to actually test transform
+4. multithread camera with object mesh's with transforms ????
 
 
 clean up code base around all of this ^^^

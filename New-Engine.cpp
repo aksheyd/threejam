@@ -16,7 +16,20 @@
 #include "MeshFilter.h"
 #include "Transform.h"
 
+#include "Triangle.h"
+#include "Square.h"
+
 #include <iostream>
+//#include <mutex>
+//
+//std::mutex e1;
+//
+//int calculate(int x) {
+//	e1.lock();
+//	std::cout << x << std::endl;
+//	e1.unlock();
+//	return x * 2;
+//}
 
 void SetWireframe() {
 	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -72,9 +85,11 @@ int main()
 
 	// user logic *inserted* here
 	GameObject e;
-	e.AddComponent<Transform>();
 	e.AddComponent<MeshRenderer>();
 	e.AddComponent<MeshFilter>();
+
+	e.GetComponent<MeshRenderer>()->color = glm::vec4(1.0f, 0.0f, 0.0f, 0.5f);
+	//e.GetComponent<MeshFilter>()->mesh = new Triangle();
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{

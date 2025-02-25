@@ -16,7 +16,6 @@ public:
 	Transform* transform = nullptr;
 
 	Component(const std::string& _name) : Object(_name) { }
-	//~Component();
 
 	// these are behaviours -> monobehaviours
 	virtual void Start() {
@@ -29,6 +28,10 @@ public:
 
 	virtual void Destroy() {
 
+	}
+
+	~Component() {
+		Destroy();
 	}
 };
 

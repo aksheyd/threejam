@@ -14,14 +14,19 @@
 #include "Renderer.h"
 #include "Mesh.h"
 
+#include "Triangle.h"
+#include "Square.h"
+
 // contains data about Mesh's
 class MeshFilter : public Component
 {
 
 public:
-	Mesh mesh;
+	//reminder: this is a pointer so the derived class can be switched at runtime
+	Mesh* mesh;
 
-	MeshFilter() : mesh(), Component("MeshFilter") { }
+	MeshFilter() : mesh(new Triangle()), Component("MeshFilter") {}
+	MeshFilter(Mesh* _type) : mesh(_type), Component("MeshFilter") {}
 };
 
 #endif

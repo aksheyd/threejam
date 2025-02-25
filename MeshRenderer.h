@@ -14,23 +14,28 @@ class MeshRenderer : public Renderer
 public:
 	glm::vec4 color;
 
-	// default create a colored triangle?
-	MeshRenderer() : color(255.0f, 0.0f, 0.0f, 1.0f), Renderer("MeshRenderer") {
-		_shader.setVec4("color", color);
+	// pink if color is uninit
+	MeshRenderer() : color(1.0f, 0.4f, 0.8f, 1.0f), Renderer("MeshRenderer") {
+		_shader.use();
+	}
+
+	MeshRenderer(glm::vec4& _color) : color(_color), Renderer("MeshRenderer") {
 		_shader.use();
 	}
 
     void Update() {
+		// MeshRenderer controls rendering of MeshFiler
         MeshFilter* meshFilter = gameObject->GetComponent<MeshFilter>();
 
         if (meshFilter == nullptr) {
 			return; // no meshFilter to render
         }
 
-
+		_shader.setVec4("color", color);
 		_shader.use();
-		meshFilter->mesh.BindVertexArray();
-		glDrawArrays(GL_TRIANGLES, 0, 3);
+
+		//std::cout << meshFilter->mesh.name << std::cout;
+		meshFilter->mesh->Draw();
     }
 
 };

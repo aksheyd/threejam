@@ -13,12 +13,9 @@ class GameObject : public Object {
 	bool active = true;
 
 public:
-	// layer
-	// scene
-	// monobehaviour / update life cycle
 	Transform* transform; // every game object needs a transform
 
-	// Construct GameObject with name or not
+	// make sure that only transform is class transform
 	GameObject() : Object("") { 
 		this->AddComponent<Transform>();
 		transform = this->GetComponent<Transform>();
