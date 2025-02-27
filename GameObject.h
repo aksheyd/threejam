@@ -54,6 +54,12 @@ public:
 		new_component->gameObject = this;
 		new_component->transform = transform;
 
+        if (typeid(T) != typeid(Transform)) {
+			if (new_component->gameObject == nullptr || new_component->transform == nullptr) {
+				std::cout << "COMPONENT::GAMEOBJ/TRANSFORM::NOT::SET | " << new_component->name << std::endl;
+			}
+		}
+
         components.push_back(new_component);
         new_component->Start();
         return new_component;

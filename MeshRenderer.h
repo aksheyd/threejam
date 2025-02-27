@@ -2,12 +2,14 @@
 #define MESHRENDERER_H
 
 #include <iostream>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <string>
+
 #include "MeshFilter.h"
 #include "Renderer.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
-#include <string>
+#include "Camera.h"
 
 class MeshRenderer : public Renderer
 {
@@ -23,21 +25,35 @@ public:
 		_shader.use();
 	}
 
+    #include <glm/gtc/matrix_transform.hpp> // Ensure this include is present
+
+    // ...
+
     void Update() {
-		// MeshRenderer controls rendering of MeshFiler
+        // MeshRenderer controls rendering of MeshFiler
         MeshFilter* meshFilter = gameObject->GetComponent<MeshFilter>();
 
         if (meshFilter == nullptr) {
-			return; // no meshFilter to render
+            return; // no meshFilter to render
         }
 
-		_shader.setVec4("color", color);
-		_shader.use();
+        glm::mat4 projection = glm::perspective(glm::radians(Camera::main->Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        _shader.setMat4("projection", projection);
 
-		//std::cout << meshFilter->mesh.name << std::cout;
-		meshFilter->mesh->Draw();
+        glm::mat4 view = Camera::main->GetViewMatrix();
+        _shader.setMat4("view", view);
+
+        // set model matrix for camera
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), transform->position);
+        _shader.setMat4("model", model);
+
+        // set color
+        _shader.setVec4("color", color);
+        _shader.use();
+
+        //std::cout << meshFilter->mesh.name << std::cout;
+        meshFilter->mesh->Draw();
     }
-
 };
 
 #endif

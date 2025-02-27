@@ -4,13 +4,19 @@
 #include "./Bin/Include/glm/gtc/matrix_transform.hpp"
 #include "./Bin/Include/glm/gtc/type_ptr.hpp"
 #include "./Bin/Include/stb/stb_image.h"
+#include <iostream>
+
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
 
 #include "shader_s.h"
-//#include "camera.h"
 
 #include "Object.h"
-#include "GameObject.h"
 #include "Component.h"
+
+#include "GameObject.h"
+
+#include "Camera.h"
 #include "Renderer.h"
 #include "MeshRenderer.h"
 #include "MeshFilter.h"
@@ -19,7 +25,7 @@
 #include "Triangle.h"
 #include "Square.h"
 
-#include <iostream>
+
 //#include <mutex>
 //
 //std::mutex e1;
@@ -39,22 +45,9 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 //void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow* window);
 
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
-
-// so we can initiate incremental id's
+// Set static variables
 int Object::_idCounter = 0;
-
-//// camera
-//Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
-//float lastX = SCR_WIDTH / 2.0f;
-//float lastY = SCR_HEIGHT / 2.0f;
-//bool firstMouse = true;
-//
-//// timing
-//float deltaTime = 0.0f;	// time between current frame and last frame
-//float lastFrame = 0.0f;
-
+Camera* Camera::main = nullptr;
 
 int main()
 {
@@ -83,13 +76,30 @@ int main()
 		return -1;
 	}
 
-	// user logic *inserted* here
-	GameObject e;
-	e.AddComponent<MeshRenderer>();
-	e.AddComponent<MeshFilter>();
 
-	e.GetComponent<MeshRenderer>()->color = glm::vec4(1.0f, 0.0f, 0.0f, 0.5f);
-	//e.GetComponent<MeshFilter>()->mesh = new Triangle();
+	// Camera gameobject with editable transform
+	GameObject cam;
+	cam.AddComponent<Camera>();
+	Camera* camComp = cam.GetComponent<Camera>(); 
+	cam.transform->position = glm::vec3(0.0f, 0.0f, 3.0f);
+	
+
+	// *- Users should not be able to add Camera -*
+	// square with transform thanks to camera
+	GameObject mySquare;
+	mySquare.AddComponent<MeshRenderer>();
+	mySquare.AddComponent<MeshFilter>();
+	mySquare.GetComponent<MeshRenderer>()->color = glm::vec4(0.0f, 1.0f, 0.0f, 0.5f);
+	mySquare.GetComponent<MeshFilter>()->mesh = new Square();
+	mySquare.transform->position = glm::vec3(0.5f, 0.5f, 0.0f);
+
+	// square with transform thanks to camera
+	GameObject mySquare2;
+	mySquare2.AddComponent<MeshRenderer>();
+	mySquare2.AddComponent<MeshFilter>();
+	mySquare2.GetComponent<MeshFilter>()->mesh = new Square();
+	mySquare2.transform->position = glm::vec3(-0.5f, -0.5f, 0.0f);
+
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
@@ -97,14 +107,23 @@ int main()
 		return -1;
 	}
 
+	glEnable(GL_DEPTH_TEST);
 	while (!glfwWindowShouldClose(window))
 	{
 		processInput(window); // esc to exit
 
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		e.Update();
+		// error check if no main camera set
+		if (Camera::main == nullptr) {
+			std::cout << "ERROR::NO::CAMERA::SET" << std::endl;
+			return 1;
+		}
+
+		cam.Update();
+		mySquare.Update();
+		mySquare2.Update();
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();

@@ -9,24 +9,25 @@
 
 class Transform : public Component
 {
-	glm::vec3 _position;
+	
 public:
 	// FIXME: are transforms trees?
 	//Transform* parent;
 	//GameObject* gameObject;
+	glm::vec3 position;
 
 	// Construct Transform() with identity coordinates or with an init position
-	Transform() : _position(glm::vec3(0.0f, 0.0f, 0.0f)), Component("Transform") { }
-	Transform(const glm::vec3& init_position) : _position(init_position), Component("Transform") { }
+	Transform() : position(glm::vec3(0.0f, 0.0f, 0.0f)), Component("Transform") { }
+	Transform(const glm::vec3& init_position) : position(init_position), Component("Transform") { }
 
-	void SetPosition(const glm::vec3& new_position) 
-	{
-		_position = new_position;
-	}
+	//void SetPosition(const glm::vec3& new_position) 
+	//{
+	//	position = new_position;
+	//}
 
-	glm::vec3 GetPosition() {
-		return _position;
-	}
+	//glm::vec3 GetPosition() {
+	//	return position;
+	//}
 };
 
 #endif
