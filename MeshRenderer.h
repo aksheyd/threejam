@@ -37,6 +37,8 @@ public:
             return; // no meshFilter to render
         }
 
+        transform->position.x = sin(glfwGetTime());
+
         glm::mat4 projection = glm::perspective(glm::radians(Camera::main->Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
         _shader.setMat4("projection", projection);
 

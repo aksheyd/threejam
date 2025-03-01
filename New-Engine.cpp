@@ -25,6 +25,9 @@ const unsigned int SCR_HEIGHT = 600;
 #include "Triangle.h"
 #include "Square.h"
 
+#include <thread>
+
+
 
 //#include <mutex>
 //
@@ -121,9 +124,22 @@ int main()
 			return 1;
 		}
 
+		//std::thread cam_thread([&]() { cam.Update(); });
+		//cam_thread.detach();
+
+
+		//std::thread sq1_thread([&]() { mySquare.Update(); });
+		//sq1_thread.join();
+	
+		//std::thread sq2_thread([&]() { mySquare2.Update(); });
+		//sq2_thread.join();
+		
 		cam.Update();
 		mySquare.Update();
 		mySquare2.Update();
+
+		
+
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
@@ -133,6 +149,10 @@ int main()
 
 	return 0;
 }
+
+// https://vkguide.dev/docs/extra-chapter/multithreading/
+
+
 //// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 //// ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow* window)
