@@ -20,21 +20,29 @@ public:
 		if (glfwGetKey(window, kc) == GLFW_PRESS) {
 			return true;
 		}
-		else {
+		else 
+		{
 			return false;
 		}
 	}
 
 	static void WASD(Transform* trans, double increment, GLFWwindow* window) {
-		if (GetKeyDown(KeyCode::W, window)) {
+		if (GetKeyDown(KeyCode::W, window)) 
+		{
 			trans->position.y += increment;
-		} else if (GetKeyDown(KeyCode::A, window)) {
+		} else 
+		if (GetKeyDown(KeyCode::A, window)) 
+		{
 			trans->position.x -= increment;
 		}
-		else if (GetKeyDown(KeyCode::S, window)) {
+		else 
+		if (GetKeyDown(KeyCode::S, window)) 
+		{
 			trans->position.y -= increment;
 		}
-		else if (GetKeyDown(KeyCode::D, window)) {
+		else 
+		if (GetKeyDown(KeyCode::D, window)) 
+		{
 			trans->position.x += increment;
 		}
 	}
