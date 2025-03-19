@@ -157,11 +157,13 @@
   <ItemGroup>
     <ClInclude Include="Component.h" />
     <ClInclude Include="GameObject.h" />
+    <ClInclude Include="Input.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="MeshFilter.h" />
     <ClInclude Include="MeshRenderer.h" />
     <ClInclude Include="Multithreading.h" />
     <ClInclude Include="Renderer.h" />
+    <ClInclude Include="ScriptedComponent.h" />
     <ClInclude Include="shader_s.h" />
     <ClInclude Include="Square.h" />
     <ClInclude Include="Transform.h" />

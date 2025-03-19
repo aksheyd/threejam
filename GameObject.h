@@ -1,6 +1,8 @@
 #ifndef GAME_OBJECT
 #define GAME_OBJECT
 
+#include "./Bin/Include/glad/glad.h"
+#include "./Bin/Include/GLFW/glfw3.h"
 #include <vector>
 #include <string>
 #include "Object.h"
@@ -14,14 +16,17 @@ class GameObject : public Object {
 
 public:
 	Transform* transform; // every game object needs a transform
+	GLFWwindow* window; 
 
 	// make sure that only transform is class transform
-	GameObject() : Object("") { 
+	GameObject(GLFWwindow* _window) : Object("") { 
+		window = _window;
 		this->AddComponent<Transform>();
 		transform = this->GetComponent<Transform>();
 	}
 
-	GameObject(const std::string& _name) : Object(_name)  { 
+	GameObject(const std::string& _name, GLFWwindow* _window) : Object(_name)  {
+		window = _window;
 		this->AddComponent<Transform>();
 		transform = this->GetComponent<Transform>();
 	}
@@ -53,6 +58,7 @@ public:
 		// Link gameobject and transforms to this object
 		new_component->gameObject = this;
 		new_component->transform = transform;
+		new_component->window = window;
 
         if (typeid(T) != typeid(Transform)) {
 			if (new_component->gameObject == nullptr || new_component->transform == nullptr) {

@@ -25,20 +25,9 @@ const unsigned int SCR_HEIGHT = 600;
 #include "Triangle.h"
 #include "Square.h"
 
+#include "Input.h"
+
 #include <thread>
-
-
-
-//#include <mutex>
-//
-//std::mutex e1;
-//
-//int calculate(int x) {
-//	e1.lock();
-//	std::cout << x << std::endl;
-//	e1.unlock();
-//	return x * 2;
-//}
 
 void SetWireframe() {
 	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -51,6 +40,15 @@ void processInput(GLFWwindow* window);
 // Set static variables
 int Object::_idCounter = 0;
 Camera* Camera::main = nullptr;
+
+class Script : public Component {
+public:
+	Script() : Component("UserScript") { }
+
+	void Update() {
+		Input::WASD(transform, 0.01f, window);
+	}
+};
 
 int main()
 {
@@ -81,7 +79,7 @@ int main()
 
 
 	// Camera gameobject with editable transform
-	GameObject cam;
+	GameObject cam(window);
 	cam.AddComponent<Camera>();
 	Camera* camComp = cam.GetComponent<Camera>(); 
 	cam.transform->position = glm::vec3(0.0f, 0.0f, 3.0f);
@@ -89,20 +87,20 @@ int main()
 
 	// *- Users should not be able to add Camera -*
 	// square with transform thanks to camera
-	GameObject mySquare;
+	GameObject mySquare(window);
 	mySquare.AddComponent<MeshRenderer>();
 	mySquare.AddComponent<MeshFilter>();
 	mySquare.GetComponent<MeshRenderer>()->color = glm::vec4(0.0f, 1.0f, 0.0f, 0.5f);
 	mySquare.GetComponent<MeshFilter>()->mesh = new Square();
 	mySquare.transform->position = glm::vec3(0.5f, 0.5f, 0.0f);
+	mySquare.AddComponent<Script>();
 
 	// square with transform thanks to camera
-	GameObject mySquare2;
+	GameObject mySquare2(window);
 	mySquare2.AddComponent<MeshRenderer>();
 	mySquare2.AddComponent<MeshFilter>();
 	mySquare2.GetComponent<MeshFilter>()->mesh = new Square();
 	mySquare2.transform->position = glm::vec3(-0.5f, -0.5f, 0.0f);
-
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
@@ -123,23 +121,10 @@ int main()
 			std::cout << "ERROR::NO::CAMERA::SET" << std::endl;
 			return 1;
 		}
-
-		//std::thread cam_thread([&]() { cam.Update(); });
-		//cam_thread.detach();
-
-
-		//std::thread sq1_thread([&]() { mySquare.Update(); });
-		//sq1_thread.join();
-	
-		//std::thread sq2_thread([&]() { mySquare2.Update(); });
-		//sq2_thread.join();
 		
 		cam.Update();
 		mySquare.Update();
 		mySquare2.Update();
-
-		
-
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
