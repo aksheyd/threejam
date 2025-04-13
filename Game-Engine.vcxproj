@@ -155,6 +155,7 @@
     <Image Include="textures\container.jpg" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Collider2D.h" />
     <ClInclude Include="Component.h" />
     <ClInclude Include="GameObject.h" />
     <ClInclude Include="Input.h" />

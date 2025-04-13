@@ -121,7 +121,7 @@ int main()
 			std::cout << "ERROR::NO::CAMERA::SET" << std::endl;
 			return 1;
 		}
-		
+
 		cam.Update();
 		mySquare.Update();
 		mySquare2.Update();

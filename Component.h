@@ -14,9 +14,9 @@ class GameObject;
 class Component : public Object
 {
 public:
-	GameObject* gameObject = nullptr;
-	Transform* transform = nullptr;
-	GLFWwindow* window = nullptr;
+	GameObject* gameObject = nullptr; // parent gameobject
+	Transform* transform = nullptr; // points to parent gameobject's transform
+	GLFWwindow* window = nullptr; // window for input class
 
 	Component(const std::string& _name) : Object(_name) { }
 
