@@ -1,6 +1,9 @@
 import { GameError } from './errors.ts'
+import { PORTABLE } from './math.ts'
 
-type Timers = Pick<typeof globalThis, 'setTimeout' | 'setInterval' | 'queueMicrotask'>
+const CLOCK = 'count ticks with ctx.tick, since game time only moves in ticks'
+const TIMERS = ['setTimeout', 'setInterval', 'queueMicrotask', 'requestAnimationFrame'] as const
+const MATH = Object.entries(PORTABLE)
 
 function blocked(name: string, instead: string): () => never {
   return () => {
@@ -8,22 +11,16 @@ function blocked(name: string, instead: string): () => never {
   }
 }
 
-const CLOCK = 'count ticks with ctx.tick, since game time only moves in ticks'
-
 export function guarded<T>(fn: () => T): T {
-  const g = globalThis as typeof globalThis & Timers
-  const frames = typeof g.requestAnimationFrame === 'function'
-  const saved = {
-    random: Math.random,
-    Date: g.Date,
-    now: performance.now,
-    setTimeout: g.setTimeout,
-    setInterval: g.setInterval,
-    queueMicrotask: g.queueMicrotask,
-    requestAnimationFrame: g.requestAnimationFrame,
-  }
+  const saved = { random: Math.random, Date: globalThis.Date, now: performance.now }
+  const timers = TIMERS.filter((name) => typeof Reflect.get(globalThis, name) === 'function').map((name) => ({
+    name,
+    original: Reflect.get(globalThis, name),
+  }))
+  const natives = MATH.map(([name]) => ({ name, native: Reflect.get(Math, name) }))
+  for (const [name, portable] of MATH) Reflect.set(Math, name, portable)
   Math.random = blocked('Math.random()', 'use ctx.random(), which is seeded')
-  g.Date = new Proxy(saved.Date, {
+  globalThis.Date = new Proxy(saved.Date, {
     apply: blocked('Date()', CLOCK),
     construct(target, args) {
       if (args.length === 0) blocked('new Date()', CLOCK)()
@@ -34,23 +31,18 @@ export function guarded<T>(fn: () => T): T {
     },
   })
   performance.now = blocked('performance.now()', CLOCK)
-  g.setTimeout = blocked('setTimeout()', CLOCK) as unknown as typeof setTimeout
-  g.setInterval = blocked('setInterval()', CLOCK) as unknown as typeof setInterval
-  g.queueMicrotask = blocked('queueMicrotask()', CLOCK)
-  if (frames) g.requestAnimationFrame = blocked('requestAnimationFrame()', CLOCK)
+  for (const { name } of timers) Reflect.set(globalThis, name, blocked(`${name}()`, CLOCK))
   try {
     const result = fn()
-    if (result !== null && typeof result === 'object' && typeof (result as { then?: unknown }).then === 'function') {
+    if (typeof result === 'object' && result !== null && 'then' in result && typeof result.then === 'function') {
       throw new GameError('start and update must not be async, since game time only moves in ticks')
     }
     return result
   } finally {
+    for (const { name, native } of natives) Reflect.set(Math, name, native)
     Math.random = saved.random
-    g.Date = saved.Date
+    globalThis.Date = saved.Date
     performance.now = saved.now
-    g.setTimeout = saved.setTimeout
-    g.setInterval = saved.setInterval
-    g.queueMicrotask = saved.queueMicrotask
-    if (frames) g.requestAnimationFrame = saved.requestAnimationFrame
+    for (const { name, original } of timers) Reflect.set(globalThis, name, original)
   }
 }

@@ -1,117 +1,53 @@
-// Flappy: Space starts a run and each press flaps. Fly through the gaps; hitting a pipe or the ground ends the run.
-import { defineGame, type Context, type Entities, type World } from 'fourjs'
+// Flappy: Space starts a run and each press flaps. Fly through the gaps; hitting a pipe, the ceiling, or the ground ends the run.
+import { defineGame, grid, group, oneOf, type Context, type Entities, type World } from 'fourjs'
 
 const OUTLINE = '#543847'
-const PIPE = '#73bf2e'
-const PIPE_HI = '#9ce659'
-const PIPE_LO = '#558e22'
 const WHITE = '#ffffff'
 
 const LEFT = -2
 const BOB_PERIOD = 0.8
-const WING_FRAMES = [0.018, 0, -0.018, 0]
-const STRIPE_COUNT = 27
-const STRIPE_WRAP_AT = -2.16
-const STRIPE_PERIOD = 4.32
 
-type State = 'ready' | 'play' | 'over'
-type Part = { dx: number; dy: number; w: number; h: number; color: string; flaps?: boolean }
-type Rect = { x: number; y: number; w: number; h: number; color: string }
-
-// A pipe pair's parts, as offsets from its gap.
-const PIPE_PARTS = {
-  top_line: { dx: 0, dy: 2.16, w: 0.36, h: 3.2, color: OUTLINE },
-  top: { dx: 0, dy: 2.16, w: 0.32, h: 3.2, color: PIPE },
-  top_hi: { dx: -0.105, dy: 2.16, w: 0.05, h: 3.2, color: PIPE_HI },
-  top_lo: { dx: 0.13, dy: 2.16, w: 0.06, h: 3.2, color: PIPE_LO },
-  top_cap_line: { dx: 0, dy: 0.48, w: 0.4, h: 0.16, color: OUTLINE },
-  top_cap: { dx: 0, dy: 0.48, w: 0.36, h: 0.12, color: PIPE },
-  top_cap_hi: { dx: -0.12, dy: 0.48, w: 0.05, h: 0.12, color: PIPE_HI },
-  top_cap_lo: { dx: 0.15, dy: 0.48, w: 0.06, h: 0.12, color: PIPE_LO },
-  bot_line: { dx: 0, dy: -2.16, w: 0.36, h: 3.2, color: OUTLINE },
-  bot: { dx: 0, dy: -2.16, w: 0.32, h: 3.2, color: PIPE },
-  bot_hi: { dx: -0.105, dy: -2.16, w: 0.05, h: 3.2, color: PIPE_HI },
-  bot_lo: { dx: 0.13, dy: -2.16, w: 0.06, h: 3.2, color: PIPE_LO },
-  bot_cap_line: { dx: 0, dy: -0.48, w: 0.4, h: 0.16, color: OUTLINE },
-  bot_cap: { dx: 0, dy: -0.48, w: 0.36, h: 0.12, color: PIPE },
-  bot_cap_hi: { dx: -0.12, dy: -0.48, w: 0.05, h: 0.12, color: PIPE_HI },
-  bot_cap_lo: { dx: 0.15, dy: -0.48, w: 0.06, h: 0.12, color: PIPE_LO },
-} satisfies Record<string, Part>
-const PIPE_PART_NAMES = Object.keys(PIPE_PARTS) as Array<keyof typeof PIPE_PARTS>
-const PIPE_SOLIDS = ['top_line', 'top_cap_line', 'bot_line', 'bot_cap_line'] as const
-const PIPES = ['pipe1', 'pipe2', 'pipe3'] as const
-
-// The bird's parts, drawn over its outline, as offsets from it.
-const BIRD_PARTS = {
-  body: { dx: 0, dy: 0, w: 0.216, h: 0.156, color: '#fad129' },
-  belly: { dx: 0.006, dy: -0.048, w: 0.156, h: 0.048, color: '#fdee9e' },
-  wing_line: { dx: -0.066, dy: -0.006, w: 0.108, h: 0.078, color: OUTLINE, flaps: true },
-  wing: { dx: -0.066, dy: -0.006, w: 0.084, h: 0.054, color: '#fdf7e0', flaps: true },
-  eye: { dx: 0.054, dy: 0.036, w: 0.078, h: 0.078, color: WHITE },
-  pupil: { dx: 0.0744, dy: 0.0324, w: 0.0264, h: 0.042, color: '#1f1414' },
-  beak_line: { dx: 0.102, dy: -0.036, w: 0.126, h: 0.084, color: OUTLINE },
-  beak_top: { dx: 0.1044, dy: -0.0204, w: 0.108, h: 0.0288, color: '#fa5921' },
-  beak_bot: { dx: 0.0996, dy: -0.0516, w: 0.096, h: 0.0264, color: '#e64d1f' },
-} satisfies Record<string, Part>
-const BIRD_PART_NAMES = Object.keys(BIRD_PARTS) as Array<keyof typeof BIRD_PARTS>
-
-function parts<P extends string, T extends Record<string, Part>>(prefix: P, table: T, x: number, y: number) {
-  const rects: Record<string, Rect> = {}
-  for (const [name, part] of Object.entries(table)) {
-    rects[prefix + name] = { x: x + part.dx, y: y + part.dy, w: part.w, h: part.h, color: part.color }
-  }
-  return rects as Record<`${P}${keyof T & string}`, Rect>
-}
-
-function gap(x: number) {
-  return { x, y: 0, w: 0.4, h: 0.8, visible: false, gap_min: -0.35, gap_max: 0.75, wrap: 4.8, home_x: 0, scored: false }
-}
-
-function stripes() {
-  const triangles: Record<string, Rect & { shape: 'triangle' }> = {}
-  for (let i = 0; i < STRIPE_COUNT; i++) {
-    triangles[`stripe_${i + 1}`] = { x: STRIPE_WRAP_AT + 0.16 * i, y: -1.095, w: 0.1, h: 0.06, shape: 'triangle', color: PIPE }
-  }
-  return triangles as Record<`stripe_${number}`, Rect & { shape: 'triangle' }>
-}
+// The boxes of a pipe pair, offset from its gap: the top pipe and its cap, then the bottom pipe and its cap.
+const WALLS = [
+  { part: 'top_line', dy: 2.16, w: 0.36, h: 3.2 },
+  { part: 'top_cap_line', dy: 0.48, w: 0.4, h: 0.16 },
+  { part: 'bot_line', dy: -2.16, w: 0.36, h: 3.2 },
+  { part: 'bot_cap_line', dy: -0.48, w: 0.4, h: 0.16 },
+]
 
 const entities = {
   ceiling: { x: 0, y: 2, w: 4.4, h: 1, visible: false },
-  pipe1: gap(2.25),
-  ...parts('pipe1_', PIPE_PARTS, 2.25, 0),
-  pipe2: gap(3.85),
-  ...parts('pipe2_', PIPE_PARTS, 3.85, 0),
-  pipe3: gap(5.45),
-  ...parts('pipe3_', PIPE_PARTS, 5.45, 0),
-  ground: { x: 0, y: -1.275, w: 4.2, h: 0.45, color: '#ded895' },
-  ground_line: { x: 0, y: -1.0575, w: 4.2, h: 0.015, color: OUTLINE },
-  grass: { x: 0, y: -1.095, w: 4.2, h: 0.06, color: PIPE_HI },
-  ...stripes(),
-  grass_edge: { x: 0, y: -1.13, w: 4.2, h: 0.01, color: '#558022' },
-  dirt_edge: { x: 0, y: -1.1425, w: 4.2, h: 0.015, color: '#d7a84c' },
+  // Each pipe pair is its gap, and walls[i] are the boxes around pipes[i] in the order of WALLS.
+  pipes: group(3, (i) => ({
+    x: 2.25 + 1.6 * i, y: 0, w: 0.4, h: 0.8, visible: false,
+    gap_min: -0.35, gap_max: 0.75, wrap: 4.8, home_x: 0, scored: false,
+  })),
+  walls: grid(3, WALLS.length, ({ col }) => ({ w: WALLS[col].w, h: WALLS[col].h, color: OUTLINE })),
+  // scroll is how far the ground has moved, for the stripes view.ts draws.
+  ground: { x: 0, y: -1.275, w: 4.2, h: 0.45, color: '#ded895', scroll: 0 },
   // The bird's box is its outline. restart_delay is in ticks.
   bird: {
     x: -0.9, y: 0.1, w: 0.24, h: 0.18, color: OUTLINE,
     gravity: 8, flap_speed: 2.3, max_fall: 3.5, forward_speed: 1, bob: 0.03, restart_delay: 30,
-    state: 'ready' as State, vy: 0, score: 0, age: 0, landed: false as boolean, over_ticks: 0, can_restart: false as boolean, home_y: 0,
+    state: oneOf(['ready', 'play', 'over']), vy: 0, score: 0, age: 0, landed: false, over_ticks: 0, can_restart: false, home_y: 0,
   },
-  ...parts('bird_', BIRD_PARTS, -0.9, 0.1),
-  // Capitals come out about 0.72 of size tall with their middle 0.1 of size above y, so these sizes and offsets compensate.
-  score_shadow: { x: 0.02, y: 1.14, text: '0', size: 0.39, color: OUTLINE },
-  score: { x: 0, y: 1.16, text: '0', size: 0.39, color: WHITE },
-  title_shadow: { x: 0.015, y: 0.605, text: 'GET READY', size: 0.29, color: OUTLINE },
-  title: { x: 0, y: 0.62, text: 'GET READY', size: 0.29, color: WHITE },
-  prompt_shadow: { x: 0.01, y: 0.32, text: 'PRESS SPACE', size: 0.195, color: OUTLINE },
-  prompt: { x: 0, y: 0.33, text: 'PRESS SPACE', size: 0.195, color: WHITE },
+  // The beak sticks out of the bird's box, so pipes test both; dx and dy place it from the bird.
+  beak: { w: 0.126, h: 0.084, color: OUTLINE, dx: 0.102, dy: -0.036 },
+  score_shadow: { x: 0.02, y: 1.18, text: '0', size: 0.28, color: OUTLINE },
+  score: { x: 0, y: 1.2, text: '0', size: 0.28, color: WHITE },
+  title_shadow: { x: 0.015, y: 0.635, text: 'GET READY', size: 0.21, color: OUTLINE },
+  title: { x: 0, y: 0.65, text: 'GET READY', size: 0.21, color: WHITE },
+  prompt_shadow: { x: 0.01, y: 0.34, text: 'PRESS SPACE', size: 0.14, color: OUTLINE },
+  prompt: { x: 0, y: 0.35, text: 'PRESS SPACE', size: 0.14, color: WHITE },
   // ticks is how long the flash fades after a crash, and peak its opacity on the crash tick.
   flash: { w: 4, h: 3, color: WHITE, opacity: 0, ticks: 20, peak: 0.85, left: 0 },
 } satisfies Entities
 
 type Flappy = World<typeof entities>
 type Bird = Flappy['bird']
-type Pipe = Flappy['pipe1']
-type PipeName = (typeof PIPES)[number]
-type Box = { x: number; y: number; w: number; h: number }
+type Pipe = Flappy['pipes'][number]
+type Wall = Flappy['walls'][number][number]
+type Box = Pick<Wall, 'x' | 'y' | 'w' | 'h'>
 
 function overlaps(a: Box, b: Box): boolean {
   return Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.y - b.y) < (a.h + b.h) / 2
@@ -154,6 +90,18 @@ function goHome(pipe: Pipe, bird: Bird, ctx: Context): void {
   pipe.scored = pipe.x < bird.x
 }
 
+function placeWalls(pipe: Pipe, walls: readonly Wall[]): void {
+  for (const [col, wall] of walls.entries()) {
+    wall.x = pipe.x
+    wall.y = pipe.y + WALLS[col].dy
+  }
+}
+
+function placeBeak({ bird, beak }: Flappy): void {
+  beak.x = bird.x + beak.dx
+  beak.y = bird.y + beak.dy
+}
+
 function restart(world: Flappy, ctx: Context): void {
   const { bird } = world
   bird.state = 'ready'
@@ -163,64 +111,53 @@ function restart(world: Flappy, ctx: Context): void {
   bird.landed = false
   bird.over_ticks = 0
   bird.can_restart = false
-  for (const name of PIPES) goHome(world[name], bird, ctx)
-}
-
-function placeBird(world: Flappy): void {
-  const { bird } = world
-  const wing = bird.state === 'over' ? 0 : WING_FRAMES[Math.floor(bird.age / 5) % 4]
-  for (const name of BIRD_PART_NAMES) {
-    const part: Part = BIRD_PARTS[name]
-    const shape = world[`bird_${name}`]
-    shape.x = bird.x + part.dx
-    shape.y = bird.y + part.dy + (part.flaps ? wing : 0)
-  }
+  for (const pipe of world.pipes) goHome(pipe, bird, ctx)
 }
 
 function moveBird(world: Flappy, ctx: Context): void {
   const { bird, ground, ceiling } = world
   const pressed = ctx.input.pressed('Space')
   bird.age += 1
+  // Not a case below: the press that starts a run is also its first flap.
   if (bird.state === 'ready') {
     bird.y = bird.home_y + bird.bob * Math.sin((bird.age * ctx.dt * 2 * Math.PI) / BOB_PERIOD)
     if (pressed) bird.state = 'play'
   }
-  if (bird.state === 'play') {
-    fly(bird, pressed, ctx)
-    if (overlaps(bird, ground)) {
-      land(world)
-      crash(world, 'the ground', ctx)
-    } else if (overlaps(bird, ceiling)) {
-      bird.y = ceiling.y - (ceiling.h + bird.h) / 2
-      crash(world, 'the ceiling', ctx)
-    }
-  } else if (bird.state === 'over') {
-    if (bird.can_restart && pressed) {
-      restart(world, ctx)
-    } else if (!bird.landed) {
-      fly(bird, false, ctx)
-      if (bird.y <= restY(world)) land(world)
-    } else {
-      bird.over_ticks += 1
-      bird.can_restart = bird.over_ticks >= bird.restart_delay
+  switch (bird.state) {
+    case 'ready':
+      break
+    case 'play':
+      fly(bird, pressed, ctx)
+      if (overlaps(bird, ground)) {
+        land(world)
+        crash(world, 'the ground', ctx)
+      } else if (overlaps(bird, ceiling)) {
+        bird.y = ceiling.y - (ceiling.h + bird.h) / 2
+        crash(world, 'the ceiling', ctx)
+      }
+      break
+    case 'over':
+      if (bird.can_restart && pressed) {
+        restart(world, ctx)
+      } else if (!bird.landed) {
+        fly(bird, false, ctx)
+        if (bird.y <= restY(world)) land(world)
+      } else {
+        bird.over_ticks += 1
+        bird.can_restart = bird.over_ticks >= bird.restart_delay
+      }
+      break
+    default: {
+      const _exhaustive: never = bird.state
+      return _exhaustive
     }
   }
-  placeBird(world)
-}
-
-function placePipe(world: Flappy, name: PipeName): void {
-  const pipe = world[name]
-  for (const part of PIPE_PART_NAMES) {
-    const shape = world[`${name}_${part}`]
-    shape.x = pipe.x + PIPE_PARTS[part].dx
-    shape.y = pipe.y + PIPE_PARTS[part].dy
-  }
+  placeBeak(world)
 }
 
 function movePipes(world: Flappy, ctx: Context): void {
   const { bird } = world
-  for (const name of PIPES) {
-    const pipe = world[name]
+  for (const [i, pipe] of world.pipes.entries()) {
     if (bird.state === 'play') {
       pipe.x -= bird.forward_speed * ctx.dt
       if (pipe.x < LEFT - pipe.w / 2) {
@@ -229,41 +166,28 @@ function movePipes(world: Flappy, ctx: Context): void {
         pipe.scored = false
       }
     }
-    placePipe(world, name)
+    placeWalls(pipe, world.walls[i])
   }
 }
 
-function scrollGround(world: Flappy, ctx: Context): void {
-  const { bird } = world
-  if (bird.state === 'over') return
-  for (const stripe of ctx.all('stripe_')) {
-    stripe.x -= bird.forward_speed * ctx.dt
-    if (stripe.x < STRIPE_WRAP_AT) stripe.x += STRIPE_PERIOD
-  }
-}
-
-function solidHit(world: Flappy, name: PipeName): string | undefined {
-  // The beak sticks out of the bird's box, so pipes test both.
-  const boxes = [world.bird, world.bird_beak_line]
-  const solid = PIPE_SOLIDS.find((solid) => boxes.some((box) => overlaps(box, world[`${name}_${solid}`])))
-  return solid && `${name}_${solid}`
+function scrollGround({ bird, ground }: Flappy, ctx: Context): void {
+  if (bird.state !== 'over') ground.scroll += bird.forward_speed * ctx.dt
 }
 
 function referee(world: Flappy, ctx: Context): void {
-  const { bird } = world
-  for (const name of PIPES) {
-    const hit = solidHit(world, name)
-    if (hit) {
-      crash(world, hit, ctx)
+  const { bird, beak } = world
+  for (const [i, walls] of world.walls.entries()) {
+    const hit = walls.findIndex((wall) => overlaps(bird, wall) || overlaps(beak, wall))
+    if (hit >= 0) {
+      crash(world, `pipe${i + 1}_${WALLS[hit].part}`, ctx)
       return
     }
   }
-  for (const name of PIPES) {
-    const pipe = world[name]
+  for (const [i, pipe] of world.pipes.entries()) {
     if (!pipe.scored && pipe.x + pipe.w / 2 < bird.x - bird.w / 2) {
       pipe.scored = true
       bird.score += 1
-      ctx.print(`passed ${name}, score ${bird.score}`)
+      ctx.print(`passed pipe${i + 1}, score ${bird.score}`)
     }
   }
 }
@@ -292,12 +216,12 @@ export default defineGame({
   start(world, ctx) {
     const { bird } = world
     bird.home_y = bird.y
-    for (const name of PIPES) {
-      const pipe = world[name]
+    for (const [i, pipe] of world.pipes.entries()) {
       pipe.home_x = pipe.x
       goHome(pipe, bird, ctx)
-      placePipe(world, name)
+      placeWalls(pipe, world.walls[i])
     }
+    placeBeak(world)
   },
   update(world, ctx) {
     moveBird(world, ctx)

@@ -1,34 +1,40 @@
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { randomInt } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type ServerResponse } from 'node:http'
-import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import * as esbuild from 'esbuild'
 import { UsageError } from './errors.ts'
-import { ROOT, gameFile } from './load.ts'
+import { ROOT, gameFiles } from './load.ts'
 import type { Config } from './browser/client.ts'
 
 export interface Page {
-  outdir: string
+  readonly outdir: string
   dispose(): Promise<void>
 }
 
-export async function buildPage(dir: string, config: Config, onRebuild?: (errors: string[]) => void): Promise<Page> {
-  const file = gameFile(dir)
-  const folder = dirname(file)
-  const view = ['view.ts', 'view.js'].map((name) => join(folder, name)).find((path) => existsSync(path))
+export interface PageOptions {
+  readonly dir: string
+  readonly config: Config
+  readonly driver?: string
+  readonly onRebuild?: (errors: string[]) => void
+}
+
+export async function buildPage({ dir, config, driver, onRebuild }: PageOptions): Promise<Page> {
+  const files = gameFiles(dir)
   const outdir = mkdtempSync(join(tmpdir(), 'fourjs-'))
-  writeFileSync(join(outdir, 'index.html'), html(basename(folder), config))
+  writeFileSync(join(outdir, 'index.html'), html(basename(files.folder), config))
   const entry = [
-    `import game from ${JSON.stringify(file)}`,
-    view ? `import * as view from ${JSON.stringify(view)}` : 'const view = {}',
+    `import game from ${JSON.stringify(files.game)}`,
+    files.view ? `import * as view from ${JSON.stringify(files.view)}` : 'const view = {}',
+    driver ? `import driver from ${JSON.stringify(resolve(driver))}` : 'const driver = undefined',
     `import { play } from ${JSON.stringify(join(ROOT, 'src', 'browser', 'client.ts'))}`,
-    'play(game, view, window.FOUR)',
+    'play({ game, view, driver, config: window.FOUR })',
   ].join('\n')
-  let first = true
+  let watching = false
   const context = await esbuild.context({
-    stdin: { contents: entry, resolveDir: folder, sourcefile: 'four-entry.ts', loader: 'ts' },
+    stdin: { contents: entry, resolveDir: files.folder, sourcefile: 'four-entry.ts', loader: 'ts' },
     bundle: true,
     format: 'esm',
     platform: 'browser',
@@ -40,12 +46,10 @@ export async function buildPage(dir: string, config: Config, onRebuild?: (errors
     plugins: [
       {
         name: 'four-rebuild',
-        setup(build) {
-          build.onEnd((result) => {
-            if (first) return
-            onRebuild?.(result.errors.map(formatMessage))
-          })
-        },
+        setup: (build) =>
+          void build.onEnd((result) => {
+            if (watching) onRebuild?.(result.errors.map(formatMessage))
+          }),
       },
     ],
   })
@@ -53,10 +57,12 @@ export async function buildPage(dir: string, config: Config, onRebuild?: (errors
   if (result.errors.length > 0) {
     await context.dispose()
     rmSync(outdir, { recursive: true, force: true })
-    throw new UsageError(result.errors.map(formatMessage).join('\n'))
+    throw new UsageError(result.errors.map(formatMessage).join('; '))
   }
-  first = false
-  if (onRebuild) await context.watch()
+  if (onRebuild) {
+    watching = true
+    await context.watch()
+  }
   return {
     outdir,
     async dispose() {
@@ -89,12 +95,12 @@ function html(title: string, config: Config): string {
 }
 
 export interface Server {
-  url: string
+  readonly url: string
   reload(): void
   close(): void
 }
 
-export function serve(outdir: string, onQuit: () => void = () => {}): Promise<Server> {
+export function serve({ outdir, onQuit = () => {} }: { outdir: string; onQuit?: () => void }): Promise<Server> {
   const listeners = new Set<ServerResponse>()
   const server = createServer((request, response) => {
     const path = (request.url ?? '/').split('?')[0]
@@ -123,11 +129,15 @@ export function serve(outdir: string, onQuit: () => void = () => {}): Promise<Se
     response.writeHead(200, { 'content-type': `${type}; charset=utf-8`, 'cache-control': 'no-store' })
     response.end(readFileSync(join(outdir, name)))
   })
-  return new Promise((resolve) => {
+  return new Promise((ready, fail) => {
     server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address() as AddressInfo
-      resolve({
-        url: `http://127.0.0.1:${port}/`,
+      const address = server.address()
+      if (address === null || typeof address === 'string') {
+        fail(new Error(`the page server has no port: ${String(address)}`))
+        return
+      }
+      ready({
+        url: `http://127.0.0.1:${address.port}/`,
         reload() {
           for (const listener of listeners) listener.write('data: reload\n\n')
         },
@@ -151,12 +161,12 @@ export function findChrome(): string | undefined {
   return undefined
 }
 
-interface Window {
-  exited: Promise<void>
+interface AppWindow {
+  readonly exited: Promise<void>
   close(): void
 }
 
-function openWindow(url: string): Window | undefined {
+function openWindow(url: string): AppWindow | undefined {
   const chrome = findChrome()
   if (!chrome) {
     spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { stdio: 'ignore', detached: true }).unref()
@@ -164,28 +174,29 @@ function openWindow(url: string): Window | undefined {
   }
   const profile = mkdtempSync(join(tmpdir(), 'fourjs-profile-'))
   const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628']
-  const child: ChildProcess = spawn(chrome, args, { stdio: 'ignore' })
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
-  exited.then(() => rmSync(profile, { recursive: true, force: true }))
+  const child = spawn(chrome, args, { stdio: 'ignore' })
+  const exited = new Promise<void>((done) => child.once('exit', () => done()))
+  void exited.then(() => rmSync(profile, { recursive: true, force: true }))
   return { exited, close: () => void child.kill() }
 }
 
-export async function* play(dir: string, options: { seed?: number; window: boolean }): AsyncGenerator<string> {
+export async function* play({ dir, seed = randomInt(2 ** 31), window }: { dir: string; seed?: number; window: boolean }): AsyncGenerator<string> {
   let quit = () => {}
   const done = new Promise<void>((resolve) => (quit = resolve))
   let server: Server | undefined
-  const page = await buildPage(dir, { mode: 'run', seed: options.seed }, (errors) => {
-    if (errors.length > 0) process.stderr.write(`${errors.join('\n')}\n`)
-    else server?.reload()
+  const page = await buildPage({
+    dir,
+    config: { mode: 'run', seed },
+    onRebuild: (errors) => (errors.length > 0 ? void process.stderr.write(`${errors.join('\n')}\n`) : server?.reload()),
   })
-  server = await serve(page.outdir, () => quit())
-  const window = options.window ? openWindow(server.url) : undefined
-  window?.exited.then(() => quit())
+  server = await serve({ outdir: page.outdir, onQuit: () => quit() })
+  const app = window ? openWindow(server.url) : undefined
+  void app?.exited.then(() => quit())
   process.once('SIGINT', () => quit())
   process.once('SIGTERM', () => quit())
-  yield `Playing ${dir} at ${server.url}${options.window ? '. Esc quits, and saving a file reloads the game.' : ''}`
+  yield `Playing ${dir} with seed ${seed} at ${server.url}${window ? '. Esc quits, and saving a file replays the game with the same seed.' : ''}`
   await done
-  window?.close()
+  app?.close()
   server.close()
   await page.dispose()
   yield 'Stopped.'

@@ -1,17 +1,20 @@
 import * as THREE from 'three'
-import type { Drawable, Game, Value } from '../types.ts'
+import { FONT_ADVANCE, FONT_ROWS, glyph } from '../font.ts'
+import type { Drawable, Entities, EntitiesOf, Game, ReadonlyDeep, World } from '../types.ts'
 
-export interface ViewSetup {
-  THREE: typeof THREE
-  scene: THREE.Scene
-  camera: THREE.OrthographicCamera
-  renderer: THREE.WebGLRenderer
-  objects: ReadonlyMap<string, THREE.Mesh>
+export type EntityMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>
+
+export interface ViewSetup<G extends Game = Game> {
+  readonly THREE: typeof THREE
+  readonly scene: THREE.Scene
+  readonly camera: THREE.OrthographicCamera
+  readonly renderer: THREE.WebGLRenderer
+  readonly objects: ReadonlyMap<string, EntityMesh>
+  readonly world: ReadonlyDeep<World<EntitiesOf<G>>>
 }
 
-export interface ViewFrame extends ViewSetup {
-  entities: Readonly<Record<string, Record<string, Value>>>
-  tick: number
+export interface ViewFrame<G extends Game = Game> extends ViewSetup<G> {
+  readonly tick: number
 }
 
 export interface ViewModule {
@@ -19,8 +22,11 @@ export interface ViewModule {
   draw?(frame: ViewFrame): void
 }
 
-const FONT_PX = 96
-const FONT = `600 ${FONT_PX}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`
+export interface Scene {
+  readonly drawables: readonly Drawable[]
+  readonly world: ReadonlyDeep<World<Entities>>
+  readonly tick: number
+}
 
 const GEOMETRY = {
   square: new THREE.PlaneGeometry(1, 1),
@@ -32,101 +38,139 @@ const GEOMETRY = {
 }
 
 interface Label {
-  text: string
-  texture: THREE.CanvasTexture
-  aspect: number
+  readonly text: string
+  readonly texture: THREE.CanvasTexture
+  readonly columns: number
 }
 
 export class View {
-  readonly renderer: THREE.WebGLRenderer
-  readonly scene = new THREE.Scene()
-  readonly camera = new THREE.OrthographicCamera(-2, 2, 1.5, -1.5, -10, 10)
-  readonly objects = new Map<string, THREE.Mesh>()
+  readonly #renderer: THREE.WebGLRenderer
+  readonly #scene = new THREE.Scene()
+  readonly #camera = new THREE.OrthographicCamera(-2, 2, 1.5, -1.5, -10, 10)
+  readonly #objects = new Map<string, EntityMesh>()
   readonly #labels = new Map<string, Label>()
   readonly #custom: ViewModule
+  #started = false
 
-  constructor(canvas: HTMLCanvasElement, game: Game, custom: ViewModule) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true })
-    this.scene.background = new THREE.Color(game.background ?? '#08080d')
+  constructor({ canvas, game, custom }: { canvas: HTMLCanvasElement; game: Game; custom: ViewModule }) {
+    this.#renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true })
+    this.#scene.background = new THREE.Color(game.background ?? '#08080d')
     this.#custom = custom
-    custom.init?.(this.#setup())
   }
 
   resize(width: number, height: number, ratio = devicePixelRatio): void {
-    this.renderer.setPixelRatio(ratio)
-    this.renderer.setSize(width, height)
+    this.#renderer.setPixelRatio(ratio)
+    this.#renderer.setSize(width, height)
   }
 
-  draw(drawables: Drawable[], entities: Record<string, Record<string, Value>>, tick: number): void {
-    drawables.forEach((drawable, order) => {
-      const mesh = this.objects.get(drawable.name) ?? this.#create(drawable.name, order)
-      if (drawable.kind === 'text') this.#text(mesh, drawable)
-      else this.#shape(mesh, drawable)
-    })
-    this.#custom.draw?.({ ...this.#setup(), entities, tick })
-    this.renderer.render(this.scene, this.camera)
+  draw({ drawables, world, tick }: Scene): void {
+    for (const drawable of drawables) this.#place(this.#objects.get(drawable.name) ?? this.#create(drawable), drawable)
+    const setup: ViewSetup = { THREE, scene: this.#scene, camera: this.#camera, renderer: this.#renderer, objects: this.#objects, world }
+    if (!this.#started) {
+      this.#started = true
+      custom('init', () => this.#custom.init?.(setup))
+    }
+    custom(`draw at tick ${tick}`, () => this.#custom.draw?.({ ...setup, tick }))
+    this.#renderer.render(this.#scene, this.#camera)
   }
 
-  #setup(): ViewSetup {
-    return { THREE, scene: this.scene, camera: this.camera, renderer: this.renderer, objects: this.objects }
-  }
-
-  #create(name: string, order: number): THREE.Mesh {
-    const material = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false })
+  #create(drawable: Drawable): EntityMesh {
+    // Custom blending fades without joining Three's transparent pass, so faded meshes keep their declared order.
+    const material = new THREE.MeshBasicMaterial({ depthTest: false, depthWrite: false, blending: THREE.CustomBlending })
     const mesh = new THREE.Mesh(GEOMETRY.square, material)
-    mesh.name = name
-    mesh.renderOrder = order
-    this.scene.add(mesh)
-    this.objects.set(name, mesh)
+    mesh.name = drawable.name
+    mesh.renderOrder = drawable.order
+    this.#scene.add(mesh)
+    this.#objects.set(drawable.name, mesh)
     return mesh
   }
 
-  #shape(mesh: THREE.Mesh, { fields: f }: Drawable): void {
-    mesh.geometry = GEOMETRY[f.shape]
-    mesh.position.set(f.x, f.y, 0)
-    mesh.scale.set(f.w, f.h, 1)
-    mesh.visible = f.visible
-    const material = mesh.material as THREE.MeshBasicMaterial
-    material.color.set(f.color)
-    material.opacity = f.opacity
-  }
-
-  #text(mesh: THREE.Mesh, { name, fields: f }: Drawable): void {
-    const label = this.#label(name, f.text)
-    const height = f.size * 1.25
-    const width = height * label.aspect
-    const shift = f.align === 'left' ? width / 2 : f.align === 'right' ? -width / 2 : 0
-    mesh.position.set(f.x + shift, f.y, 0)
-    mesh.scale.set(width, height, 1)
-    mesh.visible = f.visible && f.text !== ''
-    const material = mesh.material as THREE.MeshBasicMaterial
-    if (material.map !== label.texture) {
-      material.map = label.texture
-      material.needsUpdate = true
+  #place(mesh: EntityMesh, drawable: Drawable): void {
+    const material = mesh.material
+    material.opacity = drawable.opacity
+    material.color.set(drawable.color)
+    switch (drawable.kind) {
+      case 'shape':
+        mesh.geometry = GEOMETRY[drawable.shape]
+        mesh.position.set(drawable.x, drawable.y, 0)
+        mesh.scale.set(drawable.w, drawable.h, 1)
+        mesh.visible = drawable.visible
+        this.#texture(material, null, 0)
+        return
+      case 'text': {
+        const label = this.#label(drawable.name, drawable.text)
+        mesh.visible = drawable.visible && label !== undefined
+        if (label === undefined) return
+        const height = drawable.size
+        const width = (label.columns * height) / FONT_ROWS
+        const left = drawable.x - (drawable.align === 'left' ? 0 : drawable.align === 'right' ? width : width / 2)
+        // Snapping the corner to a whole screen pixel keeps the font's pixels sharp.
+        const pixel = 4 / this.#renderer.domElement.width
+        const snap = (value: number) => Math.round(value / pixel) * pixel
+        mesh.geometry = GEOMETRY.square
+        mesh.position.set(snap(left) + width / 2, snap(drawable.y - height / 2) + height / 2, 0)
+        mesh.scale.set(width, height, 1)
+        this.#texture(material, label.texture, 0.5)
+        return
+      }
+      default: {
+        const _exhaustive: never = drawable
+        void _exhaustive
+      }
     }
-    material.color.set(f.color)
-    material.opacity = f.opacity
   }
 
-  #label(name: string, text: string): Label {
+  #texture(material: THREE.MeshBasicMaterial, texture: THREE.CanvasTexture | null, alphaTest: number): void {
+    if (material.map === texture && material.alphaTest === alphaTest) return
+    material.map = texture
+    material.alphaTest = alphaTest
+    material.needsUpdate = true
+  }
+
+  #label(name: string, text: string): Label | undefined {
+    if (text === '') return undefined
     const cached = this.#labels.get(name)
     if (cached?.text === text) return cached
+    const columns = text.length * FONT_ADVANCE - 1
     const canvas = document.createElement('canvas')
+    canvas.width = columns
+    canvas.height = FONT_ROWS
     const context = canvas.getContext('2d')
     if (!context) throw new Error('this browser has no 2D canvas for text')
-    context.font = FONT
-    canvas.width = Math.max(1, Math.ceil(context.measureText(text).width + FONT_PX * 0.2))
-    canvas.height = Math.ceil(FONT_PX * 1.25)
-    context.font = FONT
     context.fillStyle = '#ffffff'
-    context.textAlign = 'center'
-    context.textBaseline = 'middle'
-    context.fillText(text, canvas.width / 2, canvas.height / 2)
+    for (const [index, char] of [...text].entries()) {
+      for (const [row, pixels] of (glyph(char) ?? []).entries()) {
+        for (const [column, pixel] of [...pixels].entries()) if (pixel === '#') context.fillRect(index * FONT_ADVANCE + column, row, 1, 1)
+      }
+    }
     const texture = new THREE.CanvasTexture(canvas)
+    texture.magFilter = THREE.NearestFilter
+    texture.minFilter = THREE.NearestFilter
+    texture.generateMipmaps = false
     texture.colorSpace = THREE.SRGBColorSpace
     cached?.texture.dispose()
-    const label = { text, texture, aspect: canvas.width / canvas.height }
+    const label = { text, texture, columns }
     this.#labels.set(name, label)
     return label
+  }
+}
+
+export function parseView(value: unknown): ViewModule {
+  if (typeof value !== 'object' || value === null) return {}
+  const init = 'init' in value ? value.init : undefined
+  const draw = 'draw' in value ? value.draw : undefined
+  if (init !== undefined && typeof init !== 'function') throw new Error('view.ts: init must be a function')
+  if (draw !== undefined && typeof draw !== 'function') throw new Error('view.ts: draw must be a function')
+  return {
+    init: init === undefined ? undefined : (setup) => void Reflect.apply(init, undefined, [setup]),
+    draw: draw === undefined ? undefined : (frame) => void Reflect.apply(draw, undefined, [frame]),
+  }
+}
+
+function custom(what: string, run: () => void): void {
+  try {
+    run()
+  } catch (error) {
+    throw new Error(`view.ts: ${error instanceof Error ? error.message : String(error)} (in ${what})`, { cause: error })
   }
 }

@@ -1,12 +1,10 @@
-// Decoration only: sprites over the boxes game.ts moves, the arcade's green band, and a 5x7 pixel font.
+// Decoration only: sprites over the boxes game.ts moves, and the arcade's green band.
 import type { ViewFrame, ViewSetup } from 'fourjs'
-import type { BufferGeometry, Mesh, MeshBasicMaterial, Scene } from 'three'
-import { textArt } from './font.ts'
-import type { Invader, Invaders } from './game.ts'
+import type { BufferGeometry, Mesh } from 'three'
+import type game from './game.ts'
 import { BOOM, CANNON, INVADERS, UFO, boxes, type Box } from './sprites.ts'
 
 type Three = ViewSetup['THREE']
-type Text = { x: number; y: number; visible: boolean; text: string; size: number; align: string; color: string; opacity: number }
 
 const WHITE = '#ffffff'
 const GREEN = '#33ff33'
@@ -15,8 +13,6 @@ const GREEN_BELOW = -0.6
 
 // Geometries in a unit square, which each mesh's scale stretches to its entity's w and h.
 let sprites: { cannon: BufferGeometry; ufo: BufferGeometry; boom: BufferGeometry; invaders: BufferGeometry[][]; bombs: BufferGeometry[] }
-// Pixel-font meshes that replace the default text meshes, rebuilt only when their text changes.
-const labels = new Map<string, { mesh: Mesh; text: string }>()
 
 function geometry(THREE: Three, parts: Box[]): BufferGeometry {
   const points = parts.flatMap(({ x, y, w, h }) => {
@@ -34,10 +30,6 @@ function bombParts(slot: number): Box[] {
   ]
 }
 
-function tint(mesh: Mesh, y: number): void {
-  ;(mesh.material as MeshBasicMaterial).color.set(y < GREEN_BELOW ? GREEN : WHITE)
-}
-
 // The renderer always antialiases, so odd-width sprites would blur; this rounds a mesh's corner to a whole pixel.
 function snap(mesh: Mesh, width: number, height: number): void {
   const round = (edge: number, span: number, pixels: number) => {
@@ -48,34 +40,7 @@ function snap(mesh: Mesh, width: number, height: number): void {
   mesh.position.y += round(mesh.position.y - mesh.scale.y / 2, 3, height)
 }
 
-function label(THREE: Three, scene: Scene, name: string, base: Mesh, t: Text): void {
-  base.visible = false
-  let entry = labels.get(name)
-  if (!entry) {
-    const material = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false })
-    entry = { mesh: new THREE.Mesh(new THREE.BufferGeometry(), material), text: '' }
-    entry.mesh.renderOrder = base.renderOrder
-    scene.add(entry.mesh)
-    labels.set(name, entry)
-  }
-  const { mesh } = entry
-  mesh.visible = t.visible && t.text !== ''
-  if (!mesh.visible) return
-  if (entry.text !== t.text) {
-    mesh.geometry.dispose()
-    mesh.geometry = geometry(THREE, boxes(textArt(t.text)))
-    entry.text = t.text
-  }
-  const width = ((6 * t.text.length - 1) * t.size) / 7
-  const shift = t.align === 'left' ? width / 2 : t.align === 'right' ? -width / 2 : 0
-  mesh.position.set(t.x + shift, t.y, 0)
-  mesh.scale.set(width, t.size, 1)
-  const material = mesh.material as MeshBasicMaterial
-  material.color.set(t.color)
-  material.opacity = t.opacity
-}
-
-export function init({ THREE }: ViewSetup): void {
+export function init({ THREE }: ViewSetup<typeof game>): void {
   const sprite = (art: readonly string[]) => geometry(THREE, boxes(art))
   sprites = {
     cannon: sprite(CANNON),
@@ -86,27 +51,31 @@ export function init({ THREE }: ViewSetup): void {
   }
 }
 
-export function draw({ THREE, scene, renderer, entities, objects }: ViewFrame): void {
-  const world = entities as unknown as Invaders
+export function draw({ THREE, world, objects, renderer }: ViewFrame<typeof game>): void {
+  const mesh = (name: string): Mesh => {
+    const found = objects.get(name)
+    if (!found) throw new Error(`no mesh for ${name}`)
+    return found
+  }
+  const tint = (target: Mesh, y: number) => {
+    if (target.material instanceof THREE.MeshBasicMaterial) target.material.color.set(y < GREEN_BELOW ? GREEN : WHITE)
+  }
+
   const pose = world.fleet.steps % 2
-  for (const [name, mesh] of objects) {
-    const fields = entities[name]
-    if (typeof fields.text === 'string') {
-      label(THREE, scene, name, mesh, fields as unknown as Text)
-    } else if (name.startsWith('inv_')) {
-      const inv = fields as unknown as Invader
-      mesh.geometry = sprites.invaders[inv.row - 1][pose]
-      tint(mesh, inv.y)
+  for (const [row, invaders] of world.invaders.entries()) {
+    for (const inv of invaders) {
+      const target = mesh(inv.name)
+      target.geometry = sprites.invaders[row][pose]
+      tint(target, inv.y)
     }
   }
-  const find = (name: string) => objects.get(name) as Mesh
-  for (const name of ['cannon', 'life1', 'life2']) find(name).geometry = sprites.cannon
-  find('ufo').geometry = sprites.ufo
-  find('boom').geometry = sprites.boom
-  tint(find('boom'), world.boom.y)
-  for (const name of ['bomb1', 'bomb2', 'bomb3'] as const) find(name).geometry = sprites.bombs[Math.floor(world[name].age / 4) % 3]
+  for (const { name } of [world.cannon, world.life1, world.life2]) mesh(name).geometry = sprites.cannon
+  mesh(world.ufo.name).geometry = sprites.ufo
+  const boom = mesh(world.boom.name)
+  boom.geometry = sprites.boom
+  tint(boom, world.boom.y)
+  for (const bomb of [world.bomb1, world.bomb2, world.bomb3]) mesh(bomb.name).geometry = sprites.bombs[Math.floor(bomb.age / 4) % 3]
 
   const { width, height } = renderer.domElement
-  for (const mesh of objects.values()) snap(mesh, width, height)
-  for (const { mesh } of labels.values()) snap(mesh, width, height)
+  for (const target of objects.values()) snap(target, width, height)
 }

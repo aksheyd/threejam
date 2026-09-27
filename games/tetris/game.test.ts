@@ -35,7 +35,7 @@ test('a piece with no room ends the game, and Space starts a new one only after 
   const set = [`game.board=${JSON.stringify(Array(18).fill('IIIIIIIII.'))}`, 'game.bag=["O"]']
   const early = run({ ticks: 63, set, press: ['Space@1,30,63'], hold: ['Down@2-3'] })
   assert.deepEqual([2, 3, 30, 63].map((tick) => early(tick).state), ['playing', 'over', 'over', 'over'])
-  assert.deepEqual([early(3, 'border').color, early(3, 'cell_1_1').color], ['#d92626', '#737373'])
+  assert.deepEqual([early(3, 'border').color, early(3, 'cells[0][0]').color], ['#d92626', '#737373'])
   assert.deepEqual([early(62, 'banner_prompt').text, early(63, 'banner_prompt').text], ['', 'PRESS SPACE'])
 
   const late = run({ ticks: 64, set, press: ['Space@1,30,64'], hold: ['Down@2-3'] })

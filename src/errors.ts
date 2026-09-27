@@ -12,11 +12,13 @@ export class UsageError extends Error {
   }
 }
 
+export type Phase = 'start' | 'update' | 'driver'
+
 export class RunError extends Error {
-  readonly phase: 'start' | 'update'
+  readonly phase: Phase
   readonly tick: number
 
-  constructor(phase: 'start' | 'update', tick: number, cause: unknown) {
+  constructor({ phase, tick, cause }: { phase: Phase; tick: number; cause: unknown }) {
     super(cause instanceof Error ? cause.message : String(cause), { cause })
     this.name = 'RunError'
     this.phase = phase
@@ -32,4 +34,8 @@ export function show(value: unknown): string {
   } catch {
     return String(value)
   }
+}
+
+export function quote(text: string): string {
+  return JSON.stringify(text.length > 60 ? `${text.slice(0, 57)}...` : text)
 }

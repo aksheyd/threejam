@@ -5,8 +5,8 @@ export function checkSeed(seed: number): number {
   return seed
 }
 
-export function createRandom(seed: number): () => number {
-  let state = mix(checkSeed(seed))
+export function createRandom({ seed, stream = 0 }: { seed: number; stream?: number }): () => number {
+  let state = mix(checkSeed(seed)) ^ Math.imul(stream, 0x9e3779b9)
   return () => {
     state = (state + 0x6d2b79f5) | 0
     let t = Math.imul(state ^ (state >>> 15), 1 | state)

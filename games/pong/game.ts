@@ -1,5 +1,5 @@
 // Pong for two players. Left paddle: W / S. Right paddle: Up / Down. Space starts a match; first to 7 wins.
-import { defineGame, type Context, type Entities, type World } from 'fourjs'
+import { KEYS, defineGame, oneOf, type Context, type Entities, type World } from 'fourjs'
 
 const TOP = 1.5
 const BOTTOM = -1.5
@@ -17,9 +17,9 @@ const entities = {
   prompt: { x: 0, y: -0.5, text: 'PRESS SPACE TO START', color: WHITE },
   left_keys: { x: -1, y: -1, text: 'W / S', color: GREY },
   right_keys: { x: 1, y: -1, text: 'UP / DOWN', color: GREY },
-  match: { state: 'ready', left: 0, right: 0, win_score: 7 },
-  left_paddle: { x: -1.85, y: 0, w: 0.08, h: 0.45, color: WHITE, up: 'W', down: 'S', speed: 2.2 },
-  right_paddle: { x: 1.85, y: 0, w: 0.08, h: 0.45, color: WHITE, up: 'Up', down: 'Down', speed: 2.2 },
+  match: { state: oneOf(['ready', 'play', 'over']), left: 0, right: 0, win_score: 7 },
+  left_paddle: { x: -1.85, y: 0, w: 0.08, h: 0.45, color: WHITE, up: oneOf(KEYS, 'W'), down: oneOf(KEYS, 'S'), speed: 2.2 },
+  right_paddle: { x: 1.85, y: 0, w: 0.08, h: 0.45, color: WHITE, up: oneOf(KEYS, 'Up'), down: oneOf(KEYS, 'Down'), speed: 2.2 },
   // serve_pause is in ticks.
   ball: {
     x: 0, y: 0, w: 0.08, h: 0.08, color: '#ffffff',

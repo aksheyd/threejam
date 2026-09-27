@@ -1,8 +1,18 @@
-// Decoration only: the skyline behind the pipes never changes and the game never reads it, so sim never sees it.
-import type { ViewSetup } from 'fourjs'
+// Decoration only: the skyline, the pipes' fill, the ground's stripes, and the bird's details never affect play, so sim never sees them.
+import type { ViewFrame, ViewSetup } from 'fourjs'
+import type { BufferGeometry, Mesh } from 'three'
+import type game from './game.ts'
 
+type Flappy = ViewFrame<typeof game>['world']
+type Point = Pick<Flappy['bird'], 'x' | 'y'>
 type Rect = [x: number, y: number, w: number, h: number]
+type Part = { dx: number; dy: number; w: number; h: number; color: string }
 
+const OUTLINE = '#543847'
+const PIPE = '#73bf2e'
+const PIPE_HI = '#9ce659'
+const PIPE_LO = '#558e22'
+const WHITE = '#ffffff'
 const CLOUD = '#e9fcd9'
 const BUILDING_COLORS = ['#c7eadb', '#b7e2d0']
 const WINDOW = '#a7d8c6'
@@ -74,6 +84,53 @@ const BUSHES: Rect[] = [
   [2.0844, -0.9001, 0.4312, 0.1199],
 ]
 
+// The fill and shading over each wall, by its column in walls: top pipe, top cap, bottom pipe, bottom cap.
+const PIPE_BODY: Part[] = [
+  { dx: 0, dy: 0, w: 0.32, h: 3.2, color: PIPE },
+  { dx: -0.105, dy: 0, w: 0.05, h: 3.2, color: PIPE_HI },
+  { dx: 0.13, dy: 0, w: 0.06, h: 3.2, color: PIPE_LO },
+]
+const PIPE_CAP: Part[] = [
+  { dx: 0, dy: 0, w: 0.36, h: 0.12, color: PIPE },
+  { dx: -0.12, dy: 0, w: 0.05, h: 0.12, color: PIPE_HI },
+  { dx: 0.15, dy: 0, w: 0.06, h: 0.12, color: PIPE_LO },
+]
+const WALL_PARTS = [PIPE_BODY, PIPE_CAP, PIPE_BODY, PIPE_CAP]
+
+const GROUND_LINE: Rect = [0, -1.0575, 4.2, 0.015]
+const GRASS: Rect = [0, -1.095, 4.2, 0.06]
+const GRASS_EDGE: Rect = [0, -1.13, 4.2, 0.01]
+const DIRT_EDGE: Rect = [0, -1.1425, 4.2, 0.015]
+// The stripes on the grass repeat every STRIPE_GAP, and each wraps to the right end once it scrolls past STRIPE_LEFT.
+const STRIPE: Rect = [0, -1.095, 0.1, 0.06]
+const STRIPE_COUNT = 27
+const STRIPE_GAP = 0.16
+const STRIPE_LEFT = -2.16
+const STRIPE_PERIOD = STRIPE_COUNT * STRIPE_GAP
+
+const BODY: Part[] = [
+  { dx: 0, dy: 0, w: 0.216, h: 0.156, color: '#fad129' },
+  { dx: 0.006, dy: -0.048, w: 0.156, h: 0.048, color: '#fdee9e' },
+]
+const WING: Part[] = [
+  { dx: -0.066, dy: -0.006, w: 0.108, h: 0.078, color: OUTLINE },
+  { dx: -0.066, dy: -0.006, w: 0.084, h: 0.054, color: '#fdf7e0' },
+]
+// The wing moves to the next of these every 5 ticks, and holds still once the run is over.
+const WING_FRAMES = [0.018, 0, -0.018, 0]
+const FACE: Part[] = [
+  { dx: 0.054, dy: 0.036, w: 0.078, h: 0.078, color: WHITE },
+  { dx: 0.0744, dy: 0.0324, w: 0.0264, h: 0.042, color: '#1f1414' },
+]
+const BEAK: Part[] = [
+  { dx: 0.0024, dy: 0.0156, w: 0.108, h: 0.0288, color: '#fa5921' },
+  { dx: -0.0024, dy: -0.0156, w: 0.096, h: 0.0264, color: '#e64d1f' },
+]
+
+// Meshes that init makes and draw moves each frame; at reads draw's world, since engine.reset() replaces the one init saw.
+const followers: { mesh: Mesh; part: Part; at: (world: Flappy) => Point }[] = []
+const stripes: Mesh[] = []
+
 function windows([x, y, w, h]: Rect): Rect[] {
   const top = y + h / 2 - 0.05
   return [
@@ -82,23 +139,68 @@ function windows([x, y, w, h]: Rect): Rect[] {
   ]
 }
 
-export function init({ THREE, scene }: ViewSetup): void {
+function wing({ bird }: Flappy): Point {
+  return { x: bird.x, y: bird.y + (bird.state === 'over' ? 0 : WING_FRAMES[Math.floor(bird.age / 5) % 4]) }
+}
+
+export function init({ THREE, scene, world, objects }: ViewSetup<typeof game>): void {
   const square = new THREE.PlaneGeometry(1, 1)
-  // Counting up from a negative order keeps these under every entity, and in the order they're added.
-  let order = -1000
-  const add = ([x, y, w, h]: Rect, color: string) => {
-    const mesh = new THREE.Mesh(square, new THREE.MeshBasicMaterial({ color, depthTest: false }))
+  const triangle = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0, 0.5, 0], 3))
+  const add = (color: string, order: number, [x, y, w, h]: Rect, geometry: BufferGeometry = square): Mesh => {
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color, depthTest: false, depthWrite: false }))
     mesh.position.set(x, y, 0)
     mesh.scale.set(w, h, 1)
-    mesh.renderOrder = order++
+    mesh.renderOrder = order
     scene.add(mesh)
+    return mesh
   }
-  for (const cloud of CLOUDS) add(cloud, CLOUD)
+  // Each call returns an order above the named entity and the orders returned before, and still under the next entity.
+  const above = (name: string) => {
+    const base = objects.get(name)?.renderOrder
+    if (base === undefined) throw new Error(`${name} has no mesh to draw over`)
+    let count = 0
+    return () => {
+      count += 1
+      return base + count / 100
+    }
+  }
+  const follow = (parts: Part[], at: (world: Flappy) => Point, order: () => number) => {
+    for (const part of parts) followers.push({ mesh: add(part.color, order(), [0, 0, part.w, part.h]), part, at })
+  }
+
+  // Counting up from a negative order keeps the skyline under every entity, in the order it's added.
+  let order = -1000
+  for (const cloud of CLOUDS) add(CLOUD, order++, cloud)
   BUILDINGS.forEach((building, i) => {
-    add(building, BUILDING_COLORS[i % 2])
-    for (const pane of windows(building)) add(pane, WINDOW)
+    add(BUILDING_COLORS[i % 2], order++, building)
+    for (const pane of windows(building)) add(WINDOW, order++, pane)
   })
-  for (const [x, y, w, h] of BUSHES) add([x, y + 0.0075, w + 0.03, h + 0.015], BUSH_EDGE)
-  for (const bush of BUSHES) add(bush, BUSH)
-  add([0, -0.99, 4.2, 0.12], BUSH)
+  for (const [x, y, w, h] of BUSHES) add(BUSH_EDGE, order++, [x, y + 0.0075, w + 0.03, h + 0.015])
+  for (const bush of BUSHES) add(BUSH, order++, bush)
+  add(BUSH, order++, [0, -0.99, 4.2, 0.12])
+
+  for (const [i, row] of world.walls.entries()) {
+    for (const [j, wall] of row.entries()) follow(WALL_PARTS[j], (w) => w.walls[i][j], above(wall.name))
+  }
+  const overGround = above('ground')
+  add(OUTLINE, overGround(), GROUND_LINE)
+  add(PIPE_HI, overGround(), GRASS)
+  for (let i = 0; i < STRIPE_COUNT; i++) stripes.push(add(PIPE, overGround(), STRIPE, triangle))
+  add('#558022', overGround(), GRASS_EDGE)
+  add('#d7a84c', overGround(), DIRT_EDGE)
+  const overBird = above('bird')
+  follow(BODY, (w) => w.bird, overBird)
+  follow(WING, wing, overBird)
+  follow(FACE, (w) => w.bird, overBird)
+  follow(BEAK, (w) => w.beak, above('beak'))
+}
+
+export function draw({ world }: ViewFrame<typeof game>): void {
+  for (const { mesh, part, at } of followers) {
+    const { x, y } = at(world)
+    mesh.position.set(x + part.dx, y + part.dy, 0)
+  }
+  for (const [i, stripe] of stripes.entries()) {
+    stripe.position.x = STRIPE_LEFT + ((((STRIPE_GAP * i - world.ground.scroll) % STRIPE_PERIOD) + STRIPE_PERIOD) % STRIPE_PERIOD)
+  }
 }

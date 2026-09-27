@@ -1,11 +1,11 @@
-// A bot that plays Invaders; FourJS has no input drivers yet, so tests step a Session with it.
-import type { Value } from 'fourjs'
-import type { Invader, Invaders } from './game.ts'
+// A bot that plays Invaders, for tests and for sim --driver.
+import type { Driver, DriverFrame, EntitiesOf, Key } from 'fourjs'
+import game, { frontLine } from './game.ts'
 
-type Fields = Readonly<Record<string, Record<string, Value>>>
+type Invaders = DriverFrame<EntitiesOf<typeof game>>['world']
 
 // Dodge a bomb about to land on the cannon; otherwise line up under the nearest column's lowest invader and fire.
-function steer(world: Invaders, invaders: Invader[]): { move: number; fire: boolean } {
+function steer(world: Invaders): { move: number; fire: boolean } {
   const { cannon, fleet, shot } = world
   const half = cannon.w / 2
   for (const bomb of [world.bomb1, world.bomb2, world.bomb3]) {
@@ -18,10 +18,8 @@ function steer(world: Invaders, invaders: Invader[]): { move: number; fire: bool
   }
 
   const drift = (fleet.dir * fleet.step_x) / fleet.interval
-  const lowest: Invader[] = []
-  for (const inv of invaders) if (inv.visible) lowest[inv.col - 1] = inv
   let best: { x: number; w: number } | undefined
-  for (const inv of lowest.filter(Boolean)) {
+  for (const inv of frontLine(world.invaders)) {
     const x = inv.x + drift * ((inv.y - cannon.y) / (shot.speed / 60))
     if (!best || Math.abs(x - cannon.x) < Math.abs(best.x - cannon.x)) best = { x, w: inv.w }
   }
@@ -30,26 +28,34 @@ function steer(world: Invaders, invaders: Invader[]): { move: number; fire: bool
   return { move: Math.abs(dx) > 0.01 ? Math.sign(dx) : 0, fire: Math.abs(dx) < best.w / 2 - 0.01 }
 }
 
-// Picks the keys for one tick from the state the previous tick left; hintSeen is when the play-again hint appeared.
-export function autopilot(fields: Fields, tick: number, hintSeen: number | undefined): { keys: string[]; hintSeen: number | undefined } {
-  const world = fields as unknown as Invaders
-  const { state } = world.game
-  if (state === 'ready') return { keys: ['Space'], hintSeen }
-  if (state === 'won' || state === 'over') {
-    if (world.hint.text === '') return { keys: [], hintSeen: undefined }
-    const seen = hintSeen ?? tick
-    return { keys: tick - seen >= 30 ? ['Space'] : [], hintSeen: seen }
+// Presses Space 30 ticks after the play-again hint appears; the tick it remembers clears whenever the hint is hidden.
+export function autopilot(): Driver<EntitiesOf<typeof game>> {
+  let hintSince: number | undefined
+  return ({ world, tick }) => {
+    hintSince = world.hint.text === '' ? undefined : (hintSince ?? tick)
+    switch (world.game.state) {
+      case 'ready':
+        return ['Space']
+      case 'dying':
+        return []
+      case 'won':
+      case 'over':
+        return hintSince !== undefined && tick - hintSince >= 30 ? ['Space'] : []
+      case 'play': {
+        const { move, fire } = steer(world)
+        const keys: Key[] = []
+        if (move < 0) keys.push('Left')
+        if (move > 0) keys.push('Right')
+        // The cannon ignores Space until it has been let go after the press that started the game.
+        if (fire && world.cannon.armed) keys.push('Space')
+        return keys
+      }
+      default: {
+        const _exhaustive: never = world.game.state
+        return _exhaustive
+      }
+    }
   }
-  if (state !== 'play') return { keys: [], hintSeen }
-
-  const invaders = Object.keys(fields)
-    .filter((name) => name.startsWith('inv_'))
-    .map((name) => fields[name] as unknown as Invader)
-  const { move, fire } = steer(world, invaders)
-  const keys: string[] = []
-  if (move < 0) keys.push('Left')
-  if (move > 0) keys.push('Right')
-  // The cannon ignores Space until it has been let go after the press that started the game.
-  if (fire && world.cannon.armed) keys.push('Space')
-  return { keys, hintSeen }
 }
+
+export default autopilot()

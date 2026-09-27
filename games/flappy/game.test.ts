@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { Session, pick, simulate, type EntityState } from '../../src/index.ts'
+import { pick, simulate, type EntityState, type LogEntry } from '../../src/index.ts'
 import flappy from './game.ts'
 
-const PIPES = ['pipe1', 'pipe2', 'pipe3']
-
-type Box = { x: number; y: number; w: number }
-type Bird = Box & { vy: number; home_y: number; state: string }
-
-function byName(entities: EntityState[]): Record<string, EntityState> {
+function byName(entities: readonly EntityState[]): Record<string, EntityState> {
   return Object.fromEntries(entities.map((entity) => [entity.name, entity]))
+}
+
+function lines(logs: readonly LogEntry[]): string[] {
+  return logs.map(({ tick, text }) => `[tick ${tick}] ${text}`)
 }
 
 test('one flap falls to the ground, and Space gets ready again only after PRESS SPACE shows', () => {
@@ -22,14 +21,14 @@ test('one flap falls to the ground, and Space gets ready again only after PRESS 
   assert.equal(at[87].bird.state, 'over', 'a press on the tick PRESS SPACE appears is too early')
 
   const again = byName(simulate(flappy, { ticks: 87, press: ['Space@1,87'] }).snapshots[0].entities)
-  assert.deepEqual([again.bird.state, again.bird.y, again.bird.score, again.pipe1.x, again.title.text], ['ready', 0.1, 0, 2.25, 'GET READY'])
+  assert.deepEqual([again.bird.state, again.bird.y, again.bird.score, again['pipes[0]'].x, again.title.text], ['ready', 0.1, 0, 2.25, 'GET READY'])
 })
 
 test('each gap passed scores once, and flying above the fourth gap hits its top pipe', () => {
-  const set = PIPES.flatMap((pipe) => [`${pipe}.gap_min=0.1`, `${pipe}.gap_max=0.1`])
+  const set = ['pipes[*].gap_min=0.1', 'pipes[*].gap_max=0.1']
   const flaps = [...Array.from({ length: 12 }, (_, i) => 1 + 36 * i), 415, 433]
   const { snapshots, logs } = simulate(flappy, { ticks: 460, press: [`Space@${flaps.join(',')}`], set })
-  assert.deepEqual(logs, [
+  assert.deepEqual(lines(logs), [
     '[tick 209] passed pipe1, score 1',
     '[tick 305] passed pipe2, score 2',
     '[tick 401] passed pipe3, score 3',
@@ -40,19 +39,17 @@ test('each gap passed scores once, and flying above the fourth gap hits its top 
 })
 
 test('a bot that flaps whenever it sinks below the next gap keeps scoring through new random gaps', () => {
-  const session = new Session(flappy, { seed: 0 })
   const gaps = new Set<number>()
-  session.start()
-  for (let tick = 1; tick <= 1200; tick++) {
-    const seen = byName(session.state())
-    const bird = seen.bird as unknown as Bird
-    const ahead = PIPES.map((name) => seen[name] as unknown as Box).filter((pipe) => pipe.x + pipe.w / 2 > bird.x - bird.w / 2)
-    const next = ahead.sort((a, b) => a.x - b.x)[0]
-    gaps.add(next.y)
-    const flap = bird.state === 'ready' || (bird.y < next.y - 0.12 && bird.vy < 0)
-    session.step(flap ? ['Space'] : [])
-  }
-  const { bird } = byName(session.state())
+  const { snapshots } = simulate(flappy, {
+    ticks: 1200,
+    seed: 0,
+    drive: ({ world: { bird, pipes } }) => {
+      const next = pipes.filter((pipe) => pipe.x + pipe.w / 2 > bird.x - bird.w / 2).sort((a, b) => a.x - b.x)[0]
+      gaps.add(next.y)
+      return bird.state === 'ready' || (bird.y < next.y - 0.12 && bird.vy < 0) ? ['Space'] : []
+    },
+  })
+  const { bird } = byName(snapshots[0].entities)
   assert.deepEqual([bird.state, bird.score], ['play', 11])
   assert.equal(gaps.size, 12, 'every pipe that wraps around comes back with a new gap')
 })

@@ -1,5 +1,5 @@
 // Space Invaders. Space starts the invasion; Left / Right move the cannon; Space fires, and holding it keeps firing.
-import { defineGame, type Context, type Entities, type Entity, type World } from 'fourjs'
+import { defineGame, grid, oneOf, type Context, type Entities, type World } from 'fourjs'
 import { CANNON, boxes, type Box } from './sprites.ts'
 
 const WHITE = '#ffffff'
@@ -11,55 +11,30 @@ const COLS = 11
 const POINTS = [30, 20, 20, 10, 10]
 const INVADER_W = [0.12, 0.165, 0.165, 0.18, 0.18]
 const UFO_POINTS = [50, 100, 150, 300]
-const BOMBS = ['bomb1', 'bomb2', 'bomb3'] as const
 const CANNON_PARTS = boxes(CANNON)
 
 // Every bunker is this grid of cells, laid out from its top-left cell.
 const BUNKER = ['..#######..', '.#########.', '###########', '###########', '###########', '###########', '####...####', '###.....###']
+const BUNKER_CELLS = BUNKER.flatMap((line, row) => [...line].flatMap((pixel, col) => (pixel === '#' ? [{ row, col }] : [])))
 const BUNKERS = 4
 const CELL = 0.03
 const SHIELD_Y = -0.695
 const SHIELD_TOP = SHIELD_Y + CELL / 2
 const SHIELD_BOTTOM = SHIELD_Y - (BUNKER.length - 0.5) * CELL
 
-const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1)
-const bunkerX = (s: number) => -1.35 + (s - 1) * 0.8
-const homeX = (col: number) => -1.2 + (col - 1) * 0.24
-const homeY = (row: number) => 0.84 - (row - 1) * 0.24
+const bunkerX = (bunker: number) => -1.35 + bunker * 0.8
+const homeX = (col: number) => -1.2 + col * 0.24
+const homeY = (row: number) => 0.84 - row * 0.24
 
-function invader(row: number, col: number) {
-  return { x: homeX(col), y: homeY(row), w: INVADER_W[row - 1], h: 0.12, row, col }
-}
-
-function cell(x: number, y: number) {
-  return { x, y, w: CELL, h: CELL, color: GREEN }
+function shieldCell(bunker: number, cell: number) {
+  const { row, col } = BUNKER_CELLS[cell]
+  return { x: bunkerX(bunker) + col * CELL, y: SHIELD_Y - row * CELL, w: CELL, h: CELL, color: GREEN }
 }
 
 function bomb(kind: 'aimed' | 'random') {
-  return { x: 0, y: -2.5, w: 0.045, h: 0.105, visible: false, kind, speed: 0.9, ground: -1.24, age: 0 }
+  return { x: 0, y: -2.5, w: 0.045, h: 0.105, visible: false, kind: oneOf(['aimed', 'random'], kind), speed: 0.9, ground: -1.24, age: 0 }
 }
 
-function invaderEntities() {
-  const invaders: Record<string, ReturnType<typeof invader>> = {}
-  for (const row of range(ROWS)) for (const col of range(COLS)) invaders[`inv_r${row}_c${col}`] = invader(row, col)
-  return invaders
-}
-
-function shieldEntities() {
-  const cells: Record<string, ReturnType<typeof cell>> = {}
-  for (const s of range(BUNKERS)) {
-    for (const [r, line] of BUNKER.entries()) {
-      for (const [c, pixel] of [...line].entries()) {
-        if (pixel === '#') cells[`shield${s}_${r + 1}_${c + 1}`] = cell(bunkerX(s) + c * CELL, SHIELD_Y - r * CELL)
-      }
-    }
-  }
-  return cells
-}
-
-type State = 'ready' | 'play' | 'dying' | 'won' | 'over'
-
-// Written inline under `satisfies Entities`, false is typed as the literal false and could never become true, hence `as boolean`.
 const entities = {
   score_label: { x: -1.58, y: 1.41, text: 'SCORE', size: 0.105, color: WHITE },
   score: { x: -1.58, y: 1.27, text: '0000', size: 0.105, color: WHITE },
@@ -69,9 +44,10 @@ const entities = {
   life1: { x: -1.6, y: -1.37, w: 0.156, h: 0.096, color: GREEN },
   life2: { x: -1.4, y: -1.37, w: 0.156, h: 0.096, color: GREEN },
   ground: { x: 0, y: -1.24, w: 4, h: 0.015, color: GREEN },
-  ...shieldEntities(),
+  // One row per bunker, holding its lit cells top row first.
+  bunkers: grid(BUNKERS, BUNKER_CELLS.length, ({ row, col }) => shieldCell(row, col)),
   // respawn_ticks and restart_ticks are pauses in ticks; start copies lives into start_lives for later games.
-  game: { state: 'ready' as State, score: 0, lives: 3, timer: 0, start_lives: 3, respawn_ticks: 90, restart_ticks: 60 },
+  game: { state: oneOf(['ready', 'play', 'dying', 'won', 'over']), score: 0, lives: 3, timer: 0, start_lives: 3, respawn_ticks: 90, restart_ticks: 60 },
   shields: { destroyed: 0 },
   // rows and cols pick how much of the formation is in the wave; wait, interval, and the bomb gaps count ticks.
   fleet: {
@@ -79,24 +55,32 @@ const entities = {
     bomb_gap_min: 30, bomb_gap_max: 90, boom_ticks: 12,
     alive_count: ROWS * COLS, interval: 33, wait: 33, dir: 1, sx: 0, sy: 0, steps: 0, bomb_wait: 90, next_bomb: 0, boom_timer: 0,
   },
-  ...invaderEntities(),
-  boom: { x: 0, y: -2.5, w: 0.195, h: 0.105, visible: false as boolean },
-  ufo: { x: -2.5, y: 1.08, w: 0.24, h: 0.105, color: RED, visible: false as boolean, speed: 0.9, edge: 2.3, first_wait: 900, every: 1500, wait: 900, dir: 1 },
-  cannon: { x: 0, y: -1.1, w: 0.195, h: 0.12, color: GREEN, speed: 1.2, left: -1.9, right: 1.9, armed: false as boolean, home_x: 0 },
-  shot: { x: 0, y: -2.5, w: 0.015, h: 0.06, color: WHITE, visible: false as boolean, speed: 3.6, top: 1.17 },
+  invaders: grid(ROWS, COLS, ({ row, col }) => ({ x: homeX(col), y: homeY(row), w: INVADER_W[row], h: 0.12, points: POINTS[row] })),
+  boom: { x: 0, y: -2.5, w: 0.195, h: 0.105, visible: false },
+  ufo: { x: -2.5, y: 1.08, w: 0.24, h: 0.105, color: RED, visible: false, speed: 0.9, edge: 2.3, first_wait: 900, every: 1500, wait: 900, dir: 1 },
+  cannon: { x: 0, y: -1.1, w: 0.195, h: 0.12, color: GREEN, speed: 1.2, left: -1.9, right: 1.9, armed: false, home_x: 0 },
+  shot: { x: 0, y: -2.5, w: 0.015, h: 0.06, color: WHITE, visible: false, speed: 3.6, top: 1.17 },
   bomb1: bomb('aimed'),
   bomb2: bomb('random'),
   bomb3: bomb('random'),
 } satisfies Entities
 
-export type Invaders = World<typeof entities>
-export type Invader = Entity<ReturnType<typeof invader>>
-type Cell = Entity<ReturnType<typeof cell>>
-type BombName = (typeof BOMBS)[number]
+type Invaders = World<typeof entities>
+type Invader = Invaders['invaders'][number][number]
+type Bomb = Invaders['bomb1']
+type Ending = { state: 'won' } | { state: 'over'; cause: string }
 
-// Generated entities aren't in the World type, so they're looked up by prefix.
-const invaders = (ctx: Context) => ctx.all('inv_') as Invader[]
-const bunker = (ctx: Context, s: number) => ctx.all(`shield${s}_`) as Cell[]
+const bombs = (world: Invaders): Bomb[] => [world.bomb1, world.bomb2, world.bomb3]
+
+// The lowest invader left in each column, left to right.
+export function frontLine<T extends { readonly visible: boolean }>(invaders: readonly (readonly T[])[]): T[] {
+  const front: T[] = []
+  for (const col of invaders[0].keys()) {
+    const lowest = invaders.findLast((row) => row[col].visible)
+    if (lowest) front.push(lowest[col])
+  }
+  return front
+}
 
 function overlaps(a: Box, b: Box): boolean {
   return Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.y - b.y) < (a.h + b.h) / 2
@@ -130,16 +114,24 @@ function begin(world: Invaders, ctx: Context): void {
   ctx.print(`the invasion begins with ${livesPhrase(world.game.lives)}`)
 }
 
-function finish(world: Invaders, ctx: Context, state: 'won' | 'over', message: string): void {
+function finish(world: Invaders, ctx: Context, ending: Ending): void {
   const { game } = world
-  game.state = state
+  game.state = ending.state
   game.timer = game.restart_ticks
-  ctx.print(`${message} (final score ${game.score})`)
-  if (state === 'over') {
-    world.ground.color = RED
-    show(world, 'GAME OVER', RED)
-  } else {
-    show(world, 'YOU WIN', WHITE)
+  switch (ending.state) {
+    case 'won':
+      ctx.print(`YOU WIN: the wave is cleared (final score ${game.score})`)
+      show(world, 'YOU WIN', WHITE)
+      return
+    case 'over':
+      ctx.print(`GAME OVER: ${ending.cause} (final score ${game.score})`)
+      world.ground.color = RED
+      show(world, 'GAME OVER', RED)
+      return
+    default: {
+      const _exhaustive: never = ending
+      return _exhaustive
+    }
   }
 }
 
@@ -149,14 +141,14 @@ function addScore(world: Invaders, ctx: Context, points: number, what: string): 
   drawHud(world)
 }
 
-function cannonHit(world: Invaders, ctx: Context, by: BombName): void {
+function cannonHit(world: Invaders, ctx: Context, bomb: Bomb): void {
   const { game } = world
   if (game.state !== 'play') return
   game.lives -= 1
-  ctx.print(`cannon hit by ${by}: ${livesPhrase(game.lives)} left`)
+  ctx.print(`cannon hit by ${bomb.name}: ${livesPhrase(game.lives)} left`)
   drawHud(world)
   if (game.lives <= 0) {
-    finish(world, ctx, 'over', 'GAME OVER: the last life is lost')
+    finish(world, ctx, { state: 'over', cause: 'the last life is lost' })
   } else {
     game.state = 'dying'
     game.timer = game.respawn_ticks
@@ -164,14 +156,14 @@ function cannonHit(world: Invaders, ctx: Context, by: BombName): void {
 }
 
 // Destroys every shield cell the box overlaps and returns how many.
-function hitShields(world: Invaders, ctx: Context, box: Box): number {
+function hitShields(world: Invaders, box: Box): number {
   if (box.y - box.h / 2 >= SHIELD_TOP || box.y + box.h / 2 <= SHIELD_BOTTOM) return 0
   let count = 0
-  for (const s of range(BUNKERS)) {
-    const left = bunkerX(s) - CELL / 2
+  for (const [b, bunker] of world.bunkers.entries()) {
+    const left = bunkerX(b) - CELL / 2
     const right = left + BUNKER[0].length * CELL
     if (box.x + box.w / 2 <= left || box.x - box.w / 2 >= right) continue
-    for (const cell of bunker(ctx, s)) {
+    for (const cell of bunker) {
       if (cell.visible && overlaps(box, cell)) {
         cell.visible = false
         count += 1
@@ -186,30 +178,34 @@ function intervalFor(fleet: Invaders['fleet'], alive: number): number {
   return Math.max(1, Math.floor(alive * fleet.tempo + 0.5))
 }
 
-function extents(ctx: Context): { left: number; right: number; bottom: number } {
+function extents(world: Invaders): { left: number; right: number; bottom: number } {
   let [left, right, bottom] = [Infinity, -Infinity, Infinity]
-  for (const inv of invaders(ctx)) {
-    if (!inv.visible) continue
-    left = Math.min(left, inv.x - inv.w / 2)
-    right = Math.max(right, inv.x + inv.w / 2)
-    bottom = Math.min(bottom, inv.y - inv.h / 2)
+  for (const row of world.invaders) {
+    for (const inv of row) {
+      if (!inv.visible) continue
+      left = Math.min(left, inv.x - inv.w / 2)
+      right = Math.max(right, inv.x + inv.w / 2)
+      bottom = Math.min(bottom, inv.y - inv.h / 2)
+    }
   }
   return { left, right, bottom }
 }
 
-function place(world: Invaders, ctx: Context): void {
+function place(world: Invaders): void {
   const { fleet } = world
-  for (const inv of invaders(ctx)) {
-    if (!inv.visible) continue
-    inv.x = homeX(inv.col) + fleet.sx * fleet.step_x
-    inv.y = homeY(inv.row) - fleet.sy * fleet.step_down
+  for (const [r, row] of world.invaders.entries()) {
+    for (const [c, inv] of row.entries()) {
+      if (!inv.visible) continue
+      inv.x = homeX(c) + fleet.sx * fleet.step_x
+      inv.y = homeY(r) - fleet.sy * fleet.step_down
+    }
   }
 }
 
 // One step sideways, or down and turning around when the next step would cross an edge.
 function march(world: Invaders, ctx: Context): void {
   const { fleet } = world
-  const { left, right } = extents(ctx)
+  const { left, right } = extents(world)
   const edge = fleet.dir > 0 ? right + fleet.step_x > fleet.right + 1e-6 : left - fleet.step_x < fleet.left - 1e-6
   fleet.steps += 1
   if (edge) {
@@ -218,27 +214,33 @@ function march(world: Invaders, ctx: Context): void {
   } else {
     fleet.sx += fleet.dir
   }
-  place(world, ctx)
+  place(world)
 
-  const { bottom } = extents(ctx)
+  const { bottom } = extents(world)
   if (bottom < SHIELD_TOP) {
-    for (const inv of invaders(ctx)) if (inv.visible) hitShields(world, ctx, inv)
+    for (const row of world.invaders) for (const inv of row) if (inv.visible) hitShields(world, inv)
   }
   if (bottom < fleet.invade_below && world.game.state === 'play') {
-    finish(world, ctx, 'over', `GAME OVER: the invaders reached the bottom (lowest edge y=${bottom.toFixed(2)})`)
+    finish(world, ctx, { state: 'over', cause: `the invaders reached the bottom (lowest edge y=${bottom.toFixed(2)})` })
   }
 }
 
 // Aimed bombs come from the column nearest the cannon, the others from a random column.
-function pickShooter(world: Invaders, ctx: Context, kind: 'aimed' | 'random'): Invader | undefined {
-  // Rows come top to bottom, so each column's slot ends up holding its lowest invader; filter drops empty columns.
-  const lowest: Invader[] = []
-  for (const inv of invaders(ctx)) if (inv.visible) lowest[inv.col - 1] = inv
-  const shooters = lowest.filter(Boolean)
+function pickShooter(world: Invaders, ctx: Context, kind: Bomb['kind']): Invader | undefined {
+  const shooters = frontLine(world.invaders)
   if (shooters.length === 0) return undefined
-  if (kind !== 'aimed') return shooters[Math.floor(ctx.random() * shooters.length)]
-  const x = world.cannon.x
-  return shooters.reduce((best, inv) => (Math.abs(inv.x - x) < Math.abs(best.x - x) ? inv : best))
+  switch (kind) {
+    case 'random':
+      return shooters[Math.floor(ctx.random() * shooters.length)]
+    case 'aimed': {
+      const x = world.cannon.x
+      return shooters.reduce((best, inv) => (Math.abs(inv.x - x) < Math.abs(best.x - x) ? inv : best))
+    }
+    default: {
+      const _exhaustive: never = kind
+      return _exhaustive
+    }
+  }
 }
 
 function dropBomb(world: Invaders, ctx: Context): void {
@@ -247,9 +249,10 @@ function dropBomb(world: Invaders, ctx: Context): void {
     fleet.bomb_wait -= 1
     return
   }
-  for (let i = 0; i < BOMBS.length; i++) {
-    fleet.next_bomb = (fleet.next_bomb % BOMBS.length) + 1
-    const bomb = world[BOMBS[fleet.next_bomb - 1]]
+  const all = bombs(world)
+  for (let i = 0; i < all.length; i++) {
+    fleet.next_bomb = (fleet.next_bomb % all.length) + 1
+    const bomb = all[fleet.next_bomb - 1]
     if (bomb.visible) continue
     const shooter = pickShooter(world, ctx, bomb.kind)
     if (shooter) {
@@ -273,25 +276,36 @@ function kill(world: Invaders, ctx: Context, inv: Invader): void {
   fleet.alive_count -= 1
   fleet.interval = intervalFor(fleet, fleet.alive_count)
   fleet.wait = Math.min(fleet.wait, fleet.interval)
-  addScore(world, ctx, POINTS[inv.row - 1], `inv_r${inv.row}_c${inv.col}`)
-  if (fleet.alive_count === 0) finish(world, ctx, 'won', 'YOU WIN: the wave is cleared')
+  addScore(world, ctx, inv.points, inv.name)
+  if (fleet.alive_count === 0) finish(world, ctx, { state: 'won' })
 }
 
 function updateGame(world: Invaders, ctx: Context): void {
   const { game, hint } = world
-  if (game.state === 'ready') {
-    if (ctx.input.pressed('Space')) begin(world, ctx)
-  } else if (game.state === 'dying') {
-    game.timer -= 1
-    if (game.timer <= 0) game.state = 'play'
-  } else if (game.state === 'won' || game.state === 'over') {
-    if (game.timer > 0) {
+  switch (game.state) {
+    case 'ready':
+      if (ctx.input.pressed('Space')) begin(world, ctx)
+      return
+    case 'play':
+      return
+    case 'dying':
       game.timer -= 1
-    } else if (hint.text === '') {
-      hint.text = 'PRESS SPACE TO PLAY AGAIN'
-    } else if (ctx.input.pressed('Space')) {
-      reset(world, ctx)
-      begin(world, ctx)
+      if (game.timer <= 0) game.state = 'play'
+      return
+    case 'won':
+    case 'over':
+      if (game.timer > 0) {
+        game.timer -= 1
+      } else if (hint.text === '') {
+        hint.text = 'PRESS SPACE TO PLAY AGAIN'
+      } else if (ctx.input.pressed('Space')) {
+        reset(world)
+        begin(world, ctx)
+      }
+      return
+    default: {
+      const _exhaustive: never = game.state
+      return _exhaustive
     }
   }
 }
@@ -368,23 +382,24 @@ function updateShot(world: Invaders, ctx: Context): void {
   if (game.state !== 'play') return
 
   shot.y += shot.speed * ctx.dt
-  if (hitShields(world, ctx, shot) > 0) {
+  if (hitShields(world, shot) > 0) {
     shot.visible = false
     return
   }
-  for (const name of BOMBS) {
-    const bomb = world[name]
+  for (const bomb of bombs(world)) {
     if (bomb.visible && overlaps(shot, bomb)) {
       shot.visible = false
       bomb.visible = false
       return
     }
   }
-  for (const inv of invaders(ctx)) {
-    if (inv.visible && overlaps(shot, inv)) {
-      shot.visible = false
-      kill(world, ctx, inv)
-      return
+  for (const row of world.invaders) {
+    for (const inv of row) {
+      if (inv.visible && overlaps(shot, inv)) {
+        shot.visible = false
+        kill(world, ctx, inv)
+        return
+      }
     }
   }
   if (ufo.visible && overlaps(shot, ufo)) {
@@ -398,9 +413,8 @@ function updateShot(world: Invaders, ctx: Context): void {
   if (shot.y - shot.h / 2 > shot.top) shot.visible = false
 }
 
-function updateBomb(world: Invaders, ctx: Context, name: BombName): void {
+function updateBomb(world: Invaders, ctx: Context, bomb: Bomb): void {
   const { game, cannon } = world
-  const bomb = world[name]
   if (!bomb.visible) return
   if (game.state === 'dying') {
     bomb.visible = false
@@ -415,14 +429,14 @@ function updateBomb(world: Invaders, ctx: Context, name: BombName): void {
   )
   if (hit) {
     bomb.visible = false
-    cannonHit(world, ctx, name)
-  } else if (hitShields(world, ctx, bomb) > 0 || bomb.y - bomb.h / 2 < bomb.ground) {
+    cannonHit(world, ctx, bomb)
+  } else if (hitShields(world, bomb) > 0 || bomb.y - bomb.h / 2 < bomb.ground) {
     bomb.visible = false
   }
 }
 
 // Puts everything back for a new game: once from start, and again when Space plays again.
-function reset(world: Invaders, ctx: Context): void {
+function reset(world: Invaders): void {
   const { game, fleet, ufo, cannon } = world
   game.state = 'ready'
   game.score = 0
@@ -432,12 +446,11 @@ function reset(world: Invaders, ctx: Context): void {
   show(world, 'PRESS SPACE TO START', WHITE)
   drawHud(world)
 
-  for (const s of range(BUNKERS)) for (const cell of bunker(ctx, s)) cell.visible = true
+  for (const bunker of world.bunkers) for (const cell of bunker) cell.visible = true
   world.shields.destroyed = 0
 
-  const wave = invaders(ctx)
-  for (const inv of wave) inv.visible = inv.row <= fleet.rows && inv.col <= fleet.cols
-  fleet.alive_count = wave.filter((inv) => inv.visible).length
+  for (const [r, row] of world.invaders.entries()) for (const [c, inv] of row.entries()) inv.visible = r < fleet.rows && c < fleet.cols
+  fleet.alive_count = world.invaders.flat().filter((inv) => inv.visible).length
   fleet.interval = intervalFor(fleet, fleet.alive_count)
   fleet.wait = fleet.interval
   fleet.dir = 1
@@ -448,7 +461,7 @@ function reset(world: Invaders, ctx: Context): void {
   fleet.next_bomb = 0
   fleet.boom_timer = 0
   world.boom.visible = false
-  place(world, ctx)
+  place(world)
 
   ufo.visible = false
   ufo.wait = ufo.first_wait
@@ -457,9 +470,9 @@ function reset(world: Invaders, ctx: Context): void {
   cannon.visible = true
   cannon.armed = false
   world.shot.visible = false
-  for (const name of BOMBS) {
-    world[name].visible = false
-    world[name].age = 0
+  for (const bomb of bombs(world)) {
+    bomb.visible = false
+    bomb.age = 0
   }
 }
 
@@ -467,10 +480,10 @@ export default defineGame({
   title: 'Invaders',
   background: '#000000',
   entities,
-  start(world, ctx) {
+  start(world) {
     world.game.start_lives = world.game.lives
     world.cannon.home_x = world.cannon.x
-    reset(world, ctx)
+    reset(world)
   },
   update(world, ctx) {
     updateGame(world, ctx)
@@ -478,6 +491,6 @@ export default defineGame({
     updateUfo(world, ctx)
     updateCannon(world, ctx)
     updateShot(world, ctx)
-    for (const name of BOMBS) updateBomb(world, ctx, name)
+    for (const bomb of bombs(world)) updateBomb(world, ctx, bomb)
   },
 })

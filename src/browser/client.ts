@@ -1,64 +1,95 @@
-import { Session, pick } from '../engine.ts'
-import { keyFromCode, schedule, type Key } from '../input.ts'
-import type { Game } from '../types.ts'
-import { View, type ViewModule } from './view.ts'
+import { Session, parseGame, pick } from '../engine.ts'
+import { keyFromCode, schedule } from '../input.ts'
+import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Key } from '../types.ts'
+import { View, parseView } from './view.ts'
 
 export interface Config {
-  mode: 'run' | 'shot'
-  seed?: number
+  readonly mode: 'run' | 'shot'
+  readonly seed?: number
 }
 
 export interface ResetOptions {
-  seed?: number
-  ticks?: number
-  press?: string[]
-  hold?: string[]
-  set?: string[]
+  readonly seed?: number
+  readonly ticks?: number
+  readonly press?: readonly string[]
+  readonly hold?: readonly string[]
+  readonly set?: readonly string[]
+  readonly drive?: boolean
+}
+
+export interface PageEngine {
+  reset(options?: ResetOptions): number
+  step(count?: number): number
+  advanceTo(tick: number): number
+  state(only?: string): EntityState[]
+  pause(): void
+  resume(): void
+  readonly paused: boolean
+  readonly tick: number
+  readonly seed: number
 }
 
 declare global {
   interface Window {
-    FOUR: Config
-    engine: unknown
+    FOUR: unknown
+    engine: PageEngine
   }
 }
 
+type Source =
+  | { readonly kind: 'keyboard' }
+  | { readonly kind: 'schedule'; readonly keysAt: (tick: number) => ReadonlySet<Key> }
+  | { readonly kind: 'driver'; readonly driver: Driver }
+
 const TICK_MS = 1000 / 60
 
-export function play(game: Game, custom: ViewModule, config: Config): void {
+export function play(page: { game: unknown; view: unknown; driver: unknown; config: unknown }): void {
+  const game = parseGame(page.game)
+  const config = parseConfig(page.config)
+  const drive = parseDrive(page.driver)
   const canvas = document.querySelector('canvas')
   if (!canvas) throw new Error('the page needs a <canvas>')
   if (game.title) document.title = game.title
-  const view = new View(canvas, game, custom)
+  const view = new View({ canvas, game, custom: parseView(page.view) })
   const down = new Set<Key>()
   // A tap shorter than a tick still counts as held for one tick.
   const tapped = new Set<Key>()
   let session: Session | undefined
-  let keysAt: ((tick: number) => Set<Key>) | undefined
+  let source: Source = { kind: 'keyboard' }
   let paused = false
   let stopped = false
 
-  const current = () => {
+  const current = (): Session => {
     if (!session) throw new Error('call engine.reset() first')
     return session
   }
   const draw = () => {
     const s = current()
-    view.draw(s.drawables(), s.fields(), s.tick)
+    view.draw({ drawables: s.drawables(), world: s.world, tick: s.tick })
   }
   const stepOnce = () => {
     const s = current()
-    if (keysAt) {
-      s.step(keysAt(s.tick + 1))
-      return
+    switch (source.kind) {
+      case 'keyboard':
+        s.step([...down, ...tapped])
+        tapped.clear()
+        return
+      case 'schedule':
+        s.step(source.keysAt(s.tick + 1))
+        return
+      case 'driver':
+        s.step(s.drive(source.driver))
+        return
+      default: {
+        const _exhaustive: never = source
+        void _exhaustive
+      }
     }
-    s.step(new Set([...down, ...tapped]))
-    tapped.clear()
   }
 
-  function reset(options: ResetOptions = {}): number {
-    session = new Session(game, { seed: options.seed ?? randomSeed(), set: options.set })
-    keysAt = options.ticks === undefined ? undefined : schedule(options.press ?? [], options.hold ?? [], options.ticks)
+  const reset = (options: ResetOptions = {}): number => {
+    session = new Session(game, { seed: options.seed ?? config.seed ?? 0, set: options.set })
+    source = inputSource(options, drive)
     session.start()
     draw()
     return session.seed
@@ -71,23 +102,14 @@ export function play(game: Game, custom: ViewModule, config: Config): void {
       draw()
       return current().tick
     },
-    advanceTo(tick: number) {
+    advanceTo(tick) {
       while (current().tick < tick) stepOnce()
       draw()
       return current().tick
     },
-    state(only?: string) {
-      return pick(current().state(), only)
-    },
-    logs() {
-      return [...current().logs]
-    },
-    pause() {
-      paused = true
-    },
-    resume() {
-      paused = false
-    },
+    state: (only) => pick(current().state(), only),
+    pause: () => void (paused = true),
+    resume: () => void (paused = false),
     get paused() {
       return paused
     },
@@ -119,8 +141,7 @@ export function play(game: Game, custom: ViewModule, config: Config): void {
   }
 
   try {
-    reset({ seed: config.seed })
-    console.log(`seed ${current().seed}`)
+    reset()
   } catch (error) {
     fail(error)
     return
@@ -155,27 +176,42 @@ export function play(game: Game, custom: ViewModule, config: Config): void {
   let owed = 0
   const frame = (now: number) => {
     if (stopped) return
-    if (!paused && !document.hidden) {
-      owed = Math.min(owed + (now - last), 250)
-      try {
-        while (owed >= TICK_MS) {
-          stepOnce()
-          owed -= TICK_MS
-        }
-      } catch (error) {
-        fail(error)
-        return
+    try {
+      if (!paused && !document.hidden) {
+        owed = Math.min(owed + (now - last), 250)
+        for (; owed >= TICK_MS; owed -= TICK_MS) stepOnce()
       }
+      last = now
+      draw()
+    } catch (error) {
+      fail(error)
+      return
     }
-    last = now
-    draw()
     requestAnimationFrame(frame)
   }
   requestAnimationFrame(frame)
 }
 
-function randomSeed(): number {
-  return crypto.getRandomValues(new Uint32Array(1))[0]
+function inputSource(options: ResetOptions, drive: Drive | undefined): Source {
+  if (options.drive) {
+    if (!drive) throw new Error('this page was built without a driver')
+    return { kind: 'driver', driver: driverFor(drive) }
+  }
+  if (options.ticks === undefined) return { kind: 'keyboard' }
+  return { kind: 'schedule', keysAt: schedule({ press: options.press ?? [], hold: options.hold ?? [], ticks: options.ticks, clip: true }) }
+}
+
+function parseConfig(value: unknown): Config {
+  if (typeof value !== 'object' || value === null || !('mode' in value)) throw new Error('the page has no FourJS config')
+  const seed = 'seed' in value && typeof value.seed === 'number' ? value.seed : undefined
+  if (value.mode === 'run' || value.mode === 'shot') return { mode: value.mode, seed }
+  throw new Error(`unknown page mode ${String(value.mode)}`)
+}
+
+function parseDrive(value: unknown): Drive | undefined {
+  if (value === undefined) return undefined
+  if (isDrive(value)) return value
+  throw new Error('the driver file must export default a driver function or defineDriver(...)')
 }
 
 function notice(message: string): void {
