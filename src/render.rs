@@ -32,12 +32,12 @@ impl Renderer {
         Ok(Renderer { shader, meshes })
     }
 
-    pub fn draw(
+    pub fn draw<'a>(
         &self,
         gl: &glow::Context,
         camera: &Camera,
         background: [f32; 3],
-        sprites: &[Sprite],
+        sprites: impl IntoIterator<Item = &'a Sprite>,
         width: u32,
         height: u32,
     ) {

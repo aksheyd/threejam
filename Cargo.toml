@@ -2,7 +2,7 @@
 name = "game-engine"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["Akshey D"]
 description = "Rust Game Engine"
 license = "MIT"
@@ -24,3 +24,10 @@ raw-window-handle = "0.6.2"
 serde = { version = "1", features = ["derive"] }
 toml = "1"
 winit = "0.30.13"
+
+# mlua's generic calls compile into this crate, so optimizing only the dependencies leaves sims slow.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

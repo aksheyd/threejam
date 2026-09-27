@@ -17,7 +17,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use crate::camera::Camera;
@@ -85,13 +85,16 @@ impl Gfx {
     }
 }
 
-pub fn run(world: World, title: &str) -> Result<(), String> {
+pub fn run(world: World, title: &str, reload: impl FnMut(&mut World)) -> Result<(), String> {
     let mut game = Game {
         world,
         title,
+        reload,
         input: Input::default(),
+        modifiers: ModifiersState::empty(),
         lag: 0.0,
         last_frame: Instant::now(),
+        occluded: false,
         result: Ok(()),
         gfx: None,
     };
@@ -101,17 +104,20 @@ pub fn run(world: World, title: &str) -> Result<(), String> {
     game.result
 }
 
-struct Game<'a> {
+struct Game<'a, R> {
     world: World,
     title: &'a str,
+    reload: R,
     input: Input,
+    modifiers: ModifiersState,
     lag: f64,
     last_frame: Instant,
+    occluded: bool,
     result: Result<(), String>,
     gfx: Option<Gfx>,
 }
 
-impl ApplicationHandler for Game<'_> {
+impl<R: FnMut(&mut World)> ApplicationHandler for Game<'_, R> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.gfx.is_some() {
             return;
@@ -132,6 +138,7 @@ impl ApplicationHandler for Game<'_> {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -142,14 +149,31 @@ impl ApplicationHandler for Game<'_> {
                     },
                 ..
             } => {
-                if code == KeyCode::Escape && state == ElementState::Pressed {
+                let pressed = state == ElementState::Pressed;
+                if pressed && code == KeyCode::Escape {
                     event_loop.exit();
+                } else if pressed && reloads(code, self.modifiers) {
+                    (self.reload)(&mut self.world);
+                    self.input = Input::default();
+                    // Loading takes time the new game shouldn't catch up on.
+                    self.lag = 0.0;
+                    self.last_frame = Instant::now();
                 } else if let Some(key) = key_for(code) {
-                    self.input.set(key, state == ElementState::Pressed);
+                    self.input.set(key, pressed);
                 }
             }
             // On macOS, keys held when focus leaves the window never get a release event.
-            WindowEvent::Focused(false) => self.input = Input::default(),
+            WindowEvent::Focused(false) => self.input.release_all(),
+            // Some systems stop blocking swap_buffers for a hidden window, so redrawing it would spin a core.
+            WindowEvent::Occluded(occluded) => {
+                self.occluded = occluded;
+                if occluded {
+                    self.input.release_all();
+                } else if let Some(gfx) = &self.gfx {
+                    self.last_frame = Instant::now();
+                    gfx.window.request_redraw();
+                }
+            }
             WindowEvent::Resized(size) => {
                 if let (Some(gfx), Some(width), Some(height)) = (
                     &self.gfx,
@@ -170,9 +194,9 @@ impl ApplicationHandler for Game<'_> {
     }
 }
 
-impl Game<'_> {
+impl<R> Game<'_, R> {
     fn frame(&mut self) -> Result<(), String> {
-        let Some(gfx) = &self.gfx else {
+        let Some(gfx) = self.gfx.as_ref().filter(|_| !self.occluded) else {
             return Ok(());
         };
         let now = Instant::now();
@@ -182,15 +206,15 @@ impl Game<'_> {
             self.world
                 .tick(&self.input)
                 .map_err(|err| err.to_string())?;
+            self.input.end_tick();
             self.lag -= DT;
         }
-        let sprites = self.world.sprites().map_err(|err| err.to_string())?;
         let size = gfx.window.inner_size();
         gfx.renderer.draw(
             &gfx.gl,
             &Camera::default(),
             self.world.background(),
-            &sprites,
+            self.world.sprites(),
             size.width,
             size.height,
         );
@@ -202,8 +226,21 @@ impl Game<'_> {
     }
 }
 
-pub fn screenshot(world: &World, title: &str, path: &Path) -> Result<(), String> {
-    let sprites = world.sprites().map_err(|err| err.to_string())?;
+pub struct Frame {
+    background: [f32; 3],
+    sprites: Vec<Sprite>,
+}
+
+impl Frame {
+    pub fn new(world: &World) -> Frame {
+        Frame {
+            background: world.background(),
+            sprites: world.sprites().copied().collect(),
+        }
+    }
+}
+
+pub fn screenshot(frames: &[(Frame, &Path)], title: &str) -> Result<(), String> {
     let mut builder = EventLoop::builder();
     #[cfg(target_os = "macos")]
     {
@@ -213,10 +250,8 @@ pub fn screenshot(world: &World, title: &str, path: &Path) -> Result<(), String>
             .with_activate_ignoring_other_apps(false);
     }
     let mut shot = Shot {
-        sprites,
-        background: world.background(),
+        frames,
         title,
-        path,
         result: Err("the event loop never opened a window".to_owned()),
     };
     builder
@@ -227,10 +262,8 @@ pub fn screenshot(world: &World, title: &str, path: &Path) -> Result<(), String>
 }
 
 struct Shot<'a> {
-    sprites: Vec<Sprite>,
-    background: [f32; 3],
+    frames: &'a [(Frame, &'a Path)],
     title: &'a str,
-    path: &'a Path,
     result: Result<(), String>,
 }
 
@@ -246,18 +279,26 @@ impl ApplicationHandler for Shot<'_> {
 impl Shot<'_> {
     fn save(&self, event_loop: &ActiveEventLoop) -> Result<(), String> {
         let gfx = Gfx::new(event_loop, self.title, false)?;
-        let rgba = capture(&gfx.gl, WIDTH, HEIGHT, || {
-            gfx.renderer.draw(
-                &gfx.gl,
-                &Camera::default(),
-                self.background,
-                &self.sprites,
-                WIDTH,
-                HEIGHT,
-            );
-        })?;
-        save_png(self.path, WIDTH, HEIGHT, &rgba)
+        for (frame, path) in self.frames {
+            let rgba = capture(&gfx.gl, WIDTH, HEIGHT, || {
+                gfx.renderer.draw(
+                    &gfx.gl,
+                    &Camera::default(),
+                    frame.background,
+                    &frame.sprites,
+                    WIDTH,
+                    HEIGHT,
+                );
+            })?;
+            save_png(path, WIDTH, HEIGHT, &rgba)?;
+        }
+        Ok(())
     }
+}
+
+fn reloads(code: KeyCode, modifiers: ModifiersState) -> bool {
+    code == KeyCode::F5
+        || (cfg!(target_os = "macos") && code == KeyCode::KeyR && modifiers.super_key())
 }
 
 fn key_for(code: KeyCode) -> Option<Key> {
@@ -336,5 +377,17 @@ mod tests {
         for (code, name) in cases {
             assert_eq!(key_for(code).map(Key::name), name, "{code:?}");
         }
+    }
+
+    #[test]
+    fn f5_reloads_everywhere_and_cmd_r_on_macos_but_r_stays_a_script_key() {
+        let none = ModifiersState::empty();
+        assert!(reloads(KeyCode::F5, none));
+        assert_eq!(
+            reloads(KeyCode::KeyR, ModifiersState::SUPER),
+            cfg!(target_os = "macos")
+        );
+        assert!(!reloads(KeyCode::KeyR, none));
+        assert!(!reloads(KeyCode::KeyR, ModifiersState::CONTROL));
     }
 }

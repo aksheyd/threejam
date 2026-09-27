@@ -40,7 +40,10 @@ mod tests {
         let temp = TempGame::new(&[]);
         let dir = temp.dir.join("game");
         create_game(&dir).unwrap();
-        assert_eq!(World::load(&dir).unwrap().summary(), "2 entities, 1 script");
+        assert_eq!(
+            World::load(&dir, 0).unwrap().summary(),
+            "2 entities, 1 script"
+        );
     }
 
     #[test]
