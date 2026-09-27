@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
 import puppeteer from 'puppeteer-core'
 import { UsageError } from './errors.ts'
 import { buildPage, findChrome, serve } from './serve.ts'
@@ -51,6 +53,7 @@ export async function shoot(dir: string, options: ShotOptions): Promise<string[]
     const reset = { seed: options.seed ?? 0, ticks, press: options.press, hold: options.hold, set: options.set }
     await tab.evaluate((o) => (window.engine as { reset(o: unknown): number }).reset(o), reset)
     const paths = framePaths(options.out, options.at)
+    for (const path of paths) mkdirSync(dirname(path), { recursive: true })
     for (const [i, tick] of options.at.entries()) {
       await tab.evaluate((t) => (window.engine as { advanceTo(t: number): number }).advanceTo(t), tick)
       await tab.screenshot({ path: paths[i] as `${string}.png`, clip: { x: 0, y: 0, width: 800, height: 600 } })
