@@ -8,13 +8,13 @@ local function overlaps(a, b)
      and math.abs(a.y - b.y) < (a.h + b.h) / 2
 end
 
-local function serve(self, dir, pause)
+local function serve(self, dir)
   self.x, self.y = 0.0, 0.0
   self.speed = self.serve_speed
   local angle = (math.random() * 2 - 1) * SERVE_ANGLE
   self.vx = dir * self.speed * math.cos(angle)
   self.vy = self.speed * math.sin(angle)
-  self.wait = pause
+  self.wait = self.serve_pause
 end
 
 local function hit(self, paddle, dir)
@@ -27,10 +27,13 @@ local function hit(self, paddle, dir)
 end
 
 function start(self)
-  serve(self, 1, 0)
+  self.game = get("game")
+  self.left_paddle, self.right_paddle = get("left_paddle"), get("right_paddle")
+  serve(self, 1)
 end
 
 function update(self, dt)
+  if self.game.state ~= "play" then return end
   if self.wait > 0 then
     self.wait = self.wait - 1
     return
@@ -49,7 +52,7 @@ function update(self, dt)
   end
 
   -- A ball already past a paddle's middle doesn't bounce, so it can score.
-  local left, right = find("left_paddle"), find("right_paddle")
+  local left, right = self.left_paddle, self.right_paddle
   if self.vx < 0 and self.x > left.x and overlaps(self, left) then
     hit(self, left, 1)
   elseif self.vx > 0 and self.x < right.x and overlaps(self, right) then
@@ -57,12 +60,10 @@ function update(self, dt)
   end
 
   if self.x - self.w / 2 > RIGHT then
-    self.left_score = self.left_score + 1
-    print(("Left scores! Left %d - Right %d"):format(self.left_score, self.right_score))
-    serve(self, 1, self.serve_pause)
+    self.game.point("left")
+    serve(self, 1)
   elseif self.x + self.w / 2 < LEFT then
-    self.right_score = self.right_score + 1
-    print(("Right scores! Left %d - Right %d"):format(self.left_score, self.right_score))
-    serve(self, -1, self.serve_pause)
+    self.game.point("right")
+    serve(self, -1)
   end
 end

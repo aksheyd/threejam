@@ -1,7 +1,7 @@
-# Pong. Left paddle: W / S. Right paddle: Up / Down.
+# Pong for two players. Left paddle: W / S. Right paddle: Up / Down. Space starts a match; first to 7 wins.
 background = [0.03, 0.03, 0.05]
 
-# Dashed center line. Listed first so the paddles and ball draw on top of it.
+# Dashed center line. Listed first so everything else draws on top of it.
 [[entity]]
 name = "net1"
 transform = { position = [0.0, 1.375], scale = [0.03, 0.12] }
@@ -62,8 +62,42 @@ name = "net12"
 transform = { position = [0.0, -1.375], scale = [0.03, 0.12] }
 mesh = { shape = "square", color = [0.5, 0.5, 0.5] }
 
-# Paddles come before the ball, so each tick they move first and the ball
-# collides with where they are now.
+# game.lua sets the scores and shows the other texts only while waiting for Space.
+[[entity]]
+name = "left_score"
+transform = { position = [-0.5, 1.2] }
+text = { value = "0", size = 0.28, color = [0.5, 0.5, 0.5] }
+
+[[entity]]
+name = "right_score"
+transform = { position = [0.5, 1.2] }
+text = { value = "0", size = 0.28, color = [0.5, 0.5, 0.5] }
+
+[[entity]]
+name = "winner"
+transform = { position = [0.0, 0.5] }
+text = { value = "", size = 0.14, color = [0.95, 0.95, 0.95] }
+
+[[entity]]
+name = "prompt"
+transform = { position = [0.0, -0.5] }
+text = { value = "PRESS SPACE TO START", size = 0.14, color = [0.95, 0.95, 0.95] }
+
+[[entity]]
+name = "left_keys"
+transform = { position = [-1.0, -1.0] }
+text = { value = "W / S", size = 0.14, color = [0.5, 0.5, 0.5] }
+
+[[entity]]
+name = "right_keys"
+transform = { position = [1.0, -1.0] }
+text = { value = "UP / DOWN", size = 0.14, color = [0.5, 0.5, 0.5] }
+
+[[entity]]
+name = "game"
+script = { file = "game.lua", win_score = 7 }
+
+# Paddles come before the ball, so the ball collides with where they are this tick.
 [[entity]]
 name = "left_paddle"
 transform = { position = [-1.85, 0.0], scale = [0.08, 0.45] }
@@ -81,4 +115,4 @@ script = { file = "paddle.lua", up = "Up", down = "Down", speed = 2.2 }
 name = "ball"
 transform = { position = [0.0, 0.0], scale = [0.08, 0.08] }
 mesh = { shape = "square", color = [1.0, 1.0, 1.0] }
-script = { file = "ball.lua", serve_speed = 1.6, max_speed = 3.5, speedup = 1.05, serve_pause = 45, left_score = 0, right_score = 0 }
+script = { file = "ball.lua", serve_speed = 1.6, max_speed = 3.5, speedup = 1.05, serve_pause = 45 }

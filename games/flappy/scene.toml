@@ -1,0 +1,1116 @@
+background = [0.306, 0.753, 0.792]
+
+# The bird's body box (the size of bird_line) and game state. Its visible parts come after the ground.
+
+[[entity]]
+name = "bird"
+transform = { position = [-0.9, 0.1], scale = [0.24, 0.18] }
+script = { file = "bird.lua", gravity = 8.0, flap_speed = 2.3, max_fall = 3.5, forward_speed = 1.0, bob = 0.03, restart_delay = 30 }
+
+[[entity]]
+name = "ceiling"
+transform = { position = [0.0, 2.0], scale = [4.4, 1.0] }
+
+# Backdrop: clouds, city, and bushes (static).
+
+[[entity]]
+name = "cloud_base"
+transform = { position = [0.0, -0.8], scale = [4.2, 0.3] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_1a"
+transform = { position = [-2.1, -0.6355], scale = [0.4986, 0.1291] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_1b"
+transform = { position = [-2.1513, -0.5975], scale = [0.2742, 0.2051] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_2a"
+transform = { position = [-1.6196, -0.6383], scale = [0.5049, 0.1235] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_2b"
+transform = { position = [-1.6751, -0.6031], scale = [0.2777, 0.1938] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_3a"
+transform = { position = [-1.1546, -0.6373], scale = [0.4605, 0.1254] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_3b"
+transform = { position = [-1.1153, -0.6038], scale = [0.2533, 0.1924] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_4a"
+transform = { position = [-0.736, -0.6212], scale = [0.4835, 0.1576] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_4b"
+transform = { position = [-0.7267, -0.5772], scale = [0.2659, 0.2456] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_5a"
+transform = { position = [-0.2765, -0.6386], scale = [0.5964, 0.1228] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_5b"
+transform = { position = [-0.3017, -0.5964], scale = [0.328, 0.2071] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_6a"
+transform = { position = [0.1451, -0.6307], scale = [0.4677, 0.1385] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_6b"
+transform = { position = [0.1068, -0.5894], scale = [0.2572, 0.2212] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_7a"
+transform = { position = [0.6324, -0.6288], scale = [0.5458, 0.1423] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_7b"
+transform = { position = [0.5799, -0.5929], scale = [0.3002, 0.2143] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_8a"
+transform = { position = [1.0413, -0.6196], scale = [0.4809, 0.1608] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_8b"
+transform = { position = [1.019, -0.586], scale = [0.2645, 0.2279] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_9a"
+transform = { position = [1.5292, -0.631], scale = [0.518, 0.138] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_9b"
+transform = { position = [1.553, -0.5901], scale = [0.2849, 0.2198] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_10a"
+transform = { position = [1.9658, -0.6242], scale = [0.5362, 0.1515] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "cloud_10b"
+transform = { position = [1.9933, -0.5817], scale = [0.2949, 0.2365] }
+mesh = { shape = "square", color = [0.914, 0.988, 0.851] }
+
+[[entity]]
+name = "building_1"
+transform = { position = [-1.9414, -0.847], scale = [0.3172, 0.306] }
+mesh = { shape = "square", color = [0.78, 0.918, 0.859] }
+
+[[entity]]
+name = "building_1_windows_1"
+transform = { position = [-1.9414, -0.744], scale = [0.1903, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_1_windows_2"
+transform = { position = [-1.9414, -0.814], scale = [0.1903, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_2"
+transform = { position = [-1.6635, -0.7767], scale = [0.2385, 0.4466] }
+mesh = { shape = "square", color = [0.718, 0.886, 0.816] }
+
+[[entity]]
+name = "building_2_windows_1"
+transform = { position = [-1.6635, -0.6034], scale = [0.1431, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_2_windows_2"
+transform = { position = [-1.6635, -0.6734], scale = [0.1431, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_3"
+transform = { position = [-1.4436, -0.8062], scale = [0.2013, 0.3876] }
+mesh = { shape = "square", color = [0.78, 0.918, 0.859] }
+
+[[entity]]
+name = "building_3_windows_1"
+transform = { position = [-1.4436, -0.6624], scale = [0.1208, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_3_windows_2"
+transform = { position = [-1.4436, -0.7324], scale = [0.1208, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_4"
+transform = { position = [-1.2502, -0.7865], scale = [0.1855, 0.427] }
+mesh = { shape = "square", color = [0.718, 0.886, 0.816] }
+
+[[entity]]
+name = "building_4_windows_1"
+transform = { position = [-1.2502, -0.623], scale = [0.1113, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_4_windows_2"
+transform = { position = [-1.2502, -0.693], scale = [0.1113, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_5"
+transform = { position = [-1.014, -0.797], scale = [0.287, 0.4061] }
+mesh = { shape = "square", color = [0.78, 0.918, 0.859] }
+
+[[entity]]
+name = "building_5_windows_1"
+transform = { position = [-1.014, -0.6439], scale = [0.1722, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_5_windows_2"
+transform = { position = [-1.014, -0.7139], scale = [0.1722, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_6"
+transform = { position = [-0.7191, -0.8255], scale = [0.3026, 0.349] }
+mesh = { shape = "square", color = [0.718, 0.886, 0.816] }
+
+[[entity]]
+name = "building_6_windows_1"
+transform = { position = [-0.7191, -0.701], scale = [0.1815, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_6_windows_2"
+transform = { position = [-0.7191, -0.771], scale = [0.1815, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_7"
+transform = { position = [-0.4292, -0.7946], scale = [0.2773, 0.4108] }
+mesh = { shape = "square", color = [0.78, 0.918, 0.859] }
+
+[[entity]]
+name = "building_7_windows_1"
+transform = { position = [-0.4292, -0.6392], scale = [0.1664, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_7_windows_2"
+transform = { position = [-0.4292, -0.7092], scale = [0.1664, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_8"
+transform = { position = [-0.1599, -0.8098], scale = [0.2612, 0.3804] }
+mesh = { shape = "square", color = [0.718, 0.886, 0.816] }
+
+[[entity]]
+name = "building_8_windows_1"
+transform = { position = [-0.1599, -0.6696], scale = [0.1567, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_8_windows_2"
+transform = { position = [-0.1599, -0.7396], scale = [0.1567, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_9"
+transform = { position = [0.1195, -0.7561], scale = [0.2976, 0.4878] }
+mesh = { shape = "square", color = [0.78, 0.918, 0.859] }
+
+[[entity]]
+name = "building_9_windows_1"
+transform = { position = [0.1195, -0.5622], scale = [0.1786, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_9_windows_2"
+transform = { position = [0.1195, -0.6322], scale = [0.1786, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_10"
+transform = { position = [0.3914, -0.7869], scale = [0.2464, 0.4261] }
+mesh = { shape = "square", color = [0.718, 0.886, 0.816] }
+
+[[entity]]
+name = "building_10_windows_1"
+transform = { position = [0.3914, -0.6239], scale = [0.1478, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_10_windows_2"
+transform = { position = [0.3914, -0.6939], scale = [0.1478, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_11"
+transform = { position = [0.6089, -0.7828], scale = [0.1885, 0.4343] }
+mesh = { shape = "square", color = [0.78, 0.918, 0.859] }
+
+[[entity]]
+name = "building_11_windows_1"
+transform = { position = [0.6089, -0.6157], scale = [0.1131, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_11_windows_2"
+transform = { position = [0.6089, -0.6857], scale = [0.1131, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_12"
+transform = { position = [0.8384, -0.7508], scale = [0.2706, 0.4985] }
+mesh = { shape = "square", color = [0.718, 0.886, 0.816] }
+
+[[entity]]
+name = "building_12_windows_1"
+transform = { position = [0.8384, -0.5515], scale = [0.1624, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_12_windows_2"
+transform = { position = [0.8384, -0.6215], scale = [0.1624, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_13"
+transform = { position = [1.1213, -0.8287], scale = [0.2951, 0.3426] }
+mesh = { shape = "square", color = [0.78, 0.918, 0.859] }
+
+[[entity]]
+name = "building_13_windows_1"
+transform = { position = [1.1213, -0.7074], scale = [0.177, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_13_windows_2"
+transform = { position = [1.1213, -0.7774], scale = [0.177, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_14"
+transform = { position = [1.3858, -0.7864], scale = [0.234, 0.4271] }
+mesh = { shape = "square", color = [0.718, 0.886, 0.816] }
+
+[[entity]]
+name = "building_14_windows_1"
+transform = { position = [1.3858, -0.6229], scale = [0.1404, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_14_windows_2"
+transform = { position = [1.3858, -0.6929], scale = [0.1404, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_15"
+transform = { position = [1.5944, -0.8092], scale = [0.1832, 0.3816] }
+mesh = { shape = "square", color = [0.78, 0.918, 0.859] }
+
+[[entity]]
+name = "building_15_windows_1"
+transform = { position = [1.5944, -0.6684], scale = [0.1099, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_15_windows_2"
+transform = { position = [1.5944, -0.7384], scale = [0.1099, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_16"
+transform = { position = [1.7877, -0.8471], scale = [0.2035, 0.3058] }
+mesh = { shape = "square", color = [0.718, 0.886, 0.816] }
+
+[[entity]]
+name = "building_16_windows_1"
+transform = { position = [1.7877, -0.7442], scale = [0.1221, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_16_windows_2"
+transform = { position = [1.7877, -0.8142], scale = [0.1221, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_17"
+transform = { position = [1.9836, -0.7755], scale = [0.1883, 0.449] }
+mesh = { shape = "square", color = [0.78, 0.918, 0.859] }
+
+[[entity]]
+name = "building_17_windows_1"
+transform = { position = [1.9836, -0.601], scale = [0.113, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_17_windows_2"
+transform = { position = [1.9836, -0.671], scale = [0.113, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_18"
+transform = { position = [2.1768, -0.8328], scale = [0.1981, 0.3345] }
+mesh = { shape = "square", color = [0.718, 0.886, 0.816] }
+
+[[entity]]
+name = "building_18_windows_1"
+transform = { position = [2.1768, -0.7155], scale = [0.1189, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "building_18_windows_2"
+transform = { position = [2.1768, -0.7855], scale = [0.1189, 0.025] }
+mesh = { shape = "square", color = [0.655, 0.847, 0.776] }
+
+[[entity]]
+name = "bush_1_edge"
+transform = { position = [-2.1, -0.8907], scale = [0.3886, 0.1386] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_2_edge"
+transform = { position = [-1.849, -0.9013], scale = [0.3421, 0.1175] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_3_edge"
+transform = { position = [-1.6305, -0.8904], scale = [0.4124, 0.1392] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_4_edge"
+transform = { position = [-1.3628, -0.8909], scale = [0.4529, 0.1382] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_5_edge"
+transform = { position = [-1.0668, -0.9021], scale = [0.3718, 0.1158] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_6_edge"
+transform = { position = [-0.8275, -0.8904], scale = [0.3838, 0.1392] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_7_edge"
+transform = { position = [-0.5799, -0.9087], scale = [0.4737, 0.1025] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_8_edge"
+transform = { position = [-0.2693, -0.9067], scale = [0.3564, 0.1066] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_9_edge"
+transform = { position = [-0.0408, -0.9004], scale = [0.365, 0.1192] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_10_edge"
+transform = { position = [0.1937, -0.9059], scale = [0.4184, 0.1081] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_11_edge"
+transform = { position = [0.4656, -0.902], scale = [0.3306, 0.1159] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_12_edge"
+transform = { position = [0.676, -0.8983], scale = [0.3854, 0.1233] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_13_edge"
+transform = { position = [0.9248, -0.8952], scale = [0.473, 0.1295] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_14_edge"
+transform = { position = [1.2348, -0.8971], scale = [0.4073, 0.1259] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_15_edge"
+transform = { position = [1.499, -0.9112], scale = [0.4314, 0.0977] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_16_edge"
+transform = { position = [1.78, -0.893], scale = [0.4649, 0.134] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_17_edge"
+transform = { position = [2.0844, -0.8926], scale = [0.4612, 0.1349] }
+mesh = { shape = "square", color = [0.302, 0.776, 0.365] }
+
+[[entity]]
+name = "bush_1"
+transform = { position = [-2.1, -0.8982], scale = [0.3586, 0.1236] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_2"
+transform = { position = [-1.849, -0.9088], scale = [0.3121, 0.1025] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_3"
+transform = { position = [-1.6305, -0.8979], scale = [0.3824, 0.1242] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_4"
+transform = { position = [-1.3628, -0.8984], scale = [0.4229, 0.1232] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_5"
+transform = { position = [-1.0668, -0.9096], scale = [0.3418, 0.1008] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_6"
+transform = { position = [-0.8275, -0.8979], scale = [0.3538, 0.1242] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_7"
+transform = { position = [-0.5799, -0.9162], scale = [0.4437, 0.0875] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_8"
+transform = { position = [-0.2693, -0.9142], scale = [0.3264, 0.0916] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_9"
+transform = { position = [-0.0408, -0.9079], scale = [0.335, 0.1042] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_10"
+transform = { position = [0.1937, -0.9134], scale = [0.3884, 0.0931] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_11"
+transform = { position = [0.4656, -0.9095], scale = [0.3006, 0.1009] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_12"
+transform = { position = [0.676, -0.9058], scale = [0.3554, 0.1083] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_13"
+transform = { position = [0.9248, -0.9027], scale = [0.443, 0.1145] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_14"
+transform = { position = [1.2348, -0.9046], scale = [0.3773, 0.1109] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_15"
+transform = { position = [1.499, -0.9187], scale = [0.4014, 0.0827] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_16"
+transform = { position = [1.78, -0.9005], scale = [0.4349, 0.119] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_17"
+transform = { position = [2.0844, -0.9001], scale = [0.4312, 0.1199] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+[[entity]]
+name = "bush_base"
+transform = { position = [0.0, -0.99], scale = [4.2, 0.12] }
+mesh = { shape = "square", color = [0.369, 0.886, 0.439] }
+
+# Pipe pair 1: pipe1 is the gap; its parts keep their offsets from it. pipe.lua picks the gap's height.
+
+[[entity]]
+name = "pipe1"
+transform = { position = [2.25, 0.15], scale = [0.4, 0.8] }
+script = { file = "pipe.lua", gap_min = -0.35, gap_max = 0.75, wrap = 4.8 }
+
+[[entity]]
+name = "pipe1_top_line"
+transform = { position = [2.25, 2.31], scale = [0.36, 3.2] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe1_top"
+transform = { position = [2.25, 2.31], scale = [0.32, 3.2] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe1_top_hi"
+transform = { position = [2.145, 2.31], scale = [0.05, 3.2] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe1_top_lo"
+transform = { position = [2.38, 2.31], scale = [0.06, 3.2] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+[[entity]]
+name = "pipe1_top_cap_line"
+transform = { position = [2.25, 0.63], scale = [0.4, 0.16] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe1_top_cap"
+transform = { position = [2.25, 0.63], scale = [0.36, 0.12] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe1_top_cap_hi"
+transform = { position = [2.13, 0.63], scale = [0.05, 0.12] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe1_top_cap_lo"
+transform = { position = [2.4, 0.63], scale = [0.06, 0.12] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+[[entity]]
+name = "pipe1_bot_line"
+transform = { position = [2.25, -2.01], scale = [0.36, 3.2] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe1_bot"
+transform = { position = [2.25, -2.01], scale = [0.32, 3.2] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe1_bot_hi"
+transform = { position = [2.145, -2.01], scale = [0.05, 3.2] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe1_bot_lo"
+transform = { position = [2.38, -2.01], scale = [0.06, 3.2] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+[[entity]]
+name = "pipe1_bot_cap_line"
+transform = { position = [2.25, -0.33], scale = [0.4, 0.16] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe1_bot_cap"
+transform = { position = [2.25, -0.33], scale = [0.36, 0.12] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe1_bot_cap_hi"
+transform = { position = [2.13, -0.33], scale = [0.05, 0.12] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe1_bot_cap_lo"
+transform = { position = [2.4, -0.33], scale = [0.06, 0.12] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+# Pipe pair 2: pipe2 is the gap; its parts keep their offsets from it. pipe.lua picks the gap's height.
+
+[[entity]]
+name = "pipe2"
+transform = { position = [3.85, 0.45], scale = [0.4, 0.8] }
+script = { file = "pipe.lua", gap_min = -0.35, gap_max = 0.75, wrap = 4.8 }
+
+[[entity]]
+name = "pipe2_top_line"
+transform = { position = [3.85, 2.61], scale = [0.36, 3.2] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe2_top"
+transform = { position = [3.85, 2.61], scale = [0.32, 3.2] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe2_top_hi"
+transform = { position = [3.745, 2.61], scale = [0.05, 3.2] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe2_top_lo"
+transform = { position = [3.98, 2.61], scale = [0.06, 3.2] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+[[entity]]
+name = "pipe2_top_cap_line"
+transform = { position = [3.85, 0.93], scale = [0.4, 0.16] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe2_top_cap"
+transform = { position = [3.85, 0.93], scale = [0.36, 0.12] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe2_top_cap_hi"
+transform = { position = [3.73, 0.93], scale = [0.05, 0.12] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe2_top_cap_lo"
+transform = { position = [4.0, 0.93], scale = [0.06, 0.12] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+[[entity]]
+name = "pipe2_bot_line"
+transform = { position = [3.85, -1.71], scale = [0.36, 3.2] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe2_bot"
+transform = { position = [3.85, -1.71], scale = [0.32, 3.2] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe2_bot_hi"
+transform = { position = [3.745, -1.71], scale = [0.05, 3.2] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe2_bot_lo"
+transform = { position = [3.98, -1.71], scale = [0.06, 3.2] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+[[entity]]
+name = "pipe2_bot_cap_line"
+transform = { position = [3.85, -0.03], scale = [0.4, 0.16] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe2_bot_cap"
+transform = { position = [3.85, -0.03], scale = [0.36, 0.12] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe2_bot_cap_hi"
+transform = { position = [3.73, -0.03], scale = [0.05, 0.12] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe2_bot_cap_lo"
+transform = { position = [4.0, -0.03], scale = [0.06, 0.12] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+# Pipe pair 3: pipe3 is the gap; its parts keep their offsets from it. pipe.lua picks the gap's height.
+
+[[entity]]
+name = "pipe3"
+transform = { position = [5.45, -0.15], scale = [0.4, 0.8] }
+script = { file = "pipe.lua", gap_min = -0.35, gap_max = 0.75, wrap = 4.8 }
+
+[[entity]]
+name = "pipe3_top_line"
+transform = { position = [5.45, 2.01], scale = [0.36, 3.2] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe3_top"
+transform = { position = [5.45, 2.01], scale = [0.32, 3.2] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe3_top_hi"
+transform = { position = [5.345, 2.01], scale = [0.05, 3.2] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe3_top_lo"
+transform = { position = [5.58, 2.01], scale = [0.06, 3.2] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+[[entity]]
+name = "pipe3_top_cap_line"
+transform = { position = [5.45, 0.33], scale = [0.4, 0.16] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe3_top_cap"
+transform = { position = [5.45, 0.33], scale = [0.36, 0.12] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe3_top_cap_hi"
+transform = { position = [5.33, 0.33], scale = [0.05, 0.12] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe3_top_cap_lo"
+transform = { position = [5.6, 0.33], scale = [0.06, 0.12] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+[[entity]]
+name = "pipe3_bot_line"
+transform = { position = [5.45, -2.31], scale = [0.36, 3.2] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe3_bot"
+transform = { position = [5.45, -2.31], scale = [0.32, 3.2] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe3_bot_hi"
+transform = { position = [5.345, -2.31], scale = [0.05, 3.2] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe3_bot_lo"
+transform = { position = [5.58, -2.31], scale = [0.06, 3.2] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+[[entity]]
+name = "pipe3_bot_cap_line"
+transform = { position = [5.45, -0.63], scale = [0.4, 0.16] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "pipe3_bot_cap"
+transform = { position = [5.45, -0.63], scale = [0.36, 0.12] }
+mesh = { shape = "square", color = [0.451, 0.749, 0.18] }
+
+[[entity]]
+name = "pipe3_bot_cap_hi"
+transform = { position = [5.33, -0.63], scale = [0.05, 0.12] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "pipe3_bot_cap_lo"
+transform = { position = [5.6, -0.63], scale = [0.06, 0.12] }
+mesh = { shape = "square", color = [0.333, 0.557, 0.133] }
+
+# Ground, drawn over the pipes. 'ground' is also what the bird can hit.
+
+[[entity]]
+name = "ground"
+transform = { position = [0.0, -1.275], scale = [4.2, 0.45] }
+mesh = { shape = "square", color = [0.871, 0.847, 0.584] }
+
+[[entity]]
+name = "ground_line"
+transform = { position = [0.0, -1.0575], scale = [4.2, 0.015] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "grass"
+transform = { position = [0.0, -1.095], scale = [4.2, 0.06] }
+mesh = { shape = "square", color = [0.612, 0.902, 0.349] }
+
+[[entity]]
+name = "stripe_1"
+transform = { position = [-2.16, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_2"
+transform = { position = [-2.0, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_3"
+transform = { position = [-1.84, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_4"
+transform = { position = [-1.68, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_5"
+transform = { position = [-1.52, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_6"
+transform = { position = [-1.36, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_7"
+transform = { position = [-1.2, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_8"
+transform = { position = [-1.04, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_9"
+transform = { position = [-0.88, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_10"
+transform = { position = [-0.72, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_11"
+transform = { position = [-0.56, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_12"
+transform = { position = [-0.4, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_13"
+transform = { position = [-0.24, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_14"
+transform = { position = [-0.08, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_15"
+transform = { position = [0.08, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_16"
+transform = { position = [0.24, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_17"
+transform = { position = [0.4, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_18"
+transform = { position = [0.56, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_19"
+transform = { position = [0.72, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_20"
+transform = { position = [0.88, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_21"
+transform = { position = [1.04, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_22"
+transform = { position = [1.2, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_23"
+transform = { position = [1.36, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_24"
+transform = { position = [1.52, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_25"
+transform = { position = [1.68, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_26"
+transform = { position = [1.84, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "stripe_27"
+transform = { position = [2.0, -1.095], scale = [0.1, 0.06] }
+mesh = { shape = "triangle", color = [0.451, 0.749, 0.18] }
+script = { file = "scroll.lua", wrap_at = -2.16, period = 4.32 }
+
+[[entity]]
+name = "grass_edge"
+transform = { position = [0.0, -1.13], scale = [4.2, 0.01] }
+mesh = { shape = "square", color = [0.333, 0.502, 0.133] }
+
+[[entity]]
+name = "dirt_edge"
+transform = { position = [0.0, -1.1425], scale = [4.2, 0.015] }
+mesh = { shape = "square", color = [0.843, 0.659, 0.298] }
+
+# Referee: runs after everything has moved each tick.
+
+[[entity]]
+name = "game"
+transform = { position = [0.0, 0.0], scale = [1.0, 1.0] }
+script = { file = "game.lua", flash_ticks = 20, flash_peak = 0.85 }
+
+# The bird's visible parts. bird.lua keeps their offsets from the bird.
+
+[[entity]]
+name = "bird_line"
+transform = { position = [-0.9, 0.1], scale = [0.24, 0.18] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "bird_body"
+transform = { position = [-0.9, 0.1], scale = [0.216, 0.156] }
+mesh = { shape = "square", color = [0.98, 0.82, 0.16] }
+
+[[entity]]
+name = "bird_belly"
+transform = { position = [-0.894, 0.052], scale = [0.156, 0.048] }
+mesh = { shape = "square", color = [0.992, 0.933, 0.62] }
+
+[[entity]]
+name = "bird_wing_line"
+transform = { position = [-0.966, 0.094], scale = [0.108, 0.078] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "bird_wing"
+transform = { position = [-0.966, 0.094], scale = [0.084, 0.054] }
+mesh = { shape = "square", color = [0.992, 0.969, 0.878] }
+
+[[entity]]
+name = "bird_eye"
+transform = { position = [-0.846, 0.136], scale = [0.078, 0.078] }
+mesh = { shape = "square", color = [1.0, 1.0, 1.0] }
+
+[[entity]]
+name = "bird_pupil"
+transform = { position = [-0.8256, 0.1324], scale = [0.0264, 0.042] }
+mesh = { shape = "square", color = [0.12, 0.08, 0.08] }
+
+[[entity]]
+name = "bird_beak_line"
+transform = { position = [-0.798, 0.064], scale = [0.126, 0.084] }
+mesh = { shape = "square", color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "bird_beak_top"
+transform = { position = [-0.7956, 0.0796], scale = [0.108, 0.0288] }
+mesh = { shape = "square", color = [0.98, 0.35, 0.13] }
+
+[[entity]]
+name = "bird_beak_bot"
+transform = { position = [-0.8004, 0.0484], scale = [0.096, 0.0264] }
+mesh = { shape = "square", color = [0.9, 0.3, 0.12] }
+
+# Text, drawn over the bird. hud.lua sets each line and its _shadow copy, which is drawn first.
+
+[[entity]]
+name = "hud"
+script = { file = "hud.lua" }
+
+[[entity]]
+name = "score_shadow"
+transform = { position = [0.02, 1.18] }
+text = { value = "0", size = 0.28, color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "score"
+transform = { position = [0.0, 1.2] }
+text = { value = "0", size = 0.28, color = [1.0, 1.0, 1.0] }
+
+[[entity]]
+name = "title_shadow"
+transform = { position = [0.015, 0.635] }
+text = { value = "GET READY", size = 0.21, color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "title"
+transform = { position = [0.0, 0.65] }
+text = { value = "GET READY", size = 0.21, color = [1.0, 1.0, 1.0] }
+
+[[entity]]
+name = "prompt_shadow"
+transform = { position = [0.01, 0.34] }
+text = { value = "PRESS SPACE", size = 0.14, color = [0.33, 0.22, 0.28] }
+
+[[entity]]
+name = "prompt"
+transform = { position = [0.0, 0.35] }
+text = { value = "PRESS SPACE", size = 0.14, color = [1.0, 1.0, 1.0] }
+
+# White flash when a run ends.
+
+[[entity]]
+name = "flash"
+transform = { position = [0.0, 0.0], scale = [4.0, 3.0] }
+mesh = { shape = "square", color = [1.0, 1.0, 1.0, 0.0] }

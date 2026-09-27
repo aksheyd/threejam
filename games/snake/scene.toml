@@ -1,0 +1,1745 @@
+background = [0.05, 0.09, 0.05]
+
+[[entity]]
+name = "game"
+script = { file = "game.lua", cols = 20, rows = 15, cell = 0.2, step_ticks = 8, start_body = "6,8 5,8 4,8" }
+
+[[entity]]
+name = "vline1"
+transform = { position = [-1.8, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline2"
+transform = { position = [-1.6, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline3"
+transform = { position = [-1.4, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline4"
+transform = { position = [-1.2, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline5"
+transform = { position = [-1.0, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline6"
+transform = { position = [-0.8, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline7"
+transform = { position = [-0.6, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline8"
+transform = { position = [-0.4, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline9"
+transform = { position = [-0.2, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline10"
+transform = { position = [0.0, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline11"
+transform = { position = [0.2, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline12"
+transform = { position = [0.4, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline13"
+transform = { position = [0.6, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline14"
+transform = { position = [0.8, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline15"
+transform = { position = [1.0, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline16"
+transform = { position = [1.2, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline17"
+transform = { position = [1.4, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline18"
+transform = { position = [1.6, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "vline19"
+transform = { position = [1.8, 0.0], scale = [0.01, 3.0] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline1"
+transform = { position = [0.0, -1.3], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline2"
+transform = { position = [0.0, -1.1], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline3"
+transform = { position = [0.0, -0.9], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline4"
+transform = { position = [0.0, -0.7], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline5"
+transform = { position = [0.0, -0.5], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline6"
+transform = { position = [0.0, -0.3], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline7"
+transform = { position = [0.0, -0.1], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline8"
+transform = { position = [0.0, 0.1], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline9"
+transform = { position = [0.0, 0.3], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline10"
+transform = { position = [0.0, 0.5], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline11"
+transform = { position = [0.0, 0.7], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline12"
+transform = { position = [0.0, 0.9], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline13"
+transform = { position = [0.0, 1.1], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "hline14"
+transform = { position = [0.0, 1.3], scale = [4.0, 0.01] }
+mesh = { shape = "square", color = [0.08, 0.14, 0.08] }
+
+[[entity]]
+name = "wall_left"
+transform = { position = [-1.99, 0.0], scale = [0.02, 3.0] }
+mesh = { shape = "square", color = [0.22, 0.4, 0.22] }
+
+[[entity]]
+name = "wall_right"
+transform = { position = [1.99, 0.0], scale = [0.02, 3.0] }
+mesh = { shape = "square", color = [0.22, 0.4, 0.22] }
+
+[[entity]]
+name = "wall_bottom"
+transform = { position = [0.0, -1.49], scale = [4.0, 0.02] }
+mesh = { shape = "square", color = [0.22, 0.4, 0.22] }
+
+[[entity]]
+name = "wall_top"
+transform = { position = [0.0, 1.49], scale = [4.0, 0.02] }
+mesh = { shape = "square", color = [0.22, 0.4, 0.22] }
+
+[[entity]]
+name = "food"
+transform = { position = [3.0, 0.0], scale = [0.15, 0.11] }
+mesh = { shape = "square", color = [0.9, 0.12, 0.12] }
+
+[[entity]]
+name = "food_b"
+transform = { position = [3.0, 0.0], scale = [0.11, 0.15] }
+mesh = { shape = "square", color = [0.9, 0.12, 0.12] }
+
+[[entity]]
+name = "shine"
+transform = { position = [2.965, 0.025], scale = [0.025, 0.025] }
+mesh = { shape = "square", color = [1.0, 0.55, 0.5] }
+
+[[entity]]
+name = "stem"
+transform = { position = [2.995, 0.08], scale = [0.02, 0.03] }
+mesh = { shape = "square", color = [0.45, 0.28, 0.1] }
+
+[[entity]]
+name = "leaf"
+transform = { position = [3.035, 0.08], scale = [0.05, 0.03] }
+mesh = { shape = "triangle", color = [0.3, 0.85, 0.25] }
+
+[[entity]]
+name = "seg1"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg2"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg3"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg4"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg5"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg6"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg7"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg8"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg9"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg10"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg11"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg12"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg13"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg14"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg15"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg16"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg17"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg18"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg19"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg20"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg21"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg22"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg23"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg24"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg25"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg26"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg27"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg28"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg29"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg30"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg31"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg32"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg33"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg34"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg35"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg36"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg37"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg38"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg39"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg40"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg41"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg42"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg43"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg44"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg45"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg46"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg47"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg48"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg49"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg50"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg51"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg52"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg53"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg54"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg55"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg56"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg57"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg58"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg59"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg60"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg61"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg62"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg63"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg64"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg65"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg66"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg67"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg68"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg69"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg70"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg71"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg72"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg73"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg74"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg75"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg76"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg77"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg78"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg79"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg80"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg81"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg82"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg83"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg84"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg85"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg86"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg87"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg88"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg89"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg90"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg91"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg92"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg93"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg94"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg95"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg96"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg97"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg98"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg99"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg100"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg101"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg102"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg103"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg104"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg105"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg106"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg107"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg108"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg109"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg110"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg111"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg112"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg113"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg114"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg115"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg116"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg117"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg118"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg119"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg120"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg121"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg122"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg123"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg124"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg125"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg126"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg127"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg128"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg129"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg130"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg131"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg132"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg133"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg134"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg135"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg136"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg137"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg138"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg139"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg140"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg141"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg142"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg143"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg144"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg145"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg146"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg147"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg148"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg149"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg150"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg151"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg152"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg153"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg154"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg155"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg156"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg157"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg158"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg159"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg160"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg161"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg162"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg163"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg164"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg165"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg166"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg167"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg168"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg169"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg170"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg171"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg172"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg173"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg174"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg175"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg176"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg177"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg178"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg179"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg180"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg181"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg182"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg183"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg184"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg185"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg186"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg187"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg188"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg189"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg190"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg191"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg192"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg193"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg194"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg195"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg196"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg197"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg198"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg199"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg200"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg201"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg202"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg203"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg204"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg205"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg206"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg207"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg208"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg209"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg210"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg211"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg212"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg213"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg214"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg215"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg216"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg217"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg218"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg219"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg220"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg221"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg222"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg223"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg224"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg225"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg226"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg227"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg228"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg229"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg230"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg231"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg232"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg233"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg234"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg235"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg236"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg237"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg238"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg239"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg240"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg241"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg242"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg243"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg244"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg245"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg246"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg247"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg248"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg249"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg250"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg251"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg252"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg253"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg254"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg255"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg256"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg257"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg258"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg259"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg260"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg261"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg262"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg263"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg264"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg265"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg266"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg267"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg268"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg269"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg270"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg271"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg272"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg273"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg274"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg275"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg276"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg277"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg278"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg279"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg280"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg281"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg282"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg283"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg284"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg285"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg286"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg287"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg288"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg289"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg290"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg291"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg292"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg293"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg294"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg295"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg296"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg297"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg298"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "seg299"
+transform = { position = [3.0, 0.0], scale = [0.17, 0.17] }
+mesh = { shape = "square", color = [0.18, 0.72, 0.22] }
+
+[[entity]]
+name = "head"
+transform = { position = [3.0, 0.0], scale = [0.19, 0.19] }
+mesh = { shape = "square", color = [0.45, 0.95, 0.4] }
+
+[[entity]]
+name = "eye1"
+transform = { position = [3.0, 0.0], scale = [0.04, 0.04] }
+mesh = { shape = "square", color = [0.02, 0.06, 0.02] }
+
+[[entity]]
+name = "eye2"
+transform = { position = [3.0, 0.0], scale = [0.04, 0.04] }
+mesh = { shape = "square", color = [0.02, 0.06, 0.02] }
+
+[[entity]]
+name = "overlay"
+transform = { position = [0.0, 0.0], scale = [4.0, 3.0] }
+mesh = { shape = "square", color = [0.45, 0.0, 0.0, 0.0] }
+
+[[entity]]
+name = "score"
+transform = { position = [1.8, 1.2] }
+text = { value = "0", size = 0.28, align = "right", color = [0.2, 0.38, 0.2] }
+
+[[entity]]
+name = "message"
+transform = { position = [0.0, 0.65] }
+text = { value = "", size = 0.28, color = [0.85, 1.0, 0.8] }
+
+[[entity]]
+name = "hint"
+transform = { position = [0.0, 0.35] }
+text = { value = "PRESS AN ARROW KEY", size = 0.14, color = [0.85, 1.0, 0.8] }

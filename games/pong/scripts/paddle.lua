@@ -1,6 +1,11 @@
 local TOP, BOTTOM = 1.5, -1.5
 
+function start(self)
+  self.game = get("game")
+end
+
 function update(self, dt)
+  if self.game.state ~= "play" then return end
   local dir = 0
   if input.held(self.up) then dir = dir + 1 end
   if input.held(self.down) then dir = dir - 1 end
