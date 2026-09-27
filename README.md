@@ -9,6 +9,8 @@ cargo install --path .
 game-engine run games/pong
 ```
 
+To install without cloning, use `cargo install --git https://github.com/aksheyd/Game-Engine`.
+
 Building needs Rust 1.88 or later. `cargo install` puts `game-engine` in `~/.cargo/bin`. To run it without installing, use `cargo run --` from this folder, like `cargo run -- run games/pong`. `run` and `shot` need OpenGL 3.3 (`shot` draws in a hidden window); `check` and `sim` never open a window.
 
 ## Commands
@@ -30,6 +32,17 @@ Options (`game-engine help` lists them all):
 - `check`, `sim`, `shot`, and `run`: `--scene FILE` reads another scene file.
 
 Every game made with `game-engine new` gets an `AGENTS.md`, a copy of [`games/demo/AGENTS.md`](games/demo/AGENTS.md). It's the manual for people and coding agents: the scene format, the script API, testing, and what isn't supported yet.
+
+## For coding agents
+
+Install the `game-engine` skill to teach an agent the working loop. It points the agent at the manual above.
+
+```bash
+npx skills add aksheyd/Game-Engine
+gh skill install aksheyd/Game-Engine game-engine
+```
+
+Agents changing the engine itself should read [`AGENTS.md`](AGENTS.md).
 
 ## Games
 
