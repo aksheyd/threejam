@@ -16,6 +16,7 @@ This repo is `game-engine`: a Rust engine and CLI for 2D games made of a `scene.
 - `tests/cli.rs` runs the built binary. `tests/shot.rs` holds the GPU tests, which are ignored by default.
 - `games/`: the example games. Each keeps its test drivers and test scenes in `tests/`.
 - `skills/game-engine/SKILL.md`: the agent skill published from this repo.
+- `fourjs/`: FourJS, a TypeScript prototype of the engine on Three.js with an incur CLI and MCP server. It has its own manual and commands in [`fourjs/AGENTS.md`](fourjs/AGENTS.md); `npm test` and `npx tsc -p .` there stay clean.
 
 ## Commands
 

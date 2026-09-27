@@ -44,6 +44,15 @@ gh skill install aksheyd/Game-Engine game-engine
 
 Agents changing the engine itself should read [`AGENTS.md`](AGENTS.md).
 
+## FourJS (prototype)
+
+[`fourjs/`](fourjs/) is a prototype of where this engine is heading: the same idea on Three.js, with games written in TypeScript and one set of commands that works as a CLI, as MCP tools, and as generated agent skills. It plays in the browser and needs no OpenGL. Its manual is [`fourjs/AGENTS.md`](fourjs/AGENTS.md).
+
+```bash
+cd fourjs && npm install
+npx four run games/pong
+```
+
 ## Games
 
 Play any of these with `game-engine run games/<name>`. Esc quits, and Cmd+R (on a Mac) or F5 starts over.
