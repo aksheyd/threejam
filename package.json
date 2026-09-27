@@ -2,8 +2,14 @@
   "name": "fourjs",
   "version": "0.0.1",
   "private": true,
-  "description": "A game engine on Three.js whose API agents use as code, a CLI, or MCP tools",
+  "description": "A game engine on Three.js for coding agents: games in TypeScript, one API as code, a CLI, and MCP tools",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aksheyd/fourjs.git"
+  },
+  "homepage": "https://github.com/aksheyd/fourjs",
+  "keywords": ["game-engine", "threejs", "typescript", "ai-agents", "mcp", "cli", "deterministic"],
   "type": "module",
   "bin": {
     "four": "./src/cli.ts"

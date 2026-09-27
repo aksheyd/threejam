@@ -1,3 +1,0 @@
-# Vendored Lua must target rustc's macOS minimum, or lld warns about the mismatch when linking.
-[env]
-MACOSX_DEPLOYMENT_TARGET = "11.0"
