@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { pick, simulate, type EntityState, type LogEntry } from '../../src/index.ts'
+import { pick, simulate, type EntityState, type LogEntry } from '@aksheyd/fourjs'
 import flappy from './game.ts'
 
 function byName(entities: readonly EntityState[]): Record<string, EntityState> {
@@ -32,7 +32,7 @@ test('each gap passed scores once, and flying above the fourth gap hits its top 
     '[tick 209] passed pipe1, score 1',
     '[tick 305] passed pipe2, score 2',
     '[tick 401] passed pipe3, score 3',
-    '[tick 457] hit pipe1_top_line at score 3',
+    '[tick 457] hit pipes[0].parts.top at score 3',
   ])
   const { bird } = byName(snapshots[0].entities)
   assert.deepEqual([bird.state, bird.score], ['over', 3])
@@ -44,7 +44,7 @@ test('a bot that flaps whenever it sinks below the next gap keeps scoring throug
     ticks: 1200,
     seed: 0,
     drive: ({ world: { bird, pipes } }) => {
-      const next = pipes.filter((pipe) => pipe.x + pipe.w / 2 > bird.x - bird.w / 2).sort((a, b) => a.x - b.x)[0]
+      const next = pipes.filter((pipe) => pipe.x + pipe.parts.top_cap.w / 2 > bird.x - bird.w / 2).sort((a, b) => a.x - b.x)[0]
       gaps.add(next.y)
       return bird.state === 'ready' || (bird.y < next.y - 0.12 && bird.vy < 0) ? ['Space'] : []
     },

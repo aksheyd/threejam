@@ -1,5 +1,5 @@
 // A bot that plays Invaders, for tests and for sim --driver.
-import type { Driver, DriverFrame, EntitiesOf, Key } from 'fourjs'
+import type { Driver, DriverFrame, EntitiesOf, Key } from '@aksheyd/fourjs'
 import game, { frontLine } from './game.ts'
 
 type Invaders = DriverFrame<EntitiesOf<typeof game>>['world']

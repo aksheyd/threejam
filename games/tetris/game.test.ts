@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { pick, simulate, type EntityState, type SimOptions } from '../../src/index.ts'
+import { pick, simulate, type EntityState, type SimOptions } from '@aksheyd/fourjs'
 import tetris from './game.ts'
 
 function run(options: SimOptions): (tick: number, name?: string) => EntityState {

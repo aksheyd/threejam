@@ -10,11 +10,17 @@ export const KEYS = [
   ...['N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'],
   ...['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
   ...['Space', 'Enter', 'Tab', 'Backspace', 'Shift', 'Ctrl', 'Alt', 'Up', 'Down', 'Left', 'Right'],
+  ...['Mouse', 'MouseRight'],
 ] as const
 
 export type Key = (typeof KEYS)[number]
 
-export type Common = { x: number; y: number; visible: boolean }
+export const SOUNDS = ['blip', 'coin', 'explode', 'hit', 'jump', 'lose', 'score', 'shoot'] as const
+
+// A built-in sound, or a sound file next to game.ts named with its extension.
+export type Sound = (typeof SOUNDS)[number] | `${string}.${'wav' | 'mp3' | 'ogg' | 'WAV' | 'MP3' | 'OGG'}`
+
+export type Common = { x: number; y: number; angle: number; visible: boolean }
 
 export type Visuals = {
   w: number
@@ -22,6 +28,7 @@ export type Visuals = {
   shape: Shape
   color: string
   opacity: number
+  image: string
   text: string
   size: number
   align: Align
@@ -32,15 +39,40 @@ export type EngineFields = Common & Visuals
 // Symbol.for keeps these markers recognizable across separately bundled copies of this module.
 export const CHOICE: unique symbol = Symbol.for('fourjs.choice')
 export const GROUP: unique symbol = Symbol.for('fourjs.group')
+export const LIST: unique symbol = Symbol.for('fourjs.list')
+export const MAYBE: unique symbol = Symbol.for('fourjs.maybe')
 
 export interface Choice<T extends string> {
   readonly [CHOICE]: readonly T[]
   readonly initial: T
 }
 
-export type FieldValue = Value | Choice<string>
+export type Example =
+  | number
+  | string
+  | boolean
+  | readonly Example[]
+  | { readonly [key: string]: Example }
+  | Choice<string>
+  | ListOf<Example>
+  | Maybe<Example>
 
-export type EntityInit = Partial<EngineFields> & { readonly [field: string]: FieldValue | undefined }
+export interface ListOf<T extends Example> {
+  readonly [LIST]: T
+  readonly items: readonly unknown[]
+}
+
+export interface Maybe<T extends Example> {
+  readonly [MAYBE]: T
+}
+
+export type FieldValue = Value | Choice<string> | ListOf<Example> | Maybe<Example>
+
+export type PartInit = Partial<EngineFields> & { readonly parts?: never; readonly [field: string]: FieldValue | undefined }
+
+export type PartsInit = { readonly [name: string]: PartInit } | readonly PartInit[]
+
+export type EntityInit = Partial<EngineFields> & { readonly parts?: PartsInit; readonly [field: string]: FieldValue | PartsInit | undefined }
 
 export interface Group<I extends EntityInit> {
   readonly [GROUP]: 'list'
@@ -54,8 +86,25 @@ export interface Grid<I extends EntityInit> {
 
 export type Entities = Record<string, EntityInit | Group<EntityInit> | Grid<EntityInit>>
 
-type Widen<T> = T extends Choice<infer C>
+// Inference instantiates this with all of Example before it knows T, which would otherwise recurse forever.
+type Shaped<T> = [Example] extends [T] ? Value : ShapedEach<T>
+
+type ShapedEach<T> = T extends Choice<infer C>
   ? C
+  : T extends ListOf<infer I>
+    ? Shaped<I>[]
+    : T extends Maybe<infer I>
+      ? Shaped<I> | null
+      : T extends number
+        ? number
+        : T extends string
+          ? string
+          : T extends boolean
+            ? boolean
+            : { -readonly [K in keyof T]: Shaped<T[K]> }
+
+type Widen<T> = T extends Choice<string> | ListOf<Example> | Maybe<Example>
+  ? Shaped<T>
   : T extends boolean
     ? boolean
     : T extends null
@@ -64,21 +113,31 @@ type Widen<T> = T extends Choice<infer C>
         ? Value[]
         : T
 
+// The fields I declares; in an array literal, TypeScript gives each object the others' keys as optional undefined.
+type Given<I> = { [F in keyof I]-?: [Exclude<I[F], undefined>] extends [never] ? never : F }[keyof I]
+
 type Declared<I extends EntityInit> = {
-  -readonly [F in keyof I]-?: F extends keyof EngineFields ? EngineFields[F] : Widen<Exclude<I[F], undefined>>
+  [F in Exclude<Given<I>, 'parts'>]: F extends keyof EngineFields ? EngineFields[F] : Widen<Exclude<I[F], undefined>>
 }
 
-type ShapeField = 'w' | 'h' | 'shape' | 'color' | 'opacity'
+type ShapeField = 'w' | 'h' | 'shape' | 'color' | 'opacity' | 'image'
 
-type KindFields<I extends EntityInit> = 'text' extends keyof I
+type KindFields<I extends EntityInit> = 'text' extends Given<I>
   ? Pick<Visuals, 'text' | 'size' | 'align' | 'color' | 'opacity'>
-  : [Extract<keyof I, ShapeField>] extends [never]
+  : [Extract<Given<I>, ShapeField>] extends [never]
     ? unknown
     : Pick<Visuals, ShapeField>
 
+type Part<I> = I extends EntityInit ? Entity<I> : never
+
+type PartsOf<I extends EntityInit> = I extends { readonly parts: infer P }
+  ? { readonly parts: P extends readonly (infer Each)[] ? readonly Part<Each>[] : { readonly [K in keyof P]: Part<P[K]> } }
+  : unknown
+
+// Not Value: parts aren't values, and relating typed lists to Value recurses past TypeScript's depth limit.
 export type Entity<I extends EntityInit = EntityInit> = Common & { readonly name: string } & (string extends keyof I
-    ? { [field: string]: Value }
-    : KindFields<I> & Declared<I>)
+    ? { [field: string]: unknown }
+    : KindFields<I> & Declared<I> & PartsOf<I>)
 
 type Member<T> =
   T extends Group<infer I>
@@ -93,10 +152,17 @@ export type World<E extends Entities> = { readonly [K in keyof E]: Member<E[K]> 
 
 export type ReadonlyDeep<T> = T extends object ? { readonly [K in keyof T]: ReadonlyDeep<T[K]> } : T
 
+export interface Point {
+  readonly x: number
+  readonly y: number
+}
+
 export interface Input {
   held(key: Key): boolean
   pressed(key: Key): boolean
   released(key: Key): boolean
+  // Where the mouse is in world units, the same for the whole tick.
+  readonly pointer: Point
 }
 
 export interface Context {
@@ -105,6 +171,7 @@ export interface Context {
   readonly input: Input
   random(): number
   print(...values: unknown[]): void
+  play(sound: Sound, options?: { readonly volume?: number; readonly pitch?: number }): void
 }
 
 export interface Game<E extends Entities = Entities> {
@@ -120,10 +187,18 @@ export type EntitiesOf<G> = G extends Game<infer E> ? E : never
 export interface DriverFrame<E extends Entities> {
   readonly world: ReadonlyDeep<World<E>>
   readonly tick: number
+  readonly keys: readonly Key[]
+  readonly pointer: Point
   random(): number
 }
 
-export type Driver<E extends Entities = Entities> = (frame: DriverFrame<E>) => Iterable<Key>
+// The input for one tick: the keys held during it, and where the pointer moves, if it moves.
+export interface Controls {
+  readonly keys?: Iterable<Key>
+  readonly pointer?: Point
+}
+
+export type Driver<E extends Entities = Entities> = (frame: DriverFrame<E>) => Iterable<Key> | Controls
 
 export const DRIVER: unique symbol = Symbol.for('fourjs.driver')
 
@@ -150,6 +225,13 @@ export interface LogEntry {
   readonly text: string
 }
 
+export interface SoundEntry {
+  readonly tick: number
+  readonly name: string
+  readonly volume: number
+  readonly pitch: number
+}
+
 export type EntityState = { readonly name: string } & { readonly [field: string]: Value }
 
 export interface Snapshot {
@@ -157,18 +239,20 @@ export interface Snapshot {
   readonly entities: readonly EntityState[]
 }
 
+// Where an entity or part is on the screen: a part's place and angle already include its entity's.
 type Placed = {
   readonly name: string
   readonly order: number
   readonly x: number
   readonly y: number
+  readonly angle: number
   readonly visible: boolean
   readonly color: string
   readonly opacity: number
 }
 
 export type Drawable =
-  | (Placed & { readonly kind: 'shape'; readonly w: number; readonly h: number; readonly shape: Shape })
+  | (Placed & { readonly kind: 'shape'; readonly w: number; readonly h: number; readonly shape: Shape; readonly image: string })
   | (Placed & { readonly kind: 'text'; readonly text: string; readonly size: number; readonly align: Align })
 
 export function defineGame<E extends Entities>(game: Game<E>): Game<E> {
@@ -177,6 +261,14 @@ export function defineGame<E extends Entities>(game: Game<E>): Game<E> {
 
 export function oneOf<const T extends readonly [string, ...string[]]>(options: T, initial: T[number] = options[0]): Choice<T[number]> {
   return { [CHOICE]: options, initial }
+}
+
+export function listOf<const T extends Example>(example: T, items: readonly NoInfer<Shaped<T>>[] = []): ListOf<T> {
+  return { [LIST]: example, items }
+}
+
+export function maybe<const T extends Example>(example: T): Maybe<T> {
+  return { [MAYBE]: example }
 }
 
 export function group<I extends EntityInit>(count: number, make: (index: number) => I): Group<I> {
@@ -197,6 +289,14 @@ export function isChoice(value: unknown): value is Choice<string> {
 
 export function isGroup(value: unknown): value is Group<EntityInit> | Grid<EntityInit> {
   return typeof value === 'object' && value !== null && GROUP in value
+}
+
+export function isList(value: unknown): value is ListOf<Example> {
+  return typeof value === 'object' && value !== null && LIST in value
+}
+
+export function isMaybe(value: unknown): value is Maybe<Example> {
+  return typeof value === 'object' && value !== null && MAYBE in value
 }
 
 function wholeCount(what: string, count: number): number {

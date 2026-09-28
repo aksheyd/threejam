@@ -1,6 +1,6 @@
 // Tetris. Space starts; Left / Right move the falling piece, Up rotates it, and Down drops it faster.
 // Full rows clear and score, and the game ends when a new piece has no room.
-import { defineGame, grid, group, oneOf, type Context, type Entities, type World } from 'fourjs'
+import { defineGame, grid, group, listOf, oneOf, type Context, type Entities, type World } from '@aksheyd/fourjs'
 
 const COLS = 10
 const ROWS = 20
@@ -52,9 +52,6 @@ const TURNS: Record<Kind, Offset[][]> = {
 // Bottom-left of the box at spawn; the I sits a row lower so it can turn upright under the ceiling.
 const SPAWN: Record<Kind, Offset> = { I: [4, 17], O: [5, 19], T: [4, 18], S: [4, 18], Z: [4, 18], J: [4, 18], L: [4, 18] }
 
-const EMPTY_BOARD: string[] = []
-const EMPTY_BAG: Kind[] = []
-
 const cellX = (col: number) => LEFT_X + (col - 1) * PITCH
 const cellY = (row: number) => BOTTOM_Y + (row - 1) * PITCH
 const BLOCK = { x: 0, y: 0, w: CELL, h: CELL, color: '#ffffff' }
@@ -66,7 +63,7 @@ const entities = {
   game: {
     state: oneOf(['waiting', 'playing', 'over']), score: 0, lines: 0, spawned: 0,
     piece: oneOf(KINDS), turn: 0, left: 0, right: 0, bottom: 0, top: 0, next_piece: oneOf(KINDS),
-    board: EMPTY_BOARD, bag: EMPTY_BAG, col: 0, row: 0,
+    board: listOf(''), bag: listOf(oneOf(KINDS)), col: 0, row: 0,
     drop_timer: 0, das_dir: 0, das_timer: 0, restart_delay: 60, restart_wait: 0,
   },
   border: { x: -0.55, y: 0, w: 1.46, h: 2.86, color: STEEL },

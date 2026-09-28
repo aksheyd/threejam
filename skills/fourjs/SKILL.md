@@ -1,49 +1,53 @@
 ---
 name: fourjs
-description: Builds, tests, and screenshots 2D games with FourJS, a TypeScript game engine on Three.js, through its `four` CLI or MCP tools. Use when the user asks to make, change, test, or debug a FourJS game, or when a folder has a game.ts that calls defineGame from 'fourjs'.
+description: Builds, tests, and screenshots 2D games with FourJS, a TypeScript game engine on Three.js, through its `fourjs` CLI or MCP tools. Use when the user asks to make, change, test, or debug a FourJS game, or when a folder has a game.ts that calls defineGame from '@aksheyd/fourjs'.
 license: MIT
-compatibility: Needs Node 22.18+ and a clone of github.com/aksheyd/fourjs with npm install; run four from inside the clone. shot needs Chrome or Chromium; check and sim run anywhere.
+compatibility: Needs Node 22.18+ and FourJS from npm, installed in the project with npm install -D @aksheyd/fourjs so npx fourjs runs it, or run without installing as npx @aksheyd/fourjs. shot needs Chrome or Chromium; check and sim run anywhere.
 ---
 
 # Making games with FourJS
 
-A FourJS game is a folder with a `game.ts`: entity data plus an `update` function. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run. You build a game by editing files and proving what it does with `four`, not by watching a window.
+A FourJS game is a folder with a `game.ts`: entity data plus an `update` function, next to any images and sounds it uses. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run. You build a game by editing files and proving what it does with `fourjs`, not by watching a window.
 
 ## Setup
 
-1. Work in a clone of the FourJS repo, since games live in its `games/` folder for now:
+1. Get FourJS into the project. `npx fourjs` only runs a copy installed in the project; anywhere else it would ask npm for a different package, so there use `npx @aksheyd/fourjs` in its place.
+   - In a project, install it with `npm install -D @aksheyd/fourjs`.
+   - With no project yet, start one: `npx @aksheyd/fourjs new my-game`, then run `npm install` in `my-game`. `new` writes a small playable game, its test, a `package.json`, and a `tsconfig.json`.
 
-   ```bash
-   git clone https://github.com/aksheyd/fourjs && cd fourjs && npm install
-   ```
-
-2. Read `AGENTS.md` at the repo root in full before writing code. It's the manual: entity fields, groups and grids, `oneOf`, `ctx`, `view.ts`, drivers, and testing. Start from the shape of a game in `games/`; Pong is the smallest.
+2. Read the manual in full before writing code: `node_modules/@aksheyd/fourjs/AGENTS.md` in the project, or `AGENTS.md` at github.com/aksheyd/fourjs. It covers entity fields, groups and grids, `oneOf`, images, `ctx` with its input, pointer, and sounds, `view.ts`, drivers, and testing. Start from the game `new` writes, or from the shape of a game in the repo's `games/` folder; Pong is the smallest, and Asteroids uses images, sounds, the mouse, and `spawn`.
 
 ## Working loop
 
-Run these from the repo root, with the game in `games/<name>`.
+Run these from the project's root, with the game in `<dir>`.
 
-1. Edit `games/<name>/game.ts`, and `view.ts` for decoration only.
-2. Run `npx four check games/<name>` until it prints `ok: true`. It type-checks `game.ts` and `view.ts`, then runs `start` and the first tick.
-3. Prove each behavior with numbers from `npx four sim games/<name> --ticks N`:
-   - `--press Space@60` presses a key on one tick, and `--hold Left@30-90` holds it on a range of ticks.
-   - `--driver bot.ts` picks keys each tick with code that reads the game, for input that has to react.
+1. Start a game with `npx fourjs new <dir>`, which refuses a folder that has anything in it, or edit `<dir>/game.ts`, and `view.ts` for decoration only.
+2. Run `npx fourjs check <dir>` until it prints `ok: true`. It type-checks `game.ts` and `view.ts`, checks that the images entities name are in the folder, then runs `start` and the first tick.
+3. Prove each behavior with numbers from `npx fourjs sim <dir> --ticks N`:
+   - `--press Space@60` presses a key on one tick, and `--hold Left@30-90` holds it on a range of ticks. The mouse buttons are the keys `Mouse` and `MouseRight`, and `--pointer 0.5,-0.2@30` moves the pointer on tick 30, where it stays until the next move.
+   - `--driver bot.ts` picks the input each tick with code that reads the game, for input that has to react. It also gets the keys it held and the pointer from the tick before, so it can tap a key, and it can return `{ keys, pointer }` to move the pointer.
+   - The output lists the sounds the game played with their ticks, so a test can check that a hit made a sound.
+   - `--until 'match.state=over'` or `--until 'ball.x>1.9'` stops on the first tick the condition holds, with `--ticks` as the limit, so you learn when something happens instead of guessing a tick. The output's `tick` and `reached` say where it stopped and whether the condition held.
    - `--set paddle.w=1` or `--set 'bricks[*].points=5'` changes starting values for one run; `start` runs after them and can set a field again.
    - `--only ball,bricks --fields x,y --every 10` prints those entities and fields every 10 ticks. `ctx.print(...)` lines appear in `log`, and `--filter-output log` prints only them.
-   - Pin the rules in `games/<name>/game.test.ts` with `simulate`, `pick`, and `drive`, like the other games.
-4. Look at it: `npx four shot games/<name> --at 1,120,600 --press Space@1 -o /tmp/<name>/frame.png` saves one PNG per tick from a single run, with the same key flags as `sim`. Open the PNGs.
-5. Ask a person to play it with `npx four run games/<name>`. Numbers and frames can't show whether it feels right. Don't leave a `run` window open yourself.
+   - Pin the rules in `<dir>/game.test.ts` with `simulate`, `pick`, and `drive`, like the test `new` writes, and run it with `node --test <dir>`.
+4. Look at it: `npx fourjs shot <dir> --at 1,120,600 --press Space@1 -o /tmp/<name>/frame.png` saves one PNG per tick from a single run, with the same input flags as `sim`. Open the PNGs.
+5. Ask a person to play it with `npx fourjs run <dir>`. Numbers and frames can't show whether it feels right. Don't leave a `run` window open yourself.
+6. To hand the game to someone, `npx fourjs export <dir> -o <name>.html` writes one HTML file that plays it offline, images and sounds included.
 
 ## Facts to plan with
 
-- The screen shows x from -2 to 2 and y from -1.5 to 1.5; an entity's `x, y` is its center and `w, h` its size.
-- Entities with `text` are text, entities with `w`, `h`, `shape`, `color`, or `opacity` are shapes, and the rest are data. Declare every field you'll use with a starting value; each keeps the kind it starts with.
+- The screen shows x from -2 to 2 and y from -1.5 to 1.5; an entity's `x, y` is its center, `w, h` its size, and `angle` its turn counterclockwise in radians.
+- Entities with `text` are text, entities with `w`, `h`, `shape`, `color`, `opacity`, or `image` are shapes, and the rest are data. Declare every field you'll use with a starting value; each keeps the kind it starts with.
 - Use `group(n, (i) => fields)` and `grid(rows, cols, ({ row, col }) => fields)` for many similar entities, and `oneOf([...])` for fields that take a fixed set of strings, including key names with `oneOf(KEYS, 'W')`.
-- `update(world, ctx)` runs 60 times a second with `ctx.dt` of 1/60. Use `ctx.input`, `ctx.random()`, `ctx.print()`, and `ctx.tick`; the clock, `Math.random()`, timers, and `async` are errors.
+- Entities can't be created or removed during a run, so declare a group of hidden members as a pool: `spawn(world.bullets, { x, y })` resets the first hidden one to its starting values, shows it, and returns it, and `visible = false` puts it back.
+- Declare lists with `listOf(example)`, and values that start as `null` with `maybe(example)`, instead of `[]` and `null`, so what they hold is typed and checked.
+- Give an entity `parts` when it's made of several shapes or text that move and turn together, like a pipe pair or a ship and its flame. A part's `x` and `y` are offsets from its entity, turned by its `angle`, and it hides with it.
+- `image: 'rock.png'` draws a PNG, JPEG, WebP, GIF, or SVG file from the game's folder over a shape's `w` by `h`; a name the folder lacks is an error.
+- `update(world, ctx)` runs 60 times a second with `ctx.dt` of 1/60. Use `ctx.input` (keys, `Mouse`, and `ctx.input.pointer`), `ctx.random()`, `ctx.print()`, `ctx.play('explode')` for a built-in sound or a sound file in the folder, and `ctx.tick`; the clock, `Math.random()`, timers, and `async` are errors.
 - Text uses a 5x7 pixel font with capitals, digits, and a little punctuation; `size` is the letter height.
 - Keep all changing state on entities, never in variables at the top of `game.ts`.
-- Not supported yet: creating or removing entities during a run (keep a hidden group and show members with `visible`), sound, mouse input, and images.
-- For MCP clients, `npx four mcp add` registers `check`, `sim`, and `shot` as tools; each call reads the game from disk.
+- For MCP clients, `npx fourjs mcp add` registers `new`, `check`, `sim`, `shot`, and `export` as tools; each call reads the game from disk.
 
 ## Conventions
 

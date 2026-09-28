@@ -1,5 +1,5 @@
 // Snake. An arrow key starts the snake and the arrow keys turn it. Eat apples to grow; a wall or your own body ends the game, and Space plays again.
-import { defineGame, group, oneOf, type Context, type Entities, type Entity, type Key, type World } from 'fourjs'
+import { defineGame, group, listOf, oneOf, type Context, type Entities, type Entity, type Key, type World } from '@aksheyd/fourjs'
 
 const COLS = 20
 const ROWS = 15
@@ -24,14 +24,13 @@ const ENDINGS = {
 // Cells are [x, y] from [1, 1] at the bottom left, and a direction is the [x, y] of one step.
 type XY = [x: number, y: number]
 const START: XY[] = [[6, 8], [5, 8], [4, 8]]
-const none: XY[] = []
 
 const entities = {
   // start_body lists cells head first, and body keeps the same order.
   game: {
-    cols: COLS, rows: ROWS, cell: 0.2, step_ticks: 8, start_body: START,
+    cols: COLS, rows: ROWS, cell: 0.2, step_ticks: 8, start_body: listOf([0, 0], START),
     state: oneOf(['ready', 'playing', 'over', 'won']), score: 0, steps: 0, countdown: 0,
-    body: none, dir: [1, 0], turns: none, food_x: 0, food_y: 0,
+    body: listOf([0, 0]), dir: [1, 0], turns: listOf([0, 0]), food_x: 0, food_y: 0,
   },
   // The apple's parts start at their offsets from the center of its cell.
   food: { x: 0, y: 0, w: 0.15, h: 0.11, color: RED },

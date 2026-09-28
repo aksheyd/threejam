@@ -28,13 +28,13 @@ export interface Scene {
   readonly tick: number
 }
 
+// Each geometry spans a unit square, and its texture coordinates span the image, so an image fills a shape's w by h box, cut to its shape.
 const GEOMETRY = {
   square: new THREE.PlaneGeometry(1, 1),
   circle: new THREE.CircleGeometry(0.5, 48),
-  triangle: new THREE.BufferGeometry().setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0, 0.5, 0], 3),
-  ),
+  triangle: new THREE.BufferGeometry()
+    .setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0, 0.5, 0], 3))
+    .setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0.5, 1], 2)),
 }
 
 interface Label {
@@ -49,12 +49,14 @@ export class View {
   readonly #camera = new THREE.OrthographicCamera(-2, 2, 1.5, -1.5, -10, 10)
   readonly #objects = new Map<string, EntityMesh>()
   readonly #labels = new Map<string, Label>()
+  readonly #images: ReadonlyMap<string, THREE.Texture>
   readonly #custom: ViewModule
   #started = false
 
-  constructor({ canvas, game, custom }: { canvas: HTMLCanvasElement; game: Game; custom: ViewModule }) {
+  constructor({ canvas, game, custom, images }: { canvas: HTMLCanvasElement; game: Game; custom: ViewModule; images: ReadonlyMap<string, THREE.Texture> }) {
     this.#renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true })
     this.#scene.background = new THREE.Color(game.background ?? '#08080d')
+    this.#images = images
     this.#custom = custom
   }
 
@@ -89,13 +91,14 @@ export class View {
     const material = mesh.material
     material.opacity = drawable.opacity
     material.color.set(drawable.color)
+    mesh.rotation.z = drawable.angle
     switch (drawable.kind) {
       case 'shape':
         mesh.geometry = GEOMETRY[drawable.shape]
         mesh.position.set(drawable.x, drawable.y, 0)
         mesh.scale.set(drawable.w, drawable.h, 1)
         mesh.visible = drawable.visible
-        this.#texture(material, null, 0)
+        this.#texture(material, drawable.image === '' ? null : this.#image(drawable.image), 0)
         return
       case 'text': {
         const label = this.#label(drawable.name, drawable.text)
@@ -103,13 +106,19 @@ export class View {
         if (label === undefined) return
         const height = drawable.size
         const width = (label.columns * height) / FONT_ROWS
-        const left = drawable.x - (drawable.align === 'left' ? 0 : drawable.align === 'right' ? width : width / 2)
-        // Snapping the corner to a whole screen pixel keeps the font's pixels sharp.
-        const pixel = 4 / this.#renderer.domElement.width
-        const snap = (value: number) => Math.round(value / pixel) * pixel
+        // From x to the middle of the letters, which align sets.
+        const shift = drawable.align === 'left' ? width / 2 : drawable.align === 'right' ? -width / 2 : 0
         mesh.geometry = GEOMETRY.square
-        mesh.position.set(snap(left) + width / 2, snap(drawable.y - height / 2) + height / 2, 0)
         mesh.scale.set(width, height, 1)
+        if (drawable.angle === 0) {
+          // Snapping the corner to a whole screen pixel keeps the font's pixels sharp.
+          const pixel = 4 / this.#renderer.domElement.width
+          const snap = (value: number) => Math.round(value / pixel) * pixel
+          mesh.position.set(snap(drawable.x + shift - width / 2) + width / 2, snap(drawable.y - height / 2) + height / 2, 0)
+        } else {
+          // Turned text can't line up with screen pixels, so it turns about its x and y unsnapped.
+          mesh.position.set(drawable.x + Math.cos(drawable.angle) * shift, drawable.y + Math.sin(drawable.angle) * shift, 0)
+        }
         this.#texture(material, label.texture, 0.5)
         return
       }
@@ -120,7 +129,13 @@ export class View {
     }
   }
 
-  #texture(material: THREE.MeshBasicMaterial, texture: THREE.CanvasTexture | null, alphaTest: number): void {
+  #image(name: string): THREE.Texture {
+    const texture = this.#images.get(name)
+    if (texture === undefined) throw new Error(`the page has no image ${name}; save a file of that name next to game.ts`)
+    return texture
+  }
+
+  #texture(material: THREE.MeshBasicMaterial, texture: THREE.Texture | null, alphaTest: number): void {
     if (material.map === texture && material.alphaTest === alphaTest) return
     material.map = texture
     material.alphaTest = alphaTest

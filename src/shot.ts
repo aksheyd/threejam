@@ -1,10 +1,9 @@
 import { mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, extname } from 'node:path'
 import puppeteer, { type Page } from 'puppeteer-core'
 import { UsageError, quote } from './errors.ts'
 import { buildPage, findChrome, serve } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
-
 
 export interface ShotOptions {
   readonly dir: string
@@ -13,6 +12,7 @@ export interface ShotOptions {
   readonly seed?: number
   readonly press?: readonly string[]
   readonly hold?: readonly string[]
+  readonly pointer?: readonly string[]
   readonly driver?: string
   readonly set?: readonly string[]
 }
@@ -28,16 +28,16 @@ export function parseTicks(text: string): number[] {
 export function framePaths(out: string, at: readonly number[]): string[] {
   if (at.length === 1) return [out]
   const width = Math.max(3, String(Math.max(...at)).length)
-  const dot = out.lastIndexOf('.')
-  const [stem, extension] = dot > 0 ? [out.slice(0, dot), out.slice(dot)] : [out, '.png']
-  return at.map((tick) => `${stem}-${String(tick).padStart(width, '0')}${extension}`)
+  const extension = extname(out)
+  const stem = out.slice(0, out.length - extension.length)
+  return at.map((tick) => `${stem}-${String(tick).padStart(width, '0')}${extension || '.png'}`)
 }
 
-export async function shoot({ dir, at, out, seed, press, hold, driver, set }: ShotOptions): Promise<string[]> {
+export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, set }: ShotOptions): Promise<string[]> {
   const chrome = findChrome()
-  if (!chrome) throw new UsageError('shot needs Chrome or Chromium; set CHROME_PATH to its executable')
+  if (!chrome) throw new UsageError('shot needs Chrome or Chromium, or Edge on Windows; set CHROME_PATH to its executable')
   const page = await buildPage({ dir, config: { mode: 'shot' }, driver })
-  const server = await serve({ outdir: page.outdir })
+  const server = await serve({ page })
   // Software rendering makes frames the same on every machine.
   const browser = await puppeteer.launch({
     executablePath: chrome,
@@ -51,7 +51,7 @@ export async function shoot({ dir, at, out, seed, press, hold, driver, set }: Sh
     const until = <T>(work: Promise<T>) => Promise.race([work, crashed])
     await until(tab.goto(server.url, { waitUntil: 'load' }))
     await until(tab.waitForFunction('window.engine !== undefined', { timeout: 15000 }))
-    const reset: ResetOptions = { seed: seed ?? 0, ticks: Math.max(...at), press, hold, set, drive: driver !== undefined }
+    const reset: ResetOptions = { seed: seed ?? 0, ticks: Math.max(...at), press, hold, pointer, set, drive: driver !== undefined }
     await until(tab.evaluate((options) => window.engine.reset(options), reset))
     const paths = framePaths(out, at)
     for (const path of paths) mkdirSync(dirname(path), { recursive: true })

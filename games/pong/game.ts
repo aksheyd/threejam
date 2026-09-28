@@ -1,5 +1,5 @@
 // Pong for two players. Left paddle: W / S. Right paddle: Up / Down. Space starts a match; first to 7 wins.
-import { KEYS, defineGame, oneOf, type Context, type Entities, type World } from 'fourjs'
+import { KEYS, defineGame, oneOf, type Context, type Entities, type World } from '@aksheyd/fourjs'
 
 const TOP = 1.5
 const BOTTOM = -1.5

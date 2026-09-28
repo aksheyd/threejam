@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { pick, simulate, type EntitiesOf, type Key, type SimOptions } from '../../src/index.ts'
+import { pick, simulate, type EntitiesOf, type Key, type SimOptions } from '@aksheyd/fourjs'
 import snake from './game.ts'
 
 function end(options: SimOptions<EntitiesOf<typeof snake>>) {

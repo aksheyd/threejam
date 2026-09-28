@@ -1,5 +1,5 @@
 // Decoration only: sprites over the boxes game.ts moves, and the arcade's green band.
-import type { ViewFrame, ViewSetup } from 'fourjs'
+import type { ViewFrame, ViewSetup } from '@aksheyd/fourjs'
 import type { BufferGeometry, Mesh } from 'three'
 import type game from './game.ts'
 import { BOOM, CANNON, INVADERS, UFO, boxes, type Box } from './sprites.ts'

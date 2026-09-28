@@ -1,10 +1,13 @@
 import { Session, parseGame, pick } from '../engine.ts'
-import { keyFromCode, schedule } from '../input.ts'
-import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Key } from '../types.ts'
+import { CENTER, keyFromCode, pointerMoves, schedule } from '../input.ts'
+import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Key, type Point, type SoundEntry } from '../types.ts'
+import { loadImages, parseAssets } from './assets.ts'
+import { Speaker } from './sound.ts'
 import { View, parseView } from './view.ts'
 
+// run is served by fourjs run, shot by fourjs shot, and export is one file opened from disk, with no server behind it.
 export interface Config {
-  readonly mode: 'run' | 'shot'
+  readonly mode: 'run' | 'shot' | 'export'
   readonly seed?: number
 }
 
@@ -13,6 +16,7 @@ export interface ResetOptions {
   readonly ticks?: number
   readonly press?: readonly string[]
   readonly hold?: readonly string[]
+  readonly pointer?: readonly string[]
   readonly set?: readonly string[]
   readonly drive?: boolean
 }
@@ -22,6 +26,7 @@ export interface PageEngine {
   step(count?: number): number
   advanceTo(tick: number): number
   state(only?: string): EntityState[]
+  sounds(): SoundEntry[]
   pause(): void
   resume(): void
   readonly paused: boolean
@@ -38,26 +43,44 @@ declare global {
 
 type Source =
   | { readonly kind: 'keyboard' }
-  | { readonly kind: 'schedule'; readonly keysAt: (tick: number) => ReadonlySet<Key> }
+  | { readonly kind: 'schedule'; readonly keysAt: (tick: number) => ReadonlySet<Key>; readonly pointerAt: (tick: number) => Point | undefined }
   | { readonly kind: 'driver'; readonly driver: Driver }
 
 const TICK_MS = 1000 / 60
+const BUTTONS: ReadonlyMap<number, Key> = new Map([
+  [0, 'Mouse'],
+  [2, 'MouseRight'],
+])
 
-export function play(page: { game: unknown; view: unknown; driver: unknown; config: unknown }): void {
+export async function play(page: { game: unknown; view: unknown; driver: unknown; assets: unknown; config: unknown }): Promise<void> {
   const game = parseGame(page.game)
   const config = parseConfig(page.config)
   const drive = parseDrive(page.driver)
+  const assets = parseAssets(page.assets)
   const canvas = document.querySelector('canvas')
   if (!canvas) throw new Error('the page needs a <canvas>')
   if (game.title) document.title = game.title
-  const view = new View({ canvas, game, custom: parseView(page.view) })
+  const reloads = config.mode === 'run'
+  if (reloads) new EventSource('/events').onmessage = () => location.reload()
+  // Every image is ready before the first frame, so no frame shows one half loaded.
+  const images = await loadImages(assets).catch((error: unknown) => {
+    const fix = reloads ? '\n\nFix the file and save; the page reloads.' : ''
+    if (config.mode !== 'shot') notice(`${error instanceof Error ? error.message : String(error)}${fix}`)
+    throw error
+  })
+  const view = new View({ canvas, game, custom: parseView(page.view), images })
+  const speaker = config.mode === 'shot' ? undefined : new Speaker(assets)
+  const seed = config.seed ?? (config.mode === 'export' ? Math.floor(Math.random() * 2 ** 31) : 0)
   const down = new Set<Key>()
   // A tap shorter than a tick still counts as held for one tick.
   const tapped = new Set<Key>()
+  let pointer = CENTER
   let session: Session | undefined
   let source: Source = { kind: 'keyboard' }
   let paused = false
   let stopped = false
+  // How many of the session's sounds the speaker has had.
+  let heard = 0
 
   const current = (): Session => {
     if (!session) throw new Error('call engine.reset() first')
@@ -71,11 +94,11 @@ export function play(page: { game: unknown; view: unknown; driver: unknown; conf
     const s = current()
     switch (source.kind) {
       case 'keyboard':
-        s.step([...down, ...tapped])
+        s.step({ keys: [...down, ...tapped], pointer })
         tapped.clear()
         return
       case 'schedule':
-        s.step(source.keysAt(s.tick + 1))
+        s.step({ keys: source.keysAt(s.tick + 1), pointer: source.pointerAt(s.tick + 1) })
         return
       case 'driver':
         s.step(s.drive(source.driver))
@@ -88,8 +111,9 @@ export function play(page: { game: unknown; view: unknown; driver: unknown; conf
   }
 
   const reset = (options: ResetOptions = {}): number => {
-    session = new Session(game, { seed: options.seed ?? config.seed ?? 0, set: options.set })
+    session = new Session(game, { seed: options.seed ?? seed, set: options.set, assets: Object.keys(assets) })
     source = inputSource(options, drive)
+    heard = 0
     session.start()
     draw()
     return session.seed
@@ -108,6 +132,7 @@ export function play(page: { game: unknown; view: unknown; driver: unknown; conf
       return current().tick
     },
     state: (only) => pick(current().state(), only),
+    sounds: () => [...current().sounds],
     pause: () => void (paused = true),
     resume: () => void (paused = false),
     get paused() {
@@ -132,12 +157,11 @@ export function play(page: { game: unknown; view: unknown; driver: unknown; conf
   }
   fit()
   addEventListener('resize', fit)
-  new EventSource('/events').onmessage = () => location.reload()
 
   const fail = (error: unknown) => {
     stopped = true
     console.error(error)
-    notice(`${error instanceof Error ? error.message : String(error)}\n\nFix the game and save; the page reloads.`)
+    notice(`${error instanceof Error ? error.message : String(error)}${reloads ? '\n\nFix the game and save; the page reloads.' : ''}`)
   }
 
   try {
@@ -148,7 +172,8 @@ export function play(page: { game: unknown; view: unknown; driver: unknown; conf
   }
 
   addEventListener('keydown', (event) => {
-    if (event.code === 'Escape') {
+    speaker?.unlock()
+    if (event.code === 'Escape' && config.mode === 'run') {
       stopped = true
       fetch('/quit', { method: 'POST' }).catch(() => {})
       notice('Session ended.')
@@ -167,6 +192,28 @@ export function play(page: { game: unknown; view: unknown; driver: unknown; conf
     const key = keyFromCode(event.code)
     if (key) down.delete(key)
   })
+  // The pointer is in world units and stays on the screen, keeping its last place when the mouse leaves the page.
+  const aim = (event: PointerEvent) => {
+    const box = canvas.getBoundingClientRect()
+    const x = ((event.clientX - box.left) / box.width) * 4 - 2
+    const y = 1.5 - ((event.clientY - box.top) / box.height) * 3
+    pointer = Object.freeze({ x: Math.min(2, Math.max(-2, x)), y: Math.min(1.5, Math.max(-1.5, y)) })
+  }
+  addEventListener('pointermove', aim)
+  addEventListener('pointerdown', (event) => {
+    speaker?.unlock()
+    aim(event)
+    const key = BUTTONS.get(event.button)
+    if (key) {
+      down.add(key)
+      tapped.add(key)
+    }
+  })
+  addEventListener('pointerup', (event) => {
+    const key = BUTTONS.get(event.button)
+    if (key) down.delete(key)
+  })
+  addEventListener('contextmenu', (event) => event.preventDefault())
   addEventListener('blur', () => {
     down.clear()
     tapped.clear()
@@ -182,6 +229,8 @@ export function play(page: { game: unknown; view: unknown; driver: unknown; conf
         for (; owed >= TICK_MS; owed -= TICK_MS) stepOnce()
       }
       last = now
+      const { sounds } = current()
+      for (; heard < sounds.length; heard++) speaker?.play(sounds[heard])
       draw()
     } catch (error) {
       fail(error)
@@ -197,14 +246,19 @@ function inputSource(options: ResetOptions, drive: Drive | undefined): Source {
     if (!drive) throw new Error('this page was built without a driver')
     return { kind: 'driver', driver: driverFor(drive) }
   }
-  if (options.ticks === undefined) return { kind: 'keyboard' }
-  return { kind: 'schedule', keysAt: schedule({ press: options.press ?? [], hold: options.hold ?? [], ticks: options.ticks, clip: true }) }
+  const { ticks } = options
+  if (ticks === undefined) return { kind: 'keyboard' }
+  return {
+    kind: 'schedule',
+    keysAt: schedule({ press: options.press ?? [], hold: options.hold ?? [], ticks, clip: true }),
+    pointerAt: pointerMoves({ pointer: options.pointer ?? [], ticks, clip: true }),
+  }
 }
 
 function parseConfig(value: unknown): Config {
   if (typeof value !== 'object' || value === null || !('mode' in value)) throw new Error('the page has no FourJS config')
   const seed = 'seed' in value && typeof value.seed === 'number' ? value.seed : undefined
-  if (value.mode === 'run' || value.mode === 'shot') return { mode: value.mode, seed }
+  if (value.mode === 'run' || value.mode === 'shot' || value.mode === 'export') return { mode: value.mode, seed }
   throw new Error(`unknown page mode ${String(value.mode)}`)
 }
 

@@ -1,0 +1,10 @@
+# LF everywhere, so a Windows checkout matches macOS and Linux byte for byte, including the shebang in src/cli.ts.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.wav binary
+*.mp3 binary
+*.ogg binary

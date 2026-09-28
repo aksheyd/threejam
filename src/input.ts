@@ -1,8 +1,11 @@
-import { GameError, UsageError, quote } from './errors.ts'
-import { KEYS, type Input, type Key } from './types.ts'
+import { GameError, UsageError, quote, show } from './errors.ts'
+import { KEYS, type Input, type Key, type Point } from './types.ts'
 
 const BY_LOWER: ReadonlyMap<string, Key> = new Map(KEYS.map((key) => [key.toLowerCase(), key]))
-const KEY_LIST = 'A-Z, 0-9, Space, Enter, Tab, Backspace, Shift, Ctrl, Alt, Up, Down, Left, and Right'
+const KEY_LIST = 'A-Z, 0-9, Space, Enter, Tab, Backspace, Shift, Ctrl, Alt, Up, Down, Left, Right, Mouse, and MouseRight'
+const SCREEN = 'x from -2 to 2 and y from -1.5 to 1.5'
+
+export const CENTER: Point = Object.freeze({ x: 0, y: 0 })
 
 export function keyNamed(name: unknown): Key {
   const key = typeof name === 'string' ? BY_LOWER.get(name.toLowerCase()) : undefined
@@ -10,13 +13,39 @@ export function keyNamed(name: unknown): Key {
   return key
 }
 
-export class KeyState implements Input {
+export function pointAt(value: unknown): Point {
+  const x = typeof value === 'object' && value !== null && 'x' in value ? value.x : undefined
+  const y = typeof value === 'object' && value !== null && 'y' in value ? value.y : undefined
+  if (typeof x !== 'number' || typeof y !== 'number' || !onScreen(x, y)) {
+    throw new GameError(`the pointer must be { x, y } on the screen, with ${SCREEN}, got ${show(value)}`)
+  }
+  return Object.freeze({ x, y })
+}
+
+// What drivers and Session.step hand the engine: a list of keys, or { keys, pointer }.
+export function controlsOf(value: unknown): { readonly keys: Key[]; readonly pointer: Point | undefined } {
+  if (typeof value === 'string') throw new GameError(`the keys must be a list, like ["Space"], not the string ${show(value)}`)
+  if (isIterable(value)) return { keys: Array.from(value, keyNamed), pointer: undefined }
+  if (typeof value !== 'object' || value === null) throw new GameError(`expected the keys, like ["Space"], or { keys, pointer }, got ${show(value)}`)
+  const keys = 'keys' in value ? value.keys : undefined
+  const pointer = 'pointer' in value ? value.pointer : undefined
+  if (typeof keys === 'string' || (keys !== undefined && !isIterable(keys))) throw new GameError(`keys must be a list, like ["Space"], got ${show(keys)}`)
+  return { keys: keys === undefined ? [] : Array.from(keys, keyNamed), pointer: pointer === undefined ? undefined : pointAt(pointer) }
+}
+
+export class InputState implements Input {
   #now: ReadonlySet<Key> = new Set()
   #before: ReadonlySet<Key> = new Set()
+  #pointer = CENTER
 
-  advance(held: Iterable<Key>): void {
+  get pointer(): Point {
+    return this.#pointer
+  }
+
+  advance(held: Iterable<Key>, pointer: Point | undefined): void {
     this.#before = this.#now
     this.#now = new Set(held)
+    if (pointer !== undefined) this.#pointer = pointer
   }
 
   held(key: Key): boolean {
@@ -148,4 +177,37 @@ function tickIn(flag: string, value: string, text: string, ticks: number): numbe
   if (!Number.isInteger(tick) || tick < 1) throw new UsageError(`${flag} ${quote(value)}: "${text}" should be a tick from 1 up`)
   if (tick > ticks) throw new UsageError(`${flag} ${quote(value)}: tick ${tick} is after --ticks ${ticks}`)
   return tick
+}
+
+const NUMBER = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?`
+const POINTER = new RegExp(String.raw`^(${NUMBER})\s*,\s*(${NUMBER})(?:@(.*))?$`, 'i')
+
+export interface PointerOptions {
+  readonly pointer: readonly string[]
+  readonly ticks: number
+  readonly clip: boolean
+}
+
+// Each --pointer moves the pointer on one tick, and it stays there until the next move.
+export function pointerMoves({ pointer, ticks, clip }: PointerOptions): (tick: number) => Point | undefined {
+  const limit = clip ? Number.MAX_SAFE_INTEGER : ticks
+  const moves = new Map<number, Point>()
+  for (const value of pointer) {
+    const match = POINTER.exec(value.trim())
+    if (!match) throw new UsageError(`--pointer ${quote(value)} should look like X,Y@T in world units, like 0.5,-0.2@30, or X,Y to start there`)
+    const [x, y] = [Number(match[1]), Number(match[2])]
+    if (!onScreen(x, y)) throw new UsageError(`--pointer ${quote(value)}: the pointer stays on the screen, with ${SCREEN}`)
+    const tick = match[3] === undefined ? 1 : tickIn('--pointer', value, match[3], limit)
+    if (moves.has(tick)) throw new UsageError(`--pointer ${quote(value)}: another --pointer already moves it on tick ${tick}`)
+    moves.set(tick, Object.freeze({ x, y }))
+  }
+  return (tick) => moves.get(tick)
+}
+
+function onScreen(x: number, y: number): boolean {
+  return x >= -2 && x <= 2 && y >= -1.5 && y <= 1.5
+}
+
+function isIterable(value: unknown): value is Iterable<unknown> {
+  return typeof value === 'object' && value !== null && Symbol.iterator in value
 }

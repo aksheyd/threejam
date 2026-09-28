@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { grid, pick, simulate } from '../../src/index.ts'
+import { grid, pick, simulate } from '@aksheyd/fourjs'
 import breakout from './game.ts'
 
 function alone(row: number, col: number): typeof breakout {

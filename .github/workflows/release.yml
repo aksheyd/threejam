@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# id-token lets npm's trusted publishing sign in as this workflow, so no npm token is stored anywhere.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Test and publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # Trusted publishing needs npm 11.5.1 or later, which Node 26 comes with.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+
+      - name: Check that the tag names the version in package.json
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+
+      - uses: browser-actions/setup-chrome@v2
+        id: chrome
+
+      - name: Let Chrome's sandbox run
+        run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
+      - name: Typecheck
+        run: npx tsc -p .
+
+      - name: Test
+        run: npm test
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+
+      - name: Build, pack, and prove the package
+        run: npm run test:package
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+
+      # The package test left its build in dist; npm adds provenance, since the repository is public.
+      - name: Publish
+        run: npm publish ./dist

@@ -1,5 +1,5 @@
 // Decoration only: the skyline, the pipes' fill, the ground's stripes, and the bird's details never affect play, so sim never sees them.
-import type { ViewFrame, ViewSetup } from 'fourjs'
+import type { ViewFrame, ViewSetup } from '@aksheyd/fourjs'
 import type { BufferGeometry, Mesh } from 'three'
 import type game from './game.ts'
 
@@ -7,6 +7,7 @@ type Flappy = ViewFrame<typeof game>['world']
 type Point = Pick<Flappy['bird'], 'x' | 'y'>
 type Rect = [x: number, y: number, w: number, h: number]
 type Part = { dx: number; dy: number; w: number; h: number; color: string }
+type PipePart = keyof Flappy['pipes'][number]['parts']
 
 const OUTLINE = '#543847'
 const PIPE = '#73bf2e'
@@ -84,7 +85,7 @@ const BUSHES: Rect[] = [
   [2.0844, -0.9001, 0.4312, 0.1199],
 ]
 
-// The fill and shading over each wall, by its column in walls: top pipe, top cap, bottom pipe, bottom cap.
+// The fill and shading over each part of a pipe pair.
 const PIPE_BODY: Part[] = [
   { dx: 0, dy: 0, w: 0.32, h: 3.2, color: PIPE },
   { dx: -0.105, dy: 0, w: 0.05, h: 3.2, color: PIPE_HI },
@@ -95,7 +96,12 @@ const PIPE_CAP: Part[] = [
   { dx: -0.12, dy: 0, w: 0.05, h: 0.12, color: PIPE_HI },
   { dx: 0.15, dy: 0, w: 0.06, h: 0.12, color: PIPE_LO },
 ]
-const WALL_PARTS = [PIPE_BODY, PIPE_CAP, PIPE_BODY, PIPE_CAP]
+const PIPE_FILL: ReadonlyArray<readonly [PipePart, Part[]]> = [
+  ['top', PIPE_BODY],
+  ['top_cap', PIPE_CAP],
+  ['bottom', PIPE_BODY],
+  ['bottom_cap', PIPE_CAP],
+]
 
 const GROUND_LINE: Rect = [0, -1.0575, 4.2, 0.015]
 const GRASS: Rect = [0, -1.095, 4.2, 0.06]
@@ -143,6 +149,11 @@ function wing({ bird }: Flappy): Point {
   return { x: bird.x, y: bird.y + (bird.state === 'over' ? 0 : WING_FRAMES[Math.floor(bird.age / 5) % 4]) }
 }
 
+// Where a part is on screen: its x and y are from its entity's.
+function placed(at: Point, part: Point): Point {
+  return { x: at.x + part.x, y: at.y + part.y }
+}
+
 export function init({ THREE, scene, world, objects }: ViewSetup<typeof game>): void {
   const square = new THREE.PlaneGeometry(1, 1)
   const triangle = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0, 0.5, 0], 3))
@@ -179,8 +190,8 @@ export function init({ THREE, scene, world, objects }: ViewSetup<typeof game>): 
   for (const bush of BUSHES) add(BUSH, order++, bush)
   add(BUSH, order++, [0, -0.99, 4.2, 0.12])
 
-  for (const [i, row] of world.walls.entries()) {
-    for (const [j, wall] of row.entries()) follow(WALL_PARTS[j], (w) => w.walls[i][j], above(wall.name))
+  for (const [i, pipe] of world.pipes.entries()) {
+    for (const [part, fill] of PIPE_FILL) follow(fill, (w) => placed(w.pipes[i], w.pipes[i].parts[part]), above(pipe.parts[part].name))
   }
   const overGround = above('ground')
   add(OUTLINE, overGround(), GROUND_LINE)
@@ -192,7 +203,7 @@ export function init({ THREE, scene, world, objects }: ViewSetup<typeof game>): 
   follow(BODY, (w) => w.bird, overBird)
   follow(WING, wing, overBird)
   follow(FACE, (w) => w.bird, overBird)
-  follow(BEAK, (w) => w.beak, above('beak'))
+  follow(BEAK, (w) => placed(w.bird, w.bird.parts.beak), above(world.bird.parts.beak.name))
 }
 
 export function draw({ world }: ViewFrame<typeof game>): void {
