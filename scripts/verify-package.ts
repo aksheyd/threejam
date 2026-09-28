@@ -37,7 +37,7 @@ try {
   for (const frame of ['catch-001.png', 'catch-098.png']) same(readFileSync(join(project, 'frames', frame)).toString('latin1', 1, 4), 'PNG')
   same(fourjs(project, ['export', 'catch', '-o', 'catch.html']).file, 'catch.html')
   same(/<script type="module">/.test(readFileSync(join(project, 'catch.html'), 'utf8')), true)
-  node(['--test', 'catch'], project)
+  node(['--test', join('catch', 'game.test.ts')], project)
   await serveOnly(project)
   same(await mcpCommand(join(project, PACKAGE)), `npx -y ${name}@${version} --mcp`)
   mkdirSync(join(project, 'broken'))

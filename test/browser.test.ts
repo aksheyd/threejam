@@ -16,6 +16,8 @@ import { buildPage, findChrome, serve } from '../src/serve.ts'
 import { shoot } from '../src/shot.ts'
 
 const chrome = findChrome()
+// A page call that hangs fails within a minute, well inside CI's job timeout, so the report says why.
+const launch = () => puppeteer.launch({ executablePath: chrome, headless: true, protocolTimeout: 60_000, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 const TMP = join(ROOT, 'test', '.tmp')
 mkdirSync(TMP, { recursive: true })
 const made: string[] = []
@@ -42,7 +44,7 @@ test('with a driver that taps using the keys of the tick before, the page reache
   assert.ok(expected.some((entity) => entity.name === 'pipes[2].parts.bottom_cap'))
   const page = await buildPage({ dir: 'games/flappy', config: { mode: 'shot' }, driver })
   const server = await serve({ page })
-  const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+  const browser = await launch()
   try {
     const tab = await browser.newPage()
     await tab.goto(server.url)
@@ -87,7 +89,7 @@ test('with the portable math, trig-heavy code reaches the same state in the page
   const expected = simulate(await loadGame(dir), { ticks: 600 }).snapshots[0].entities
   const page = await buildPage({ dir, config: { mode: 'shot' } })
   const server = await serve({ page })
-  const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+  const browser = await launch()
   try {
     const tab = await browser.newPage()
     await tab.goto(server.url)
@@ -137,7 +139,7 @@ test('from the first frame the page draws images with square pixels and turned p
   const expected = simulate(await loadGame(dir), { ...input, assets: gameFiles(dir).assets }).snapshots[0].entities
   const page = await buildPage({ dir, config: { mode: 'shot' } })
   const server = await serve({ page })
-  const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+  const browser = await launch()
   try {
     const tab = await browser.newPage()
     await tab.goto(server.url)
@@ -176,7 +178,7 @@ test('played by the mouse autopilot, Asteroids reaches the state sim computes in
   assert.ok(expected.sounds.some((sound) => sound.name === 'explode'))
   const page = await buildPage({ dir: 'games/asteroids', config: { mode: 'shot' }, driver })
   const server = await serve({ page })
-  const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+  const browser = await launch()
   try {
     const tab = await browser.newPage()
     await tab.goto(server.url)
@@ -205,7 +207,7 @@ function watch(tab: Page): { errors: string[]; requests: string[] } {
 
 test('an exported file opened from disk starts with the seed export fixed, runs its view.ts, and reaches the state sim computes for scheduled keys', { skip: !chrome && 'needs Chrome' }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'fourjs-export-'))
-  const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+  const browser = await launch()
   try {
     const file = join(dir, 'pong.html')
     await exportGame({ dir: 'games/pong', out: file, seed: 9 })
@@ -230,7 +232,7 @@ test('an exported file opened from disk starts with the seed export fixed, runs 
 
 test('exported Asteroids draws its SVG rocks and plays sounds with nothing but the file, and picks a new seed each load', { skip: !chrome && 'needs Chrome' }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'fourjs-export-'))
-  const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+  const browser = await launch()
   try {
     const file = join(dir, 'asteroids.html')
     await exportGame({ dir: 'games/asteroids', out: file })

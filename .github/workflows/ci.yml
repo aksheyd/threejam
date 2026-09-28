@@ -45,7 +45,9 @@ jobs:
         env:
           CHROME_PATH: ''
 
+      # Page tests stall under Chrome for Testing on the macOS runners, so macOS keeps the runner's own Chrome.
       - uses: browser-actions/setup-chrome@v2
+        if: runner.os != 'macOS'
         id: chrome
 
       # Ubuntu 24.04 denies unprivileged user namespaces to programs without an AppArmor profile, and Chrome's sandbox needs them.

@@ -127,7 +127,9 @@ const cli = Cli.create('fourjs', {
           { command: `run ${at}`, description: 'Play it' },
         ]
         const description = standalone ? `Run npm install in ${shellWord(c.args.dir)} first, then these from there:` : undefined
-        return c.ok({ dir: c.args.dir, files, test: standalone ? 'npm test' : `node --test ${at}` }, { cta: { description, commands } })
+        // Node 22 reads a folder given to --test as a module, so name the test file.
+        const test = standalone ? 'npm test' : `node --test ${shellWord(`${c.args.dir.replace(/[\\/]+$/, '')}/game.test.ts`)}`
+        return c.ok({ dir: c.args.dir, files, test }, { cta: { description, commands } })
       } catch (error) {
         return c.error(failure(error))
       }

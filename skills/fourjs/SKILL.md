@@ -30,7 +30,7 @@ Run these from the project's root, with the game in `<dir>`.
    - `--until 'match.state=over'` or `--until 'ball.x>1.9'` stops on the first tick the condition holds, with `--ticks` as the limit, so you learn when something happens instead of guessing a tick. The output's `tick` and `reached` say where it stopped and whether the condition held.
    - `--set paddle.w=1` or `--set 'bricks[*].points=5'` changes starting values for one run; `start` runs after them and can set a field again.
    - `--only ball,bricks --fields x,y --every 10` prints those entities and fields every 10 ticks. `ctx.print(...)` lines appear in `log`, and `--filter-output log` prints only them.
-   - Pin the rules in `<dir>/game.test.ts` with `simulate`, `pick`, and `drive`, like the test `new` writes, and run it with `node --test <dir>`.
+   - Pin the rules in `<dir>/game.test.ts` with `simulate`, `pick`, and `drive`, like the test `new` writes, and run it with `node --test <dir>/game.test.ts`.
 4. Look at it: `npx fourjs shot <dir> --at 1,120,600 --press Space@1 -o /tmp/<name>/frame.png` saves one PNG per tick from a single run, with the same input flags as `sim`. Open the PNGs.
 5. Ask a person to play it with `npx fourjs run <dir>`. Numbers and frames can't show whether it feels right. Don't leave a `run` window open yourself.
 6. To hand the game to someone, `npx fourjs export <dir> -o <name>.html` writes one HTML file that plays it offline, images and sounds included.
