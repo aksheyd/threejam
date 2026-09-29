@@ -1,0 +1,20 @@
+# Example games
+
+| Game | How to play | Worth reading for |
+| --- | --- | --- |
+| [Pong](../games/pong) | W and S move the left paddle, Up and Down the right. Space starts; first to 7 wins. | The smallest game; `view.ts` draws the net |
+| [Breakout](../games/breakout) | Left and Right (or A and D) move the paddle, and Space serves. Three lives to clear every brick. | A `grid` of bricks, and tests that play single-brick variants |
+| [Snake](../games/snake) | An arrow key starts the snake, and the arrow keys turn it. Space plays again after a crash. | A `group` of hidden segments, since entities can't be added during a run |
+| [Flappy](../games/flappy) | Space starts a run, and each press flaps through the gaps. | Pipe pairs and a beak made of parts, and a `view.ts` that paints the skyline, pipes, ground, and bird over plain boxes |
+| [Invaders](../games/invaders) | Space starts; Left and Right move the cannon, and Space fires (hold it to keep firing). | Pixel-art sprites, and an [autopilot](../games/invaders/autopilot.ts) driver |
+| [Tetris](../games/tetris) | Space starts; Left and Right move the piece, Up rotates it, and Down drops it faster. | A [driver](../games/tetris/plan.ts) that plays seed 0's first seven pieces into two cleared rows |
+| [Asteroids](../games/asteroids) | Space or a click starts; Left and Right (or A and D) turn, Up (or W) thrusts, and Space fires. Or hold the mouse to aim at the pointer and fire, and the right button to thrust. | SVG rocks that spin and split, bullets and rocks pooled with `spawn`, a ship of turned parts, sounds, and a [driver](../games/asteroids/autopilot.ts) that plays with the mouse |
+
+In a clone of this repo, play any of them with `npx threejam run games/<name>`. The frames at the top of the [README](../README.md) come from `shot`, three of them played by those drivers:
+
+```bash
+npx threejam shot games/asteroids --driver games/asteroids/autopilot.ts --at 420 -o docs/images/asteroids.png
+npx threejam shot games/invaders --driver games/invaders/autopilot.ts --at 1075 -o docs/images/invaders.png
+npx threejam shot games/flappy --press Space@1,35,69,103,137,171 --at 200 -o docs/images/flappy.png
+npx threejam shot games/tetris --driver games/tetris/plan.ts --at 285 -o docs/images/tetris.png
+```

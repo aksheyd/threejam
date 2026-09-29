@@ -1,35 +1,35 @@
-# FourJS
+# ThreeJam
 
-FourJS is a game engine on Three.js for coding agents. A game is a folder with a `game.ts`: plain data for the entities and an `update` function, next to any images and sounds it uses. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run. The same commands work as a CLI, as MCP tools, and as generated agent skills.
+ThreeJam is a game engine on Three.js for coding agents. A game is a folder with a `game.ts`: plain data for the entities and an `update` function, next to any images and sounds it uses. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run. The same commands work as a CLI, as MCP tools, and as generated agent skills.
 
-It's a prototype, published on npm as `@aksheyd/fourjs`, and this manual ships inside the package as `node_modules/@aksheyd/fourjs/AGENTS.md`.
+It's a prototype, published on npm as `threejam`, and this manual ships inside the package as `node_modules/threejam/AGENTS.md`.
 
 ## Commands
 
-FourJS runs on macOS, Linux, and Windows, with Node 22.18 or later. Install it in a project with `npm install -D @aksheyd/fourjs`, then run `npx fourjs <command>` from the project. `npx fourjs` runs the copy installed there, so it only works where the package is installed; anywhere else, `npx @aksheyd/fourjs <command>` runs FourJS once without installing it. In a clone of this repo, run `npm install` once, and `npx fourjs` runs the TypeScript sources directly, with nothing to build.
+ThreeJam runs on macOS, Linux, and Windows, with Node 22.18 or later. Install it in a project with `npm install -D threejam`, then run `npx threejam <command>` from the project, which runs the copy installed there. Anywhere else, `npx threejam <command>` runs ThreeJam once without installing it. In a clone of this repo, run `npm install` once, and `npx threejam` runs the TypeScript sources directly, with nothing to build.
 
 `shot` needs Chrome or Chromium: it uses `CHROME_PATH` when that's set, and otherwise looks in `/Applications` on macOS, for `google-chrome` or `chromium` on the `PATH` on Linux, and in Program Files and LocalAppData on Windows, where Edge is the fallback. `run` opens a plain window in that browser when it finds one and your default browser otherwise, and plays the game's sounds once you press a key or click.
 
 ```bash
-npx fourjs new games/catch         # a small playable game and its test, in a new folder
-npx fourjs check games/pong        # types of game.ts and view.ts, entities and their images, start, and the first tick
-npx fourjs sim games/pong --ticks 120 --press Space@1 --hold W@1-60 --only ball --fields x,y
-npx fourjs shot games/pong --at 1,120,600 --press Space@1 -o frame.png
-npx fourjs run games/pong          # play it: Esc quits, and saving a file replays it with the same seed
-npx fourjs export games/pong -o pong.html   # one HTML file that plays offline
+npx threejam new games/catch         # a small playable game and its test, in a new folder
+npx threejam check games/pong        # types of game.ts and view.ts, entities and their images, start, and the first tick
+npx threejam sim games/pong --ticks 120 --press Space@1 --hold W@1-60 --only ball --fields x,y
+npx threejam shot games/pong --at 1,120,600 --press Space@1 -o frame.png
+npx threejam run games/pong          # play it: Esc quits, and saving a file replays it with the same seed
+npx threejam export games/pong -o pong.html   # one HTML file that plays offline
 ```
 
-- `new DIR` writes a small playable game into a new or empty folder, and refuses a folder that has anything in it: `game.ts`, a game of catch that waits for Space, and `game.test.ts`, which pins what it does like the example games' tests. Inside this repo or a project that depends on `@aksheyd/fourjs`, that's all it writes. Anywhere else, the folder becomes a project of its own: `new` also writes a `package.json`, with `"type": "module"`, dev dependencies on this version of FourJS and on Node's types, and a `test` script, and a `tsconfig.json` with the settings `check` uses, and its suggested commands say to run `npm install` there first. So `npx @aksheyd/fourjs new my-game`, then `npm install` in `my-game`, starts a project from nothing.
-- `check` maps `@aksheyd/fourjs` to the FourJS that runs it, as `sim` and the page do, so a game checks without the package installed next to it. TypeScript reads a `.ts` file as CommonJS unless a `package.json` above it says `"type": "module"`; the engine bundles every game as an ES module, so in a folder without one, `check` reads the game that way too. A game's own tests run in Node, though, so they need that `package.json`, which `new` writes.
+- `new DIR` writes a small playable game into a new or empty folder, and refuses a folder that has anything in it: `game.ts`, a game of catch that waits for Space, and `game.test.ts`, which pins what it does like the example games' tests. Inside this repo or a project that depends on `threejam`, that's all it writes. Anywhere else, the folder becomes a project of its own: `new` also writes a `package.json`, with `"type": "module"`, dev dependencies on this version of ThreeJam and on Node's types, and a `test` script, and a `tsconfig.json` with the settings `check` uses, and its suggested commands say to run `npm install` there first. So `npx threejam new my-game`, then `npm install` in `my-game`, starts a project from nothing.
+- `check` maps `threejam` to the ThreeJam that runs it, as `sim` and the page do, so a game checks without the package installed next to it. TypeScript reads a `.ts` file as CommonJS unless a `package.json` above it says `"type": "module"`; the engine bundles every game as an ES module, so in a folder without one, `check` reads the game that way too. A game's own tests run in Node, though, so they need that `package.json`, which `new` writes.
 - `export DIR -o FILE.html` writes one self-contained HTML file with the engine, Three.js, the game, its `view.ts`, the pixel font, and every image and sound in the folder inside it. Opened from disk, it plays offline, with the keyboard, the mouse, and sound as in `run`, but with no server behind it: saving the game doesn't reload it, and Esc doesn't quit. It picks a new seed each time it loads unless `--seed N` fixes one, and it has the same `window.engine` as the other pages. Without `-o`, it writes the folder's name with `.html`, like `pong.html`.
 
 Output is TOON by default; `--format json` switches it, and `--filter-output log` prints only the log and the suggested next command. Every command also takes `--help` and `--schema`. A failure prints a `code` and a one-line `message` and exits 1; the message starts with `path:line:` when the problem is in a game or driver file, and ends with when it happened, like `(in update at tick 61)`. Paths in messages use forward slashes on every OS.
 
 For agents:
 
-- `npx fourjs --mcp` serves `new`, `check`, `sim`, `shot`, and `export` as MCP tools. `run` is for people, so it isn't one. Each call loads the game from disk, so edits show up without restarting the server.
-- `npx fourjs mcp add` registers the server with Claude Code, Cursor, and others, through add-mcp, and with Amp directly, so agents can start it from any folder. The command it registers depends on where that FourJS came from: `node <clone>/src/cli.ts --mcp` for a clone of this repo, `node <folder>/node_modules/@aksheyd/fourjs/lib/cli.js --mcp` with the absolute path for a project's or a global install, and `npx -y @aksheyd/fourjs@<version> --mcp` for a copy in npx's cache, which npm cleans out, or for an install whose path has a space, since add-mcp splits commands at spaces. A clone on a path with a space is quoted, which only Amp understands; see Known problems. `--agent` picks one agent, and `--no-global` registers the server for the current project only.
-- `npx fourjs skills add` writes one skill per command, generated from the same definitions as the CLI. `npx fourjs --llms` prints a manifest.
+- `npx threejam --mcp` serves `new`, `check`, `sim`, `shot`, and `export` as MCP tools. `run` is for people, so it isn't one. Each call loads the game from disk, so edits show up without restarting the server.
+- `npx threejam mcp add` registers the server with Claude Code, Cursor, and others, through add-mcp, and with Amp directly, so agents can start it from any folder. The command it registers depends on where that ThreeJam came from: `node <clone>/src/cli.ts --mcp` for a clone of this repo, `node <folder>/node_modules/threejam/lib/cli.js --mcp` with the absolute path for a project's or a global install, and `npx -y threejam@<version> --mcp` for a copy in npx's cache, which npm cleans out, or for an install whose path has a space, since add-mcp splits commands at spaces. A clone on a path with a space is quoted, which only Amp understands; see Known problems. `--agent` picks one agent, and `--no-global` registers the server for the current project only.
+- `npx threejam skills add` writes one skill per command, generated from the same definitions as the CLI. `npx threejam --llms` prints a manifest.
 
 ## The screen
 
@@ -38,7 +38,7 @@ The 800x600 window shows x from -2 to 2 and y from -1.5 to 1.5, with (0, 0) at t
 ## game.ts
 
 ```ts
-import { KEYS, defineGame, grid, group, listOf, maybe, oneOf, spawn, type Context, type Entities, type World } from '@aksheyd/fourjs'
+import { KEYS, defineGame, grid, group, listOf, maybe, oneOf, spawn, type Context, type Entities, type World } from 'threejam'
 
 const entities = {
   paddle: {
@@ -111,7 +111,7 @@ While `start` or `update` runs, `Math.random()`, `Date.now()`, `new Date()`, `pe
 A game can add a `view.ts` for extras drawn with Three.js that the game logic never sees, like Pong's dashed net or Snake's grid:
 
 ```ts
-import type { ViewFrame, ViewSetup } from '@aksheyd/fourjs'
+import type { ViewFrame, ViewSetup } from 'threejam'
 import type game from './game.ts'
 
 export function init({ THREE, scene, world, objects }: ViewSetup<typeof game>) {}
@@ -132,7 +132,7 @@ export function draw({ world, tick, objects }: ViewFrame<typeof game>) {}
 - `--driver FILE` picks the input with code instead of `--press`, `--hold`, and `--pointer`. The file's default export gets `{ world, tick, keys, pointer, random }` before each tick, where `world` is read-only, `keys` lists the keys held during the tick before (none before tick 1), `pointer` is where the pointer was then, and `random` is a seeded stream of its own. It returns the keys held during that tick, or `{ keys, pointer }` to move the pointer too; without `pointer`, the pointer stays where it is. Since a press needs its key up the tick before, a driver taps Space by returning it only when `keys` lacks it: `keys.includes('Space') ? [] : ['Space']`.
 
 ```ts
-import type { Driver, EntitiesOf } from '@aksheyd/fourjs'
+import type { Driver, EntitiesOf } from 'threejam'
 import type pong from './game.ts'
 
 const follow: Driver<EntitiesOf<typeof pong>> = ({ world, tick }) =>
@@ -161,15 +161,14 @@ Tests use the library, as in `games/*/game.test.ts` and the `game.test.ts` that 
 - Nothing stops an endless loop, so a stuck `update` hangs `sim`.
 - Command-line mistakes exit 1 like other failures, because incur sets the exit codes.
 - In `run` and exported pages, a sound plays when its tick runs, so the ticks a page catches up on after a slow frame play their sounds together, and a sound file played before the page has finished decoding it is skipped.
-- `fourjs mcp add` fails on Windows, because incur, which registers the server, runs `npx add-mcp` without a shell, and there `npx` is a `.cmd` file. Run add-mcp yourself from a shell with the command for your install from the list above, like `npx add-mcp "node C:\games\node_modules\@aksheyd\fourjs\lib\cli.js --mcp" --name fourjs -g -y`. add-mcp doesn't know Amp, so add the server to Amp's `settings.json` by hand.
-- add-mcp splits the command it's given at every space and keeps any quotes, so when the path to a clone of FourJS has a space, `mcp add` gives only Amp a working entry. For the other agents, run add-mcp yourself with the absolute path of `node` as the command and the rest as arguments: `npx add-mcp /usr/local/bin/node --args "/Users/Ada Byron/fourjs/src/cli.ts" --args=--mcp --name fourjs -g -y`.
-- When the skills from `skills add` are out of date, incur suggests `npx fourjs skills add`, which only works where the package is installed; through npx, run `npx @aksheyd/fourjs skills add` instead.
+- `threejam mcp add` fails on Windows, because incur, which registers the server, runs `npx add-mcp` without a shell, and there `npx` is a `.cmd` file. Run add-mcp yourself from a shell with the command for your install from the list above, like `npx add-mcp "node C:\games\node_modules\threejam\lib\cli.js --mcp" --name threejam -g -y`. add-mcp doesn't know Amp, so add the server to Amp's `settings.json` by hand.
+- add-mcp splits the command it's given at every space and keeps any quotes, so when the path to a clone of ThreeJam has a space, `mcp add` gives only Amp a working entry. For the other agents, run add-mcp yourself with the absolute path of `node` as the command and the rest as arguments: `npx add-mcp /usr/local/bin/node --args "/Users/Ada Byron/threejam/src/cli.ts" --args=--mcp --name threejam -g -y`.
 
-## Not in FourJS yet
+## Not in ThreeJam yet
 
 Adding or removing entities during a run (a group used with `spawn` stands in), images and sounds in folders inside a game's folder, animated images, sounds that loop or stop, and gamepads.
 
-## Working on FourJS
+## Working on ThreeJam
 
 - `src/types.ts`, `entities.ts`, `engine.ts`, `input.ts`, `random.ts`, `guard.ts`, `math.ts`, `font.ts`, `colors.ts`, `assets.ts`, `errors.ts`: the engine, shared by `sim` and the page. `assets.ts` knows the image and sound file types and checks the names games use.
 - `src/browser/client.ts` and `src/browser/view.ts`: the page's loop, keyboard and mouse, and `window.engine`, and the default Three.js view. `src/browser/assets.ts` is the only place the page reads files: it loads images and sounds from the addresses the page was built with, which `serve.ts` points at the local server and `export.ts` replaces with data URLs. `src/browser/sound.ts` plays sounds and makes the built-in ones.
@@ -177,14 +176,15 @@ Adding or removing entities during a run (a group used with `spawn` stands in), 
 - `src/package.ts`: the package's name and version, where its files are, and the command `mcp add` registers. A clone runs the TypeScript in `src`, and the published package runs the JavaScript compiled into `lib`, so code finds the engine's own files through `engineFile`, never by assuming `src`.
 - `src/load.ts`: loading games and drivers fresh, listing a game's images and sounds, the type checks, and turning errors into `path:line`. `src/serve.ts` and `src/shot.ts`: bundling, the local server, the Chrome window, and headless frames. `src/export.ts`: the one-file page. `src/new.ts`: the starter game and project files `new` writes.
 - `games/`: the example games and their tests. `test/`: engine, CLI, MCP, and page-versus-sim tests.
-- `scripts/build.ts` and `tsconfig.build.json`: the build of the published package into `dist`, with its own `package.json`, the declarations its entry point needs, and a copy of the README whose links point at GitHub. `scripts/verify-package.ts`: `npm run test:package`, which builds and packs the package, installs the tarball in a project in a temporary folder and runs `new`, `check`, `sim`, `shot`, `export`, `run`, and the new game's test there, then runs FourJS through npx with nothing installed. It isn't part of `npm test`.
-- `skills/fourjs/SKILL.md`: the agent skill published from this repo.
+- `scripts/build.ts` and `tsconfig.build.json`: the build of the published package into `dist`, with its own `package.json`, the declarations its entry point needs, and a copy of the README whose links point at GitHub. `scripts/verify-package.ts`: `npm run test:package`, which builds and packs the package, installs the tarball in a project in a temporary folder and runs `new`, `check`, `sim`, `shot`, `export`, `run`, and the new game's test there, then runs ThreeJam through npx with nothing installed. It isn't part of `npm test`.
+- `skills/threejam/SKILL.md`: the agent skill published from this repo.
+- `README.md` and `docs/`: the README is the pitch and a quick start, and the guides it links to are in `docs/`, next to the README's screenshots in `docs/images`.
 - `.github/workflows/ci.yml`: CI for pushes to main and pull requests. It runs the typecheck, `npm test`, and `check` on every game with Node 26 on Linux, macOS, and Windows, and with Node 22.18 on Linux, and `npm run test:package` with both on Linux. `.github/workflows/release.yml`: publishing to npm when a version tag is pushed.
 
 ```bash
 npm test                # every test, including the games'; the page tests need Chrome
 npx tsc -p .            # typecheck
-npx fourjs check games/pong
+npx threejam check games/pong
 npm run build           # the published package, in dist
 npm run test:package    # build, pack, install, and use the package; needs Chrome and the npm registry
 ```
@@ -197,9 +197,9 @@ Rules:
 - `check` and `sim` never open a browser. The engine has no game-specific code.
 - Code runs on macOS, Linux, and Windows: start Node as `process.execPath` rather than `node` or a `node_modules/.bin` shim, import files through `pathToFileURL`, build paths with `node:path`, and print paths with forward slashes.
 - Code runs from a clone and from the published package: nothing needs a build to run in the repo, and nothing assumes the `src` folder at run time.
-- Nothing runs or suggests `npx fourjs` where the package isn't installed, since that asks npm for a different package; there, it's `npx @aksheyd/fourjs`.
+- Tests and scripts run ThreeJam from the working tree or a packed tarball, never through a bare `npx threejam` where the package isn't installed, since that downloads the published version instead.
 - Follow the TypeScript rules in the repo's style: model variants as discriminated unions, parse `unknown` input at the boundary, avoid `as` casts except right after validation, and make switches exhaustive with `never`.
-- A change agents can see goes into this file in the same change, and into the skill if it changes the skill's steps.
+- A change agents can see goes into this file in the same change, into the guide in `docs/` that describes it, and into the skill if it changes the skill's steps.
 - Comments are single lines and only say what the code can't. No emojis. Each test covers something no other test does.
 - Don't leave a `run` window open: start `run --serve-only` in the background, check it, and stop it.
 
@@ -210,9 +210,9 @@ The version in the root `package.json` is the only one; the CLI, the MCP server,
 The first release is published by hand, since npm lets a package trust a publisher only once the package exists:
 
 1. On a clean checkout of main with `version` at `0.1.0`, run `npm ci`, then `npx tsc -p .`, `npm test`, and `npm run test:package`, which leaves the build in `dist`.
-2. Sign in with `npm login` if you haven't, then run `npm publish ./dist`, and give npm your two-factor code when it asks, or pass it as `--otp <code>`. `publishConfig` in the built `package.json` makes the scoped package public.
+2. Sign in with `npm login` if you haven't, then run `npm publish ./dist`, and give npm your two-factor code when it asks, or pass it as `--otp <code>`.
 3. Make the GitHub repository public at the same time.
-4. On npmjs.com, open the package's settings, and under Trusted publishing, add GitHub Actions with the owner `aksheyd`, the repository `fourjs`, and the workflow `release.yml`.
+4. On npmjs.com, open the package's settings, and under Trusted publishing, add GitHub Actions with the owner `aksheyd`, the repository `threejam`, and the workflow `release.yml`.
 
 Every release after that goes through `release.yml`:
 
