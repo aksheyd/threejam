@@ -28,7 +28,7 @@ export interface PageOptions {
 
 export async function buildPage({ dir, config, driver, onRebuild }: PageOptions): Promise<Page> {
   const files = gameFiles(dir)
-  const outdir = mkdtempSync(join(tmpdir(), 'fourjs-'))
+  const outdir = mkdtempSync(join(tmpdir(), 'threejam-'))
   writeFileSync(join(outdir, 'index.html'), html({ title: basename(files.folder), config, script: { kind: 'file', src: '/bundle.js' } }))
   let watching = false
   const page = pageBuild({ files, driver, address: (name) => `assets/${encodeURIComponent(name)}` })
@@ -39,7 +39,7 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
     plugins: [
       ...page.plugins,
       {
-        name: 'fourjs-rebuild',
+        name: 'threejam-rebuild',
         setup: (build) =>
           void build.onEnd((result) => {
             if (watching) onRebuild?.(result.errors.map(formatMessage))
@@ -73,16 +73,16 @@ export function pageBuild({ files, driver, address }: { files: GameFiles; driver
     `import game from ${JSON.stringify(files.game)}`,
     files.view ? `import * as view from ${JSON.stringify(files.view)}` : 'const view = {}',
     driver ? `import driver from ${JSON.stringify(resolve(driver))}` : 'const driver = undefined',
-    "import assets from 'fourjs:assets'",
+    "import assets from 'threejam:assets'",
     `import { play } from ${JSON.stringify(engineFile(join('browser', 'client')))}`,
-    'play({ game, view, driver, assets, config: window.FOUR })',
+    'play({ game, view, driver, assets, config: window.THREEJAM })',
   ].join('\n')
   const assets: esbuild.Plugin = {
     // Listing the folder on each build picks up new files.
-    name: 'fourjs-assets',
+    name: 'threejam-assets',
     setup(build) {
-      build.onResolve({ filter: /^fourjs:assets$/ }, () => ({ path: 'assets', namespace: 'fourjs' }))
-      build.onLoad({ filter: /^assets$/, namespace: 'fourjs' }, () => {
+      build.onResolve({ filter: /^threejam:assets$/ }, () => ({ path: 'assets', namespace: 'threejam' }))
+      build.onLoad({ filter: /^assets$/, namespace: 'threejam' }, () => {
         const names = assetsIn(files.folder)
         return {
           contents: `export default ${JSON.stringify(Object.fromEntries(names.map((name) => [name, address(name)])))}`,
@@ -94,7 +94,7 @@ export function pageBuild({ files, driver, address }: { files: GameFiles; driver
     },
   }
   return {
-    stdin: { contents: entry, resolveDir: files.folder, sourcefile: 'fourjs-entry.ts', loader: 'ts' },
+    stdin: { contents: entry, resolveDir: files.folder, sourcefile: 'threejam-entry.ts', loader: 'ts' },
     bundle: true,
     format: 'esm',
     platform: 'browser',
@@ -122,7 +122,7 @@ export function html({ title, config, script }: { title: string; config: Config;
 </head>
 <body>
 <canvas></canvas>
-<script>window.FOUR = ${JSON.stringify(config)}</script>
+<script>window.THREEJAM = ${JSON.stringify(config)}</script>
 ${scriptTag(script)}
 </body>
 </html>
@@ -257,7 +257,7 @@ function openWindow(url: string): AppWindow | undefined {
     openBrowser(url)
     return undefined
   }
-  const profile = mkdtempSync(join(tmpdir(), 'fourjs-profile-'))
+  const profile = mkdtempSync(join(tmpdir(), 'threejam-profile-'))
   const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628']
   const child = spawn(chrome, args, { stdio: 'ignore' })
   const exited = new Promise<void>((done) => child.once('exit', () => done()))

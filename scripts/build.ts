@@ -45,12 +45,11 @@ const manifest = {
   bugs: root.bugs,
   keywords: root.keywords,
   type: 'module',
-  bin: { fourjs: 'lib/cli.js' },
+  bin: { threejam: 'lib/cli.js' },
   exports: { '.': { types: './lib/index.d.ts', default: './lib/index.js' } },
   files: ['lib', 'AGENTS.md'],
   engines: root.engines,
   dependencies: root.dependencies,
-  publishConfig: { access: 'public' },
 }
 writeFileSync(join(DIST, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 copyFileSync(join(ROOT, 'LICENSE'), join(DIST, 'LICENSE'))

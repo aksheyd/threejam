@@ -39,7 +39,7 @@ function inProject(folder: string): boolean {
 
 function manifest(name: string): string {
   const json = {
-    name: name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[._-]+|-+$/g, '') || 'fourjs-game',
+    name: name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[._-]+|-+$/g, '') || 'threejam-game',
     private: true,
     type: 'module',
     scripts: { test: 'node --test' },

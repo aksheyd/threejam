@@ -12,7 +12,7 @@ import { ENGINE, NAME, ROOT, TYPES, engineFile, manifestsAbove } from './package
 import { isDrive, type Drive, type Game } from './types.ts'
 
 const INDEX = pathToFileURL(engineFile('index')).href
-const MODULES = join(tmpdir(), 'fourjs-modules')
+const MODULES = join(tmpdir(), 'threejam-modules')
 let loads = 0
 
 process.setSourceMapsEnabled(true)
@@ -54,7 +54,7 @@ export async function loadDriver(path: string): Promise<Drive> {
   return drive
 }
 
-// The settings check uses, which fourjs new also writes into a new project's tsconfig.json.
+// The settings check uses, which threejam new also writes into a new project's tsconfig.json.
 export const COMPILER_OPTIONS = {
   strict: true,
   target: 'es2023',
@@ -104,7 +104,7 @@ export function typecheck({ file, dom }: { file: string; dom: boolean }): string
 
 // paths is only a tsconfig.json setting, so each check writes one for its file.
 function runTsc({ compilerOptions, file }: { compilerOptions: object; file: string }): SpawnSyncReturns<string> {
-  const config = mkdtempSync(join(tmpdir(), 'fourjs-check-'))
+  const config = mkdtempSync(join(tmpdir(), 'threejam-check-'))
   try {
     const project = join(config, 'tsconfig.json')
     writeFileSync(project, JSON.stringify({ compilerOptions, files: [file] }))
@@ -173,10 +173,10 @@ async function importFresh(file: string): Promise<Record<string, unknown>> {
       target: 'node22',
       sourcemap: 'inline',
       // Sources are relative to ROOT and resolve from there wherever the bundle is written, even on another drive.
-      outfile: join(ROOT, 'fourjs-module.mjs'),
+      outfile: join(ROOT, 'threejam-module.mjs'),
       sourceRoot: pathToFileURL(ROOT + sep).href,
       logLevel: 'silent',
-      plugins: [{ name: 'fourjs', setup: (build) => void build.onResolve({ filter: new RegExp(`^${NAME}$`) }, () => ({ path: INDEX, external: true })) }],
+      plugins: [{ name: 'threejam', setup: (build) => void build.onResolve({ filter: new RegExp(`^${NAME}$`) }, () => ({ path: INDEX, external: true })) }],
     })
     .catch((failure: unknown) => {
       throw new UsageError(buildMessage(failure))

@@ -8,10 +8,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const NPM = npmCli()
 const NPX = join(dirname(NPM), 'npx-cli.js')
-const PACKAGE = join('node_modules', '@aksheyd', 'fourjs')
 const { name, version } = manifest(join(ROOT, 'package.json'))
+const PACKAGE = join('node_modules', name)
 // Node names modules by their real paths, and macOS reaches its temporary folder through a link.
-const work = realpathSync(mkdtempSync(join(tmpdir(), 'fourjs-package-')))
+const work = realpathSync(mkdtempSync(join(tmpdir(), 'threejam-package-')))
 const npxCache = join(node([NPM, 'config', 'get', 'cache'], ROOT).trim(), '_npx')
 const cached = new Set(existsSync(npxCache) ? readdirSync(npxCache) : [])
 
@@ -29,27 +29,27 @@ try {
   writeFileSync(join(project, 'package.json'), `${JSON.stringify({ name: 'my-project', private: true, type: 'module' }, null, 2)}\n`)
   node([NPM, 'install', '--save-dev', '--no-audit', '--no-fund', tarball], project)
   done('installed it in a project')
-  same(fourjs(project, ['new', 'catch']).files, ['game.ts', 'game.test.ts'])
-  same(fourjs(project, ['check', 'catch']), { ok: true, entities: 6 })
+  same(threejam(project, ['new', 'catch']).files, ['game.ts', 'game.test.ts'])
+  same(threejam(project, ['check', 'catch']), { ok: true, entities: 6 })
   const input = ['--press', 'Space@1', '--hold', 'Right@2-40']
-  same(fourjs(project, ['sim', 'catch', '--ticks', '120', ...input, '--only', 'game', '--fields', 'points']).entities, [{ name: 'game', points: 1 }])
-  same(fourjs(project, ['shot', 'catch', '--at', '1,98', ...input, '-o', 'frames/catch.png']).files, ['frames/catch-001.png', 'frames/catch-098.png'])
+  same(threejam(project, ['sim', 'catch', '--ticks', '120', ...input, '--only', 'game', '--fields', 'points']).entities, [{ name: 'game', points: 1 }])
+  same(threejam(project, ['shot', 'catch', '--at', '1,98', ...input, '-o', 'frames/catch.png']).files, ['frames/catch-001.png', 'frames/catch-098.png'])
   for (const frame of ['catch-001.png', 'catch-098.png']) same(readFileSync(join(project, 'frames', frame)).toString('latin1', 1, 4), 'PNG')
-  same(fourjs(project, ['export', 'catch', '-o', 'catch.html']).file, 'catch.html')
+  same(threejam(project, ['export', 'catch', '-o', 'catch.html']).file, 'catch.html')
   same(/<script type="module">/.test(readFileSync(join(project, 'catch.html'), 'utf8')), true)
   node(['--test', join('catch', 'game.test.ts')], project)
   await serveOnly(project)
   same(await mcpCommand(join(project, PACKAGE)), `npx -y ${name}@${version} --mcp`)
   mkdirSync(join(project, 'broken'))
-  const random = ["import { defineGame } from '@aksheyd/fourjs'", '', 'export default defineGame({', '  entities: { ball: { w: 0.1 } },', '  update(world) {', '    world.ball.x = Math.random()', '  },', '})', '']
+  const random = ["import { defineGame } from 'threejam'", '', 'export default defineGame({', '  entities: { ball: { w: 0.1 } },', '  update(world) {', '    world.ball.x = Math.random()', '  },', '})', '']
   writeFileSync(join(project, 'broken', 'game.ts'), random.join('\n'))
-  const failed = spawnSync(process.execPath, [NPX, 'fourjs', 'sim', 'broken', '--ticks', '1', '--format', 'json'], { cwd: project, encoding: 'utf8' })
+  const failed = spawnSync(process.execPath, [NPX, 'threejam', 'sim', 'broken', '--ticks', '1', '--format', 'json'], { cwd: project, encoding: 'utf8' })
   const message: unknown = JSON.parse(failed.stdout || '{}').message
   same([failed.status, typeof message === 'string' && message.startsWith('broken/game.ts:6: Math.random() would make runs differ')], [1, true])
   done('new, check, sim, shot, export, run, the starter test, an error naming its line, and the MCP command in the project')
 
   // Once through npx, outside any project, where new writes a project of its own.
-  const once = (args: string[]) => fourjs(work, args, ['--yes', `--package=${tarball}`, '--'])
+  const once = (args: string[]) => threejam(work, args, ['--yes', `--package=${tarball}`, '--'])
   const created = once(['new', 'solo'])
   same(created.files, ['game.ts', 'game.test.ts', 'package.json', 'tsconfig.json'])
   same(isRecord(created.cta) && typeof created.cta.description === 'string' && created.cta.description.startsWith('Run npm install in solo first'), true)
@@ -84,10 +84,10 @@ function node(args: string[], cwd: string): string {
   return result.stdout
 }
 
-// Runs npx fourjs as people do, which finds the project's copy, or with --package, a copy in npx's cache.
-function fourjs(cwd: string, args: string[], npx: string[] = []): Record<string, unknown> {
-  const parsed: unknown = JSON.parse(node([NPX, ...npx, 'fourjs', ...args, '--format', 'json'], cwd))
-  if (!isRecord(parsed)) throw new Error(`fourjs ${args.join(' ')} printed ${JSON.stringify(parsed)}`)
+// Runs npx threejam as people do, which finds the project's copy, or with --package, a copy in npx's cache.
+function threejam(cwd: string, args: string[], npx: string[] = []): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(node([NPX, ...npx, 'threejam', ...args, '--format', 'json'], cwd))
+  if (!isRecord(parsed)) throw new Error(`threejam ${args.join(' ')} printed ${JSON.stringify(parsed)}`)
   return parsed
 }
 

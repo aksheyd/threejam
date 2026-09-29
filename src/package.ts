@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const NAME = '@aksheyd/fourjs'
+export const NAME = 'threejam'
 
 const HERE = fileURLToPath(import.meta.url)
 // The engine's folder: src in a clone, which runs the TypeScript sources, and lib in the published package, which runs compiled JavaScript.

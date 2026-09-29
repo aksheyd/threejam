@@ -1,5 +1,5 @@
-// Plays seed 0's first seven pieces into two cleared rows: npx fourjs sim games/tetris --ticks 400 --driver games/tetris/plan.ts
-import type { Driver, DriverFrame, EntitiesOf } from '@aksheyd/fourjs'
+// Plays seed 0's first seven pieces into two cleared rows: npx threejam sim games/tetris --ticks 400 --driver games/tetris/plan.ts
+import type { Driver, DriverFrame, EntitiesOf } from 'threejam'
 import type tetris from './game.ts'
 
 type Game = DriverFrame<EntitiesOf<typeof tetris>>['world']['game']

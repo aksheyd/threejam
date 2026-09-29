@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { pick, simulate, type EntityState, type LogEntry } from '@aksheyd/fourjs'
+import { pick, simulate, type EntityState, type LogEntry } from 'threejam'
 import flappy from './game.ts'
 
 function byName(entities: readonly EntityState[]): Record<string, EntityState> {

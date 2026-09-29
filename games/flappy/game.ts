@@ -1,5 +1,5 @@
 // Flappy: Space starts a run and each press flaps. Fly through the gaps; hitting a pipe, the ceiling, or the ground ends the run.
-import { defineGame, group, oneOf, type Context, type Entities, type World } from '@aksheyd/fourjs'
+import { defineGame, group, oneOf, type Context, type Entities, type World } from 'threejam'
 
 const OUTLINE = '#543847'
 const WHITE = '#ffffff'

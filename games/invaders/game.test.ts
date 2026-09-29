@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { Session, pick, simulate, type EntityState, type LogEntry, type SimOptions } from '@aksheyd/fourjs'
+import { Session, pick, simulate, type EntityState, type LogEntry, type SimOptions } from 'threejam'
 import { autopilot } from './autopilot.ts'
 import game from './game.ts'
 

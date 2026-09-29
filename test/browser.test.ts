@@ -24,7 +24,7 @@ const made: string[] = []
 after(() => made.forEach((dir) => rmSync(dir, { recursive: true, force: true })))
 
 const FLAP = [
-  "import type { Driver, EntitiesOf } from '@aksheyd/fourjs'",
+  "import type { Driver, EntitiesOf } from 'threejam'",
   "import type flappy from '../../../games/flappy/game.ts'",
   '',
   'const flap: Driver<EntitiesOf<typeof flappy>> = ({ world: { bird, pipes }, keys }) => {',
@@ -63,7 +63,7 @@ test('with a driver that taps using the keys of the tick before, the page reache
 })
 
 const MATH_HEAVY = [
-  "import { defineGame } from '@aksheyd/fourjs'",
+  "import { defineGame } from 'threejam'",
   '',
   'export default defineGame({',
   '  entities: { dot: { x: 0.5, y: 0.25, w: 0.1, h: 0.1 } },',
@@ -111,7 +111,7 @@ test('with the portable math, trig-heavy code reaches the same state in the page
 const QUAD_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwHwyBNBgAAEnICff5q7YNAAAAAElFTkSuQmCC'
 
 const PICTURE = [
-  "import { defineGame } from '@aksheyd/fourjs'",
+  "import { defineGame } from 'threejam'",
   '',
   'export default defineGame({',
   "  background: '#000000',",
@@ -206,7 +206,7 @@ function watch(tab: Page): { errors: string[]; requests: string[] } {
 }
 
 test('an exported file opened from disk starts with the seed export fixed, runs its view.ts, and reaches the state sim computes for scheduled keys', { skip: !chrome && 'needs Chrome' }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fourjs-export-'))
+  const dir = mkdtempSync(join(tmpdir(), 'threejam-export-'))
   const browser = await launch()
   try {
     const file = join(dir, 'pong.html')
@@ -231,7 +231,7 @@ test('an exported file opened from disk starts with the seed export fixed, runs 
 })
 
 test('exported Asteroids draws its SVG rocks and plays sounds with nothing but the file, and picks a new seed each load', { skip: !chrome && 'needs Chrome' }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fourjs-export-'))
+  const dir = mkdtempSync(join(tmpdir(), 'threejam-export-'))
   const browser = await launch()
   try {
     const file = join(dir, 'asteroids.html')
@@ -285,7 +285,7 @@ test('exported Asteroids draws its SVG rocks and plays sounds with nothing but t
 })
 
 test('shot writes one PNG per tick into a folder it creates', { skip: !chrome && 'needs Chrome' }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'fourjs-shot-'))
+  const dir = mkdtempSync(join(tmpdir(), 'threejam-shot-'))
   try {
     const files = await shoot({ dir: 'games/pong', at: [1, 30], out: join(dir, 'new', 'frame.png') })
     assert.deepEqual(files, [join(dir, 'new', 'frame-001.png'), join(dir, 'new', 'frame-030.png')])

@@ -1,5 +1,5 @@
 // Decoration only: the skyline, the pipes' fill, the ground's stripes, and the bird's details never affect play, so sim never sees them.
-import type { ViewFrame, ViewSetup } from '@aksheyd/fourjs'
+import type { ViewFrame, ViewSetup } from 'threejam'
 import type { BufferGeometry, Mesh } from 'three'
 import type game from './game.ts'
 

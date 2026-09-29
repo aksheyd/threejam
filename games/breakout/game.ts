@@ -1,5 +1,5 @@
 // Breakout for one player. Left / Right or A / D move the paddle and Space serves. Clear every brick to win; you have three lives.
-import { defineGame, grid, oneOf, type Context, type Entities, type World } from '@aksheyd/fourjs'
+import { defineGame, grid, oneOf, type Context, type Entities, type World } from 'threejam'
 
 const RED = { color: '#de3329', points: 7 }
 const ORANGE = { color: '#f5851f', points: 5 }

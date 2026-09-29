@@ -1,25 +1,25 @@
 {
-  "name": "@aksheyd/fourjs",
+  "name": "threejam",
   "version": "0.1.0",
   "private": true,
   "description": "A game engine on Three.js for coding agents: games in TypeScript, one API as code, a CLI, and MCP tools",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aksheyd/fourjs.git"
+    "url": "git+https://github.com/aksheyd/threejam.git"
   },
-  "homepage": "https://github.com/aksheyd/fourjs",
-  "bugs": "https://github.com/aksheyd/fourjs/issues",
+  "homepage": "https://github.com/aksheyd/threejam",
+  "bugs": "https://github.com/aksheyd/threejam/issues",
   "keywords": ["game-engine", "threejs", "typescript", "ai-agents", "mcp", "cli", "deterministic"],
   "type": "module",
   "bin": {
-    "fourjs": "./src/cli.ts"
+    "threejam": "./src/cli.ts"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "fourjs": "node src/cli.ts",
+    "threejam": "node src/cli.ts",
     "test": "node --test",
     "typecheck": "tsc -p .",
     "build": "node scripts/build.ts",

@@ -70,7 +70,7 @@ jobs:
         run: |
           status=0
           for dir in games/*/; do
-            npx fourjs check "${dir%/}" || status=1
+            npx threejam check "${dir%/}" || status=1
           done
           exit "$status"
 

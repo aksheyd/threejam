@@ -1,5 +1,5 @@
 // Decoration only: the dashed net isn't part of the game, so sim never sees it.
-import type { ViewSetup } from '@aksheyd/fourjs'
+import type { ViewSetup } from 'threejam'
 
 export function init({ THREE, scene }: ViewSetup): void {
   const dash = new THREE.PlaneGeometry(0.03, 0.12)

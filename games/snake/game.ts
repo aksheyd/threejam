@@ -1,5 +1,5 @@
 // Snake. An arrow key starts the snake and the arrow keys turn it. Eat apples to grow; a wall or your own body ends the game, and Space plays again.
-import { defineGame, group, listOf, oneOf, type Context, type Entities, type Entity, type Key, type World } from '@aksheyd/fourjs'
+import { defineGame, group, listOf, oneOf, type Context, type Entities, type Entity, type Key, type World } from 'threejam'
 
 const COLS = 20
 const ROWS = 15

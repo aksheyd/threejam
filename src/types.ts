@@ -37,10 +37,10 @@ export type Visuals = {
 export type EngineFields = Common & Visuals
 
 // Symbol.for keeps these markers recognizable across separately bundled copies of this module.
-export const CHOICE: unique symbol = Symbol.for('fourjs.choice')
-export const GROUP: unique symbol = Symbol.for('fourjs.group')
-export const LIST: unique symbol = Symbol.for('fourjs.list')
-export const MAYBE: unique symbol = Symbol.for('fourjs.maybe')
+export const CHOICE: unique symbol = Symbol.for('threejam.choice')
+export const GROUP: unique symbol = Symbol.for('threejam.group')
+export const LIST: unique symbol = Symbol.for('threejam.list')
+export const MAYBE: unique symbol = Symbol.for('threejam.maybe')
 
 export interface Choice<T extends string> {
   readonly [CHOICE]: readonly T[]
@@ -200,7 +200,7 @@ export interface Controls {
 
 export type Driver<E extends Entities = Entities> = (frame: DriverFrame<E>) => Iterable<Key> | Controls
 
-export const DRIVER: unique symbol = Symbol.for('fourjs.driver')
+export const DRIVER: unique symbol = Symbol.for('threejam.driver')
 
 export interface DriverFactory<E extends Entities = Entities> {
   readonly [DRIVER]: () => Driver<E>

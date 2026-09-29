@@ -1,5 +1,5 @@
 // Decoration only: the grid lines and walls never move, so sim never sees them.
-import type { ViewSetup } from '@aksheyd/fourjs'
+import type { ViewSetup } from 'threejam'
 import type game from './game.ts'
 
 type Box = { x: number; y: number; w: number; h: number }

@@ -1,5 +1,5 @@
 // A bot that plays Asteroids with the mouse, for tests and sim --driver: it holds the button with the pointer on the nearest rock.
-import type { Driver, EntitiesOf } from '@aksheyd/fourjs'
+import type { Driver, EntitiesOf } from 'threejam'
 import type asteroids from './game.ts'
 
 const autopilot: Driver<EntitiesOf<typeof asteroids>> = ({ world: { game, ship, rocks }, keys }) => {

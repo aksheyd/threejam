@@ -1,5 +1,5 @@
 // Asteroids. Left / Right or A / D turn, Up or W thrusts, and Space fires; or hold the mouse to aim at the pointer and fire, and the right button to thrust. Space or a click starts and plays again.
-import { defineGame, group, oneOf, spawn, type Context, type Entities, type Point, type World } from '@aksheyd/fourjs'
+import { defineGame, group, oneOf, spawn, type Context, type Entities, type Point, type World } from 'threejam'
 
 const WHITE = '#f2f2f2'
 const GREY = '#8c8c99'

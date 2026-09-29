@@ -1,6 +1,6 @@
 // Tetris. Space starts; Left / Right move the falling piece, Up rotates it, and Down drops it faster.
 // Full rows clear and score, and the game ends when a new piece has no room.
-import { defineGame, grid, group, listOf, oneOf, type Context, type Entities, type World } from '@aksheyd/fourjs'
+import { defineGame, grid, group, listOf, oneOf, type Context, type Entities, type World } from 'threejam'
 
 const COLS = 10
 const ROWS = 20

@@ -1,29 +1,29 @@
 ---
-name: fourjs
-description: Builds, tests, and screenshots 2D games with FourJS, a TypeScript game engine on Three.js, through its `fourjs` CLI or MCP tools. Use when the user asks to make, change, test, or debug a FourJS game, or when a folder has a game.ts that calls defineGame from '@aksheyd/fourjs'.
+name: threejam
+description: Builds, tests, and screenshots 2D games with ThreeJam, a TypeScript game engine on Three.js, through its `threejam` CLI or MCP tools. Use when the user asks to make, change, test, or debug a ThreeJam game, or when a folder has a game.ts that calls defineGame from 'threejam'.
 license: MIT
-compatibility: Needs Node 22.18+ and FourJS from npm, installed in the project with npm install -D @aksheyd/fourjs so npx fourjs runs it, or run without installing as npx @aksheyd/fourjs. shot needs Chrome or Chromium; check and sim run anywhere.
+compatibility: Needs Node 22.18+ and ThreeJam from npm, installed in the project with npm install -D threejam, or run once without installing as npx threejam. shot needs Chrome or Chromium; check and sim run anywhere.
 ---
 
-# Making games with FourJS
+# Making games with ThreeJam
 
-A FourJS game is a folder with a `game.ts`: entity data plus an `update` function, next to any images and sounds it uses. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run. You build a game by editing files and proving what it does with `fourjs`, not by watching a window.
+A ThreeJam game is a folder with a `game.ts`: entity data plus an `update` function, next to any images and sounds it uses. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run. You build a game by editing files and proving what it does with `threejam`, not by watching a window.
 
 ## Setup
 
-1. Get FourJS into the project. `npx fourjs` only runs a copy installed in the project; anywhere else it would ask npm for a different package, so there use `npx @aksheyd/fourjs` in its place.
-   - In a project, install it with `npm install -D @aksheyd/fourjs`.
-   - With no project yet, start one: `npx @aksheyd/fourjs new my-game`, then run `npm install` in `my-game`. `new` writes a small playable game, its test, a `package.json`, and a `tsconfig.json`.
+1. Get ThreeJam into the project, so `npx threejam` runs the copy installed there; anywhere else, `npx threejam` runs it once without installing it.
+   - In a project, install it with `npm install -D threejam`.
+   - With no project yet, start one: `npx threejam new my-game`, then run `npm install` in `my-game`. `new` writes a small playable game, its test, a `package.json`, and a `tsconfig.json`.
 
-2. Read the manual in full before writing code: `node_modules/@aksheyd/fourjs/AGENTS.md` in the project, or `AGENTS.md` at github.com/aksheyd/fourjs. It covers entity fields, groups and grids, `oneOf`, images, `ctx` with its input, pointer, and sounds, `view.ts`, drivers, and testing. Start from the game `new` writes, or from the shape of a game in the repo's `games/` folder; Pong is the smallest, and Asteroids uses images, sounds, the mouse, and `spawn`.
+2. Read the manual in full before writing code: `node_modules/threejam/AGENTS.md` in the project, or `AGENTS.md` at github.com/aksheyd/threejam. It covers entity fields, groups and grids, `oneOf`, images, `ctx` with its input, pointer, and sounds, `view.ts`, drivers, and testing. Start from the game `new` writes, or from the shape of a game in the repo's `games/` folder; Pong is the smallest, and Asteroids uses images, sounds, the mouse, and `spawn`.
 
 ## Working loop
 
 Run these from the project's root, with the game in `<dir>`.
 
-1. Start a game with `npx fourjs new <dir>`, which refuses a folder that has anything in it, or edit `<dir>/game.ts`, and `view.ts` for decoration only.
-2. Run `npx fourjs check <dir>` until it prints `ok: true`. It type-checks `game.ts` and `view.ts`, checks that the images entities name are in the folder, then runs `start` and the first tick.
-3. Prove each behavior with numbers from `npx fourjs sim <dir> --ticks N`:
+1. Start a game with `npx threejam new <dir>`, which refuses a folder that has anything in it, or edit `<dir>/game.ts`, and `view.ts` for decoration only.
+2. Run `npx threejam check <dir>` until it prints `ok: true`. It type-checks `game.ts` and `view.ts`, checks that the images entities name are in the folder, then runs `start` and the first tick.
+3. Prove each behavior with numbers from `npx threejam sim <dir> --ticks N`:
    - `--press Space@60` presses a key on one tick, and `--hold Left@30-90` holds it on a range of ticks. The mouse buttons are the keys `Mouse` and `MouseRight`, and `--pointer 0.5,-0.2@30` moves the pointer on tick 30, where it stays until the next move.
    - `--driver bot.ts` picks the input each tick with code that reads the game, for input that has to react. It also gets the keys it held and the pointer from the tick before, so it can tap a key, and it can return `{ keys, pointer }` to move the pointer.
    - The output lists the sounds the game played with their ticks, so a test can check that a hit made a sound.
@@ -31,9 +31,9 @@ Run these from the project's root, with the game in `<dir>`.
    - `--set paddle.w=1` or `--set 'bricks[*].points=5'` changes starting values for one run; `start` runs after them and can set a field again.
    - `--only ball,bricks --fields x,y --every 10` prints those entities and fields every 10 ticks. `ctx.print(...)` lines appear in `log`, and `--filter-output log` prints only them.
    - Pin the rules in `<dir>/game.test.ts` with `simulate`, `pick`, and `drive`, like the test `new` writes, and run it with `node --test <dir>/game.test.ts`.
-4. Look at it: `npx fourjs shot <dir> --at 1,120,600 --press Space@1 -o /tmp/<name>/frame.png` saves one PNG per tick from a single run, with the same input flags as `sim`. Open the PNGs.
-5. Ask a person to play it with `npx fourjs run <dir>`. Numbers and frames can't show whether it feels right. Don't leave a `run` window open yourself.
-6. To hand the game to someone, `npx fourjs export <dir> -o <name>.html` writes one HTML file that plays it offline, images and sounds included.
+4. Look at it: `npx threejam shot <dir> --at 1,120,600 --press Space@1 -o /tmp/<name>/frame.png` saves one PNG per tick from a single run, with the same input flags as `sim`. Open the PNGs.
+5. Ask a person to play it with `npx threejam run <dir>`. Numbers and frames can't show whether it feels right. Don't leave a `run` window open yourself.
+6. To hand the game to someone, `npx threejam export <dir> -o <name>.html` writes one HTML file that plays it offline, images and sounds included.
 
 ## Facts to plan with
 
@@ -47,7 +47,7 @@ Run these from the project's root, with the game in `<dir>`.
 - `update(world, ctx)` runs 60 times a second with `ctx.dt` of 1/60. Use `ctx.input` (keys, `Mouse`, and `ctx.input.pointer`), `ctx.random()`, `ctx.print()`, `ctx.play('explode')` for a built-in sound or a sound file in the folder, and `ctx.tick`; the clock, `Math.random()`, timers, and `async` are errors.
 - Text uses a 5x7 pixel font with capitals, digits, and a little punctuation; `size` is the letter height.
 - Keep all changing state on entities, never in variables at the top of `game.ts`.
-- For MCP clients, `npx fourjs mcp add` registers `new`, `check`, `sim`, `shot`, and `export` as tools; each call reads the game from disk.
+- For MCP clients, `npx threejam mcp add` registers `new`, `check`, `sim`, `shot`, and `export` as tools; each call reads the game from disk.
 
 ## Conventions
 

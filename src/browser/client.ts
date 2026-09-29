@@ -5,7 +5,7 @@ import { loadImages, parseAssets } from './assets.ts'
 import { Speaker } from './sound.ts'
 import { View, parseView } from './view.ts'
 
-// run is served by fourjs run, shot by fourjs shot, and export is one file opened from disk, with no server behind it.
+// run is served by threejam run, shot by threejam shot, and export is one file opened from disk, with no server behind it.
 export interface Config {
   readonly mode: 'run' | 'shot' | 'export'
   readonly seed?: number
@@ -36,7 +36,7 @@ export interface PageEngine {
 
 declare global {
   interface Window {
-    FOUR: unknown
+    THREEJAM: unknown
     engine: PageEngine
   }
 }
@@ -256,7 +256,7 @@ function inputSource(options: ResetOptions, drive: Drive | undefined): Source {
 }
 
 function parseConfig(value: unknown): Config {
-  if (typeof value !== 'object' || value === null || !('mode' in value)) throw new Error('the page has no FourJS config')
+  if (typeof value !== 'object' || value === null || !('mode' in value)) throw new Error('the page has no ThreeJam config')
   const seed = 'seed' in value && typeof value.seed === 'number' ? value.seed : undefined
   if (value.mode === 'run' || value.mode === 'shot' || value.mode === 'export') return { mode: value.mode, seed }
   throw new Error(`unknown page mode ${String(value.mode)}`)

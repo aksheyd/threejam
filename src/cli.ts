@@ -94,14 +94,14 @@ function shown(entities: readonly EntityState[], fields: string | undefined): En
   })
 }
 
-const cli = Cli.create('fourjs', {
-  description: 'FourJS: make games from TypeScript files, test them without a window, and play them in a browser',
+const cli = Cli.create('threejam', {
+  description: 'ThreeJam: make games from TypeScript files, test them without a window, and play them in a browser',
   version: VERSION,
   mcp: {
     command: mcpCommand(),
     tools: { discovery: 'direct' },
     instructions:
-      'A FourJS game is a folder with a game.ts that exports defineGame({ entities, start, update }), plus any images and sounds it uses; new starts one. ' +
+      'A ThreeJam game is a folder with a game.ts that exports defineGame({ entities, start, update }), plus any images and sounds it uses; new starts one. ' +
       'After each edit run check; prove behavior with sim, which runs exact ticks (60 a second) with scripted keys, mouse, and pointer or a driver, ' +
       'lists the sounds played, and can stop at the first tick a condition holds; look at frames with shot. The same files, flags, and seed always give the same result. ' +
       'export writes one HTML file that people can play offline.',
@@ -109,17 +109,17 @@ const cli = Cli.create('fourjs', {
 })
   .command('new', {
     description:
-      'Start a game: write a small playable game.ts and its test into a new or empty folder, plus a package.json and tsconfig.json when no project above it depends on FourJS',
+      'Start a game: write a small playable game.ts and its test into a new or empty folder, plus a package.json and tsconfig.json when no project above it depends on ThreeJam',
     args: z.object({ dir: z.string().describe('Folder to create; it must be new or empty') }),
     examples: [
-      { args: { dir: 'games/catch' }, description: 'Add a game to a project that depends on FourJS' },
+      { args: { dir: 'games/catch' }, description: 'Add a game to a project that depends on ThreeJam' },
       { args: { dir: 'my-game' }, description: 'Start a project of its own; run npm install in it next' },
     ],
     mcp: { annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
     run(c) {
       try {
         const { files, standalone } = createGame(c.args.dir)
-        // A project of its own runs its commands from inside, once npm install has added FourJS there.
+        // A project of its own runs its commands from inside, once npm install has added ThreeJam there.
         const at = standalone ? '.' : shellWord(c.args.dir)
         const commands = [
           { command: `check ${at}`, description: 'Check its types, entities, start, and first tick' },

@@ -1,5 +1,5 @@
 // Space Invaders. Space starts the invasion; Left / Right move the cannon; Space fires, and holding it keeps firing.
-import { defineGame, grid, oneOf, type Context, type Entities, type World } from '@aksheyd/fourjs'
+import { defineGame, grid, oneOf, type Context, type Entities, type World } from 'threejam'
 import { CANNON, boxes, type Box } from './sprites.ts'
 
 const WHITE = '#ffffff'
