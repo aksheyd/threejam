@@ -13,7 +13,7 @@ import { exportGame } from '../src/export.ts'
 import { gameFiles, loadDriver, loadGame } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { buildPage, findChrome, serve } from '../src/serve.ts'
-import { shoot } from '../src/shot.ts'
+import { openPage, shoot } from '../src/shot.ts'
 
 const chrome = findChrome()
 // A page call that hangs fails within a minute, well inside CI's job timeout, so the report says why.
@@ -47,7 +47,7 @@ test('with a driver that taps using the keys of the tick before, the page reache
   const browser = await launch()
   try {
     const tab = await browser.newPage()
-    await tab.goto(server.url)
+    await openPage(tab, server.url)
     await tab.waitForFunction('window.engine !== undefined')
     const actual = await tab.evaluate(() => {
       window.engine.reset({ seed: 7, drive: true })
@@ -92,7 +92,7 @@ test('with the portable math, trig-heavy code reaches the same state in the page
   const browser = await launch()
   try {
     const tab = await browser.newPage()
-    await tab.goto(server.url)
+    await openPage(tab, server.url)
     await tab.waitForFunction('window.engine !== undefined')
     const actual = await tab.evaluate(() => {
       window.engine.reset({ seed: 0 })
@@ -142,7 +142,7 @@ test('from the first frame the page draws images with square pixels and turned p
   const browser = await launch()
   try {
     const tab = await browser.newPage()
-    await tab.goto(server.url)
+    await openPage(tab, server.url)
     await tab.waitForFunction('window.engine !== undefined')
     // Just inside each of the image's four pixels where they meet, 100 screen pixels apart, then on the turned part and where it would be unturned.
     const spots = [[195, 295], [205, 295], [195, 305], [205, 305], [600, 170], [630, 200]]
@@ -181,7 +181,7 @@ test('played by the mouse autopilot, Asteroids reaches the state sim computes in
   const browser = await launch()
   try {
     const tab = await browser.newPage()
-    await tab.goto(server.url)
+    await openPage(tab, server.url)
     await tab.waitForFunction('window.engine !== undefined')
     const actual = await tab.evaluate(() => {
       window.engine.reset({ seed: 0, drive: true })
@@ -215,7 +215,7 @@ test('an exported file opened from disk starts with the seed export fixed, runs 
     const expected = simulate(pong, input).snapshots[0].entities
     const tab = await browser.newPage()
     const { errors } = watch(tab)
-    await tab.goto(pathToFileURL(file).href)
+    await openPage(tab, pathToFileURL(file).href)
     await tab.waitForFunction('window.engine !== undefined')
     const actual = await tab.evaluate((options) => {
       const seed = window.engine.seed
@@ -248,7 +248,7 @@ test('exported Asteroids draws its SVG rocks and plays sounds with nothing but t
       }
       Reflect.set(window, 'started', started)
     })
-    await tab.goto(pathToFileURL(file).href)
+    await openPage(tab, pathToFileURL(file).href)
     await tab.waitForFunction('window.engine !== undefined')
     const first = await tab.evaluate(() => window.engine.seed)
     // The middle of each rock on the screen, which the rock's image covers, against the black background, once they drift in from the edges.
