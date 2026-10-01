@@ -4,36 +4,32 @@ on:
   push:
     tags: ['v*']
 
-# id-token lets npm's trusted publishing sign in as this workflow, so no npm token is stored anywhere.
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Test and publish to npm
+  test:
+    name: Test and build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Trusted publishing needs npm 11.5.1 or later, which Node 26 comes with.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '26'
           cache: npm
-          registry-url: 'https://registry.npmjs.org'
 
       - run: npm ci
 
       - name: Check that the tag names the version in package.json
         run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
 
-      - uses: browser-actions/setup-chrome@v2
+      - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
         id: chrome
 
       - name: Let Chrome's sandbox run
@@ -55,8 +51,32 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
 
-      # npm trusts this workflow only once the package exists, so the first release signs in with an NPM_TOKEN secret; later ones need none.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist
+          if-no-files-found: error
+
+  publish:
+    name: Publish to npm
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only this job can sign in to npm through trusted publishing, and it runs no dependency code, just npm publish on the tested build.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Trusted publishing needs npm 11.5.1 or later, which Node 26 comes with.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26'
+          registry-url: 'https://registry.npmjs.org'
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+
       - name: Publish
         run: npm publish ./dist
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

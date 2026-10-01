@@ -207,15 +207,9 @@ Rules:
 
 The version in the root `package.json` is the only one; the CLI, the MCP server, `new`, and the build all read it. The root is marked private so it can't be published by mistake: what gets published is `dist`, which `npm run build` writes.
 
-Every release goes through `release.yml`, which runs when a `v*` tag is pushed: it checks that the tag matches `package.json`, typechecks, runs `npm test` and `npm run test:package`, and publishes `dist`. npm lets a package trust a publisher only once the package exists, so the first release signs in with a one-day token kept only in GitHub:
-
-1. On npmjs.com, create a granular access token with read and write access to all packages, two-factor bypass, and a one-day expiry.
-2. Save it as the repository secret `NPM_TOKEN` with `gh secret set NPM_TOKEN -R aksheyd/threejam`, pasting it at the prompt, so it never lands in a file.
-3. With `version` at `0.0.1` on main, run `git tag v0.0.1` and `git push origin v0.0.1`.
-4. Once the workflow has published, open the package's settings on npmjs.com, add a trusted publisher under Trusted publishing (GitHub Actions, the owner `aksheyd`, the repository `threejam`, the workflow `release.yml`), and set Publishing access to require two-factor authentication and disallow tokens.
-5. Delete the secret with `gh secret delete NPM_TOKEN -R aksheyd/threejam`, and revoke the token on npmjs.com.
-
-Every release after that needs no secret:
+Every release goes through `release.yml`, which runs when a `v*` tag is pushed. Its first job checks that the tag matches `package.json`, typechecks, runs `npm test` and `npm run test:package`, and keeps the build. Its second job is the only one that can sign in to npm: it publishes that build with trusted publishing and runs no dependency code, so a compromised dependency can't publish, and no npm token is stored anywhere. To release:
 
 1. Run `npm version <new version>` on main, which changes `package.json` and `package-lock.json`, commits, and tags `v<new version>`.
-2. Run `git push --follow-tags`. The tag starts the workflow, which publishes with trusted publishing, so no npm token is stored anywhere. npm adds provenance once the repository is public.
+2. Run `git push --follow-tags`. npm adds provenance once the repository is public.
+
+npm trusts the workflow through the package's trusted publisher on npmjs.com: GitHub Actions, the owner `aksheyd`, the repository `threejam`, and the workflow `release.yml`, allowed to run `npm publish`, with the package's publishing access set to require two-factor authentication and disallow tokens. The workflows pin every action to a full commit SHA, so a moved tag can't change what runs; update the SHA and its version comment together. The repository allows only GitHub's own actions and `browser-actions/setup-chrome`, requires the SHA pins, and has rulesets that let only its admin push to main or create, move, or delete `v*` tags.
