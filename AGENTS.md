@@ -207,14 +207,15 @@ Rules:
 
 The version in the root `package.json` is the only one; the CLI, the MCP server, `new`, and the build all read it. The root is marked private so it can't be published by mistake: what gets published is `dist`, which `npm run build` writes.
 
-The first release is published by hand, since npm lets a package trust a publisher only once the package exists:
+Every release goes through `release.yml`, which runs when a `v*` tag is pushed: it checks that the tag matches `package.json`, typechecks, runs `npm test` and `npm run test:package`, and publishes `dist`. npm lets a package trust a publisher only once the package exists, so the first release signs in with a one-day token kept only in GitHub:
 
-1. On a clean checkout of main with `version` at `0.1.0`, run `npm ci`, then `npx tsc -p .`, `npm test`, and `npm run test:package`, which leaves the build in `dist`.
-2. Sign in with `npm login` if you haven't, then run `npm publish ./dist`, and give npm your two-factor code when it asks, or pass it as `--otp <code>`.
-3. Make the GitHub repository public at the same time.
-4. On npmjs.com, open the package's settings, and under Trusted publishing, add GitHub Actions with the owner `aksheyd`, the repository `threejam`, and the workflow `release.yml`.
+1. On npmjs.com, create a granular access token with read and write access to all packages, two-factor bypass, and a one-day expiry.
+2. Save it as the repository secret `NPM_TOKEN` with `gh secret set NPM_TOKEN -R aksheyd/threejam`, pasting it at the prompt, so it never lands in a file.
+3. With `version` at `0.0.1` on main, run `git tag v0.0.1` and `git push origin v0.0.1`.
+4. Once the workflow has published, open the package's settings on npmjs.com, add a trusted publisher under Trusted publishing (GitHub Actions, the owner `aksheyd`, the repository `threejam`, the workflow `release.yml`), and set Publishing access to require two-factor authentication and disallow tokens.
+5. Delete the secret with `gh secret delete NPM_TOKEN -R aksheyd/threejam`, and revoke the token on npmjs.com.
 
-Every release after that goes through `release.yml`:
+Every release after that needs no secret:
 
 1. Run `npm version <new version>` on main, which changes `package.json` and `package-lock.json`, commits, and tags `v<new version>`.
-2. Run `git push --follow-tags`. The tag starts the workflow, which checks that the tag matches `package.json`, typechecks, runs `npm test` and `npm run test:package`, and publishes `dist` with trusted publishing, so no npm token is stored anywhere, and npm adds provenance because the repository is public.
+2. Run `git push --follow-tags`. The tag starts the workflow, which publishes with trusted publishing, so no npm token is stored anywhere. npm adds provenance once the repository is public.

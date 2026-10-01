@@ -1,6 +1,6 @@
 {
   "name": "threejam",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "description": "A game engine on Three.js for coding agents: games in TypeScript, one API as code, a CLI, and MCP tools",
   "license": "MIT",
@@ -10,7 +10,15 @@
   },
   "homepage": "https://github.com/aksheyd/threejam",
   "bugs": "https://github.com/aksheyd/threejam/issues",
-  "keywords": ["game-engine", "threejs", "typescript", "ai-agents", "mcp", "cli", "deterministic"],
+  "keywords": [
+    "game-engine",
+    "threejs",
+    "typescript",
+    "ai-agents",
+    "mcp",
+    "cli",
+    "deterministic"
+  ],
   "type": "module",
   "bin": {
     "threejam": "./src/cli.ts"

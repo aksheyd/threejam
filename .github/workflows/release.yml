@@ -55,6 +55,8 @@ jobs:
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
 
-      # The package test left its build in dist; npm adds provenance, since the repository is public.
+      # npm trusts this workflow only once the package exists, so the first release signs in with an NPM_TOKEN secret; later ones need none.
       - name: Publish
         run: npm publish ./dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
