@@ -181,7 +181,7 @@ test('a page bundles the files in its game\'s folder but refuses one from outsid
   const game = (line: string, value: string) =>
     writeFileSync(join(dir, 'game.ts'), `${line}\nimport { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1, label: ${value} } }, update() {} })\n`)
   const refused = (specifier: string, file: string) =>
-    new RegExp(`game\\.ts:1: can't bundle "${specifier.replaceAll('.', '\\.')}", which is .*${file.replaceAll('.', '\\.')}: a page holds only files from the game's folder and ThreeJam's own$`)
+    new RegExp(`game\\.ts:1: can't bundle "${specifier.replaceAll('.', '\\.')}", which is .*${file.replaceAll('.', '\\.')}: a game may import only its own folder and ThreeJam's files$`)
 
   game("import { secret } from '../outside/secret.ts'", 'secret')
   await assert.rejects(buildPage({ dir, config: { mode: 'shot' } }), { name: 'UsageError', message: refused('../outside/secret.ts', 'outside/secret.ts') })
@@ -205,6 +205,30 @@ test('a page bundles the files in its game\'s folder but refuses one from outsid
   } finally {
     await page.dispose()
   }
+})
+
+test("a page's driver may import from its own folder, but its game may not, as in sim", async () => {
+  const root = mkdtempSync(join(TMP, 'roles-'))
+  made.push(root)
+  const [dir, bot] = [join(root, 'game'), join(root, 'bot')]
+  mkdirSync(dir)
+  mkdirSync(bot)
+  writeFileSync(join(bot, 'helper.ts'), "export const helper = 'HELPER-VALUE'\n")
+  writeFileSync(join(bot, 'secret.ts'), "export const secret = 'CANARY-DRIVER-FOLDER'\n")
+  writeFileSync(join(bot, 'bot.ts'), "import { helper } from './helper.ts'\n\nexport default () => (helper === '' ? ['Space'] : [])\n")
+  const driver = join(bot, 'bot.ts')
+  writeFileSync(join(dir, 'game.ts'), GAME)
+  const page = await buildPage({ dir, config: { mode: 'shot' }, driver })
+  try {
+    assert.ok(readFileSync(join(page.outdir, 'bundle.js'), 'utf8').includes('HELPER-VALUE'))
+  } finally {
+    await page.dispose()
+  }
+  writeFileSync(join(dir, 'game.ts'), `import { secret } from '../bot/secret.ts'\n${GAME.replace('w: 0.1,', 'w: 0.1, label: secret,')}`)
+  await assert.rejects(buildPage({ dir, config: { mode: 'shot' }, driver }), {
+    name: 'UsageError',
+    message: /game\.ts:1: can't bundle "\.\.\/bot\/secret\.ts", which is .*bot\/secret\.ts: a game may import only its own folder and ThreeJam's files$/,
+  })
 })
 
 test('when Chrome fails to start, shot closes its server and esbuild and removes its temporary folder', () => {

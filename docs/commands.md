@@ -28,7 +28,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 
 ## The page and Chrome
 
-Every command that loads a game bundles it first, for the sandbox described below and, in `run`, `shot`, and `export`, for the page. A bundle holds only files from the game's folder, a `--driver` file's folder, and ThreeJam itself; an import of anything else, even through a link, fails with its `path:line`.
+Every command that loads a game bundles it first, for the sandbox described below and, in `run`, `shot`, and `export`, for the page, and both follow one rule: the game's files may import only `threejam` and files in the game's folder, and a `--driver` file may also import files in its own folder. An import of anything else, even through a link, fails with its `path:line`.
 
 `run` serves that page on `127.0.0.1` to the page alone: another page, even one on another local port or opened from a file, gets 403, and an SVG opened directly downloads instead of running its script.
 

@@ -96,9 +96,9 @@ export function confinePlugin({ roots, seeds }: ConfineOptions): esbuild.Plugin 
   const seedFiles = new Set<string>()
   for (const seed of seeds) {
     const resolved = real(seed)
-    // A game.ts or --driver that is a link out of its folder would otherwise smuggle the whole target tree in as the game or driver.
+    // A game.ts, view.ts, or --driver that is a link out of its folder would otherwise smuggle the whole target tree in as the game or driver.
     if (!within(roots.game, resolved) && !(roots.driver !== undefined && within(roots.driver, resolved))) {
-      throw new UsageError(`can't bundle ${quote(shown(seed))}, which is ${resolved.replaceAll(sep, '/')}: a game.ts or --driver must be a file in its own folder, not a link elsewhere`)
+      throw new UsageError(`can't bundle ${quote(shown(seed))}, which is ${resolved.replaceAll(sep, '/')}: a game.ts, view.ts, or --driver must be a file in its own folder, not a link elsewhere`)
     }
     seedFiles.add(resolved)
   }

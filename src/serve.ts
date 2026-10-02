@@ -1,15 +1,16 @@
 import { spawn } from 'node:child_process'
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
-import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import * as esbuild from 'esbuild'
 import { mediaType } from './assets.ts'
-import { UsageError, quote } from './errors.ts'
+import { confinePlugin, confineRoots } from './confine.ts'
+import { UsageError } from './errors.ts'
 import { assetsIn, gameFiles, type GameFiles } from './load.ts'
-import { ENGINE, NAME, engineFile } from './package.ts'
+import { NAME, engineFile } from './package.ts'
 import type { Config } from './browser/client.ts'
 
 export interface Page {
@@ -28,10 +29,10 @@ export interface PageOptions {
 
 export async function buildPage({ dir, config, driver, onRebuild }: PageOptions): Promise<Page> {
   const files = gameFiles(dir)
+  const page = pageBuild({ files, driver, address: (name) => `assets/${encodeURIComponent(name)}` })
   const outdir = mkdtempSync(join(tmpdir(), 'threejam-'))
   writeFileSync(join(outdir, 'index.html'), html({ title: basename(files.folder), config, script: { kind: 'file', src: '/bundle.js' } }))
   let watching = false
-  const page = pageBuild({ files, driver, address: (name) => `assets/${encodeURIComponent(name)}` })
   const context = await esbuild.context({
     ...page,
     outfile: join(outdir, 'bundle.js'),
@@ -69,14 +70,25 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
 
 // What every page bundles: the game, its view, a driver if there is one, and the page code, which loads each image and sound from address(name).
 export function pageBuild({ files, driver, address }: { files: GameFiles; driver?: string; address: (name: string) => string }) {
+  const driverFile = driver === undefined ? undefined : resolve(driver)
+  const roots = confineRoots({ game: files.folder, driver: driverFile === undefined ? undefined : dirname(driverFile) })
+  const seeds = [files.game, ...(files.view === undefined ? [] : [files.view]), ...(driverFile === undefined ? [] : [driverFile])]
   const entry = [
     `import game from ${JSON.stringify(files.game)}`,
     files.view ? `import * as view from ${JSON.stringify(files.view)}` : 'const view = {}',
-    driver ? `import driver from ${JSON.stringify(resolve(driver))}` : 'const driver = undefined',
+    driverFile ? `import driver from ${JSON.stringify(driverFile)}` : 'const driver = undefined',
     "import assets from 'threejam:assets'",
     `import { play } from ${JSON.stringify(engineFile(join('browser', 'client')))}`,
     'play({ game, view, driver, assets, config: window.THREEJAM })',
   ].join('\n')
+  // A module in no folder, unlike stdin, which esbuild places in its resolveDir, so the import rule judges what the entry pulls in as the engine's.
+  const page: esbuild.Plugin = {
+    name: 'threejam-page',
+    setup(build) {
+      build.onResolve({ filter: /^threejam:page$/ }, () => ({ path: 'page', namespace: 'threejam' }))
+      build.onLoad({ filter: /^page$/, namespace: 'threejam' }, () => ({ contents: entry, loader: 'ts', resolveDir: files.folder }))
+    },
+  }
   const assets: esbuild.Plugin = {
     // Listing the folder on each build picks up new files.
     name: 'threejam-assets',
@@ -94,68 +106,20 @@ export function pageBuild({ files, driver, address }: { files: GameFiles; driver
     },
   }
   return {
-    stdin: { contents: entry, resolveDir: files.folder, sourcefile: 'threejam-entry.ts', loader: 'ts' },
+    entryPoints: ['threejam:page'],
     bundle: true,
     format: 'esm',
     platform: 'browser',
     target: 'es2022',
     alias: { [NAME]: engineFile('index') },
     logLevel: 'silent',
-    plugins: [assets, confined(driver === undefined ? [files.folder] : [files.folder, dirname(resolve(driver))])],
+    // The shared import rule claims every import the other plugins leave, so it comes last.
+    plugins: [page, assets, confinePlugin({ roots, seeds })],
   } satisfies esbuild.BuildOptions
 }
 
-const CHECKED = Symbol('checked')
-
-// A page holds only files from folders and ThreeJam's own, plus what ThreeJam's own import, like Three.js, so a game can't put any other file of yours on it.
-function confined(folders: readonly string[]): esbuild.Plugin {
-  const engine = canonical(ENGINE)
-  const allowed = [engine, ...folders.map(canonical)]
-  // Files outside those folders that ThreeJam's own code imported, which may import files of their own.
-  const pulled = new Set<string>()
-  const where = folders.length > 1 ? "the game's or the driver's folder" : "the game's folder"
-  return {
-    name: 'threejam-confined',
-    setup(build) {
-      build.onResolve({ filter: /.*/ }, async (args) => {
-        if (args.pluginData === CHECKED) return undefined
-        const { kind, importer, namespace, resolveDir } = args
-        const resolved = await build.resolve(args.path, { kind, importer, namespace, resolveDir, with: args.with, pluginData: CHECKED })
-        if (resolved.errors.length > 0 || resolved.external || resolved.namespace !== 'file') return undefined
-        const file = canonical(resolved.path)
-        const inside = allowed.some((folder) => contains(folder, file))
-        const from = canonical(importer)
-        if (contains(engine, from) || pulled.has(from)) {
-          if (!inside) pulled.add(file)
-          return undefined
-        }
-        if (inside) return undefined
-        return { errors: [{ text: `can't bundle ${quote(args.path)}, which is ${shownPath(file)}: a page holds only files from ${where} and ThreeJam's own` }] }
-      })
-    },
-  }
-}
-
-// One name for each file, whatever links or short names lead to it.
-function canonical(path: string): string {
-  try {
-    return realpathSync.native(path)
-  } catch {
-    return resolve(path)
-  }
-}
-
-function contains(folder: string, file: string): boolean {
-  const path = relative(folder, file)
-  return path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path)
-}
-
-function shownPath(file: string): string {
-  return relative(process.cwd(), file).replaceAll(sep, '/')
-}
-
 export function formatMessage(message: esbuild.Message): string {
-  const at = message.location ? `${message.location.file}:${message.location.line}: ` : ''
+  const at = message.location && message.location.namespace !== 'threejam' ? `${message.location.file}:${message.location.line}: ` : ''
   return `${at}${message.text}`
 }
 
