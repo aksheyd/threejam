@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, request, type IncomingHttpHeaders } from 'node:http'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
+import { exportGame } from '../src/export.ts'
 import { ROOT } from '../src/package.ts'
 import { NO_DEVTOOLS_PORT, buildPage, findChrome, openWindow, serve } from '../src/serve.ts'
 import { launchChrome } from '../src/shot.ts'
@@ -164,6 +165,44 @@ test('another page on this machine, or a file, can neither end a run nor run scr
     await browser.close()
     server.close()
     hostile.close()
+    await page.dispose()
+  }
+})
+
+test('a page bundles the files in its game\'s folder but refuses one from outside it, whether code, JSON, or through a link, and export then writes nothing', async () => {
+  const root = mkdtempSync(join(TMP, 'bundle-'))
+  made.push(root)
+  const [dir, outside] = [join(root, 'game'), join(root, 'outside')]
+  mkdirSync(dir)
+  mkdirSync(outside)
+  writeFileSync(join(outside, 'secret.ts'), "export const secret = 'CANARY-OUTSIDE'\n")
+  writeFileSync(join(outside, 'secret.json'), '{ "token": "CANARY-JSON" }\n')
+  writeFileSync(join(dir, 'inside.ts'), "export const inside = 'INSIDE-VALUE'\n")
+  const game = (line: string, value: string) =>
+    writeFileSync(join(dir, 'game.ts'), `${line}\nimport { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1, label: ${value} } }, update() {} })\n`)
+  const refused = (specifier: string, file: string) =>
+    new RegExp(`game\\.ts:1: can't bundle "${specifier.replaceAll('.', '\\.')}", which is .*${file.replaceAll('.', '\\.')}: a page holds only files from the game's folder and ThreeJam's own$`)
+
+  game("import { secret } from '../outside/secret.ts'", 'secret')
+  await assert.rejects(buildPage({ dir, config: { mode: 'shot' } }), { name: 'UsageError', message: refused('../outside/secret.ts', 'outside/secret.ts') })
+  const out = join(root, 'game.html')
+  await assert.rejects(exportGame({ dir, out }), { name: 'UsageError', message: refused('../outside/secret.ts', 'outside/secret.ts') })
+  assert.equal(existsSync(out), false)
+
+  game("import data from '../outside/secret.json'", 'data.token')
+  await assert.rejects(buildPage({ dir, config: { mode: 'shot' } }), { message: refused('../outside/secret.json', 'outside/secret.json') })
+
+  if (process.platform !== 'win32') {
+    symlinkSync(join(outside, 'secret.ts'), join(dir, 'link.ts'))
+    game("import { secret } from './link.ts'", 'secret')
+    await assert.rejects(buildPage({ dir, config: { mode: 'shot' } }), { message: refused('./link.ts', 'outside/secret.ts') })
+  }
+
+  game("import { inside } from './inside.ts'", 'inside')
+  const page = await buildPage({ dir, config: { mode: 'shot' } })
+  try {
+    assert.ok(readFileSync(join(page.outdir, 'bundle.js'), 'utf8').includes('INSIDE-VALUE'))
+  } finally {
     await page.dispose()
   }
 })

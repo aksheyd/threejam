@@ -1,15 +1,15 @@
 import { spawn } from 'node:child_process'
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
-import { basename, delimiter, join, resolve } from 'node:path'
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import * as esbuild from 'esbuild'
 import { mediaType } from './assets.ts'
-import { UsageError } from './errors.ts'
+import { UsageError, quote } from './errors.ts'
 import { assetsIn, gameFiles, type GameFiles } from './load.ts'
-import { NAME, engineFile } from './package.ts'
+import { ENGINE, NAME, engineFile } from './package.ts'
 import type { Config } from './browser/client.ts'
 
 export interface Page {
@@ -101,8 +101,57 @@ export function pageBuild({ files, driver, address }: { files: GameFiles; driver
     target: 'es2022',
     alias: { [NAME]: engineFile('index') },
     logLevel: 'silent',
-    plugins: [assets],
+    plugins: [assets, confined(driver === undefined ? [files.folder] : [files.folder, dirname(resolve(driver))])],
   } satisfies esbuild.BuildOptions
+}
+
+const CHECKED = Symbol('checked')
+
+// A page holds only files from folders and ThreeJam's own, plus what ThreeJam's own import, like Three.js, so a game can't put any other file of yours on it.
+function confined(folders: readonly string[]): esbuild.Plugin {
+  const engine = canonical(ENGINE)
+  const allowed = [engine, ...folders.map(canonical)]
+  // Files outside those folders that ThreeJam's own code imported, which may import files of their own.
+  const pulled = new Set<string>()
+  const where = folders.length > 1 ? "the game's or the driver's folder" : "the game's folder"
+  return {
+    name: 'threejam-confined',
+    setup(build) {
+      build.onResolve({ filter: /.*/ }, async (args) => {
+        if (args.pluginData === CHECKED) return undefined
+        const { kind, importer, namespace, resolveDir } = args
+        const resolved = await build.resolve(args.path, { kind, importer, namespace, resolveDir, with: args.with, pluginData: CHECKED })
+        if (resolved.errors.length > 0 || resolved.external || resolved.namespace !== 'file') return undefined
+        const file = canonical(resolved.path)
+        const inside = allowed.some((folder) => contains(folder, file))
+        const from = canonical(importer)
+        if (contains(engine, from) || pulled.has(from)) {
+          if (!inside) pulled.add(file)
+          return undefined
+        }
+        if (inside) return undefined
+        return { errors: [{ text: `can't bundle ${quote(args.path)}, which is ${shownPath(file)}: a page holds only files from ${where} and ThreeJam's own` }] }
+      })
+    },
+  }
+}
+
+// One name for each file, whatever links or short names lead to it.
+function canonical(path: string): string {
+  try {
+    return realpathSync.native(path)
+  } catch {
+    return resolve(path)
+  }
+}
+
+function contains(folder: string, file: string): boolean {
+  const path = relative(folder, file)
+  return path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path)
+}
+
+function shownPath(file: string): string {
+  return relative(process.cwd(), file).replaceAll(sep, '/')
 }
 
 export function formatMessage(message: esbuild.Message): string {

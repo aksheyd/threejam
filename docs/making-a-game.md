@@ -71,6 +71,8 @@ npx threejam run games/catch
 npx threejam export games/catch -o catch.html
 ```
 
+All three build the same page, which holds only files from the game's folder and ThreeJam's own, so a game that imports a file from outside its folder fails there with that import's line.
+
 ## Test it
 
 `new` also wrote `game.test.ts`, which pins what the game does, and `node --test` runs it, or `npm test` in a project `new` made:

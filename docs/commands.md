@@ -27,7 +27,9 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 
 ## The page and Chrome
 
-`run` serves its page on `127.0.0.1` to the page alone: another page, even one on another local port or opened from a file, gets 403, and an SVG opened directly downloads instead of running its script.
+`run`, `shot`, and `export` bundle the game into a page that holds only files from the game's folder, a `--driver` file's folder, and ThreeJam itself; an import of anything else, even through a link, fails with its `path:line`.
+
+`run` serves that page on `127.0.0.1` to the page alone: another page, even one on another local port or opened from a file, gets 403, and an SVG opened directly downloads instead of running its script.
 
 `shot` and `run` start Chrome with no DevTools port and only the environment variables a browser needs. ThreeJam's switches come last and override a wrapper script's, like the `google-chrome` launchers on Linux, but a wrapper can still add switches that have no opposite, like `--no-sandbox`.
 
