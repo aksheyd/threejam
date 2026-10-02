@@ -4,13 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Release runs all of CI on the tagged commit before it publishes.
+  workflow_call:
 
 permissions:
   contents: read
 
 # A newer push replaces a pull request's run, while each commit on main gets a run of its own, since a group holds only one waiting run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  # In a release, github.workflow names the caller, keeping its run apart from main's; the ci- prefix means the group can never equal the caller's, which GitHub cancels as a deadlock.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

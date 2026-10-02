@@ -12,6 +12,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Every OS and Node version CI covers, on the tagged commit, so a release can't skip a leg that fails.
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
   test:
     name: Test and build
     runs-on: ubuntu-latest
@@ -59,7 +64,7 @@ jobs:
 
   publish:
     name: Publish to npm
-    needs: test
+    needs: [ci, test]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Only this job can sign in to npm through trusted publishing, and it runs no dependency code, just npm publish on the tested build.
