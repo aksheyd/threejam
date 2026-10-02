@@ -21,9 +21,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS and Windows minutes cost more, so the engines floor from package.json runs on Linux only.
+        # macOS and Windows minutes cost more, so the engines floor from package.json and Node 24, the active LTS, run on Linux only.
         include:
           - { os: ubuntu-latest, node: '22.18' }
+          - { os: ubuntu-latest, node: '24' }
           - { os: ubuntu-latest, node: '26' }
           - { os: macos-latest, node: '26' }
           - { os: windows-latest, node: '26' }
@@ -82,7 +83,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['22.18', '26']
+        node: ['22.18', '24', '26']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
