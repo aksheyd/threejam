@@ -127,7 +127,7 @@ test('a folder holds a file by the name its filesystem gives it, not by case fol
   }
 })
 
-test("a runtime import of three fails in sim and in the page, pointing to the THREE a view receives, while import type from 'three' passes", () => {
+test("a runtime import of three fails in check, sim, and the page, pointing to the THREE a view receives, while import type from 'three' passes", () => {
   const hint = /a game may import only its own folder and ThreeJam's files; use the THREE that init and draw receive in view\.ts, and import type from 'three' for its types$/
   const inGame = folder({ 'game.ts': `import * as THREE from 'three'\n${game('', 'x: 0, w: 0.1')}`.replace('world.ball.x += 0.01', 'world.ball.x = THREE.MathUtils.clamp(2, 0, 1)') })
   const sim = threejam(['sim', inGame.dir, '--ticks', '1'])
@@ -136,14 +136,18 @@ test("a runtime import of three fails in sim and in the page, pointing to the TH
 
   const init = (body: string) => `import type { ViewSetup } from 'threejam'\n\nexport function init({ THREE, scene }: ViewSetup): void {\n  ${body}\n}\n`
   const inView = folder({ 'game.ts': game(''), 'view.ts': `import { Mesh } from 'three'\n${init('scene.add(THREE ? new Mesh() : new Mesh())')}` })
+  const checked = threejam(['check', inView.dir])
+  assert.equal(checked.code, 1, checked.out)
+  assert.match(String(checked.json.message), /view\.ts:1: can't bundle "three"/)
+  assert.match(String(checked.json.message), hint)
   const out = join(inView.abs, 'page.html')
   const exported = threejam(['export', inView.dir, '-o', out])
   assert.equal(exported.code, 1, exported.out)
-  assert.match(String(exported.json.message), /view\.ts:1: can't bundle "three"/)
   assert.match(String(exported.json.message), hint)
   assert.equal(existsSync(out), false)
 
   const typed = folder({ 'game.ts': game(''), 'view.ts': `import type { Mesh } from 'three'\n${init('const mesh: Mesh = new THREE.Mesh()\n  scene.add(mesh)')}` })
+  assert.equal(threejam(['check', typed.dir]).code, 0)
   const typedOut = join(typed.abs, 'page.html')
   const typedRun = threejam(['export', typed.dir, '-o', typedOut])
   assert.equal(typedRun.code, 0, typedRun.out)

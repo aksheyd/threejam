@@ -22,7 +22,7 @@ A ThreeJam game is a folder with a `game.ts`: entity data plus an `update` funct
 Run these from the project's root, with the game in `<dir>`.
 
 1. Start a game with `npx threejam new <dir>`, which refuses a folder that has anything in it, or edit `<dir>/game.ts`, and `view.ts` for decoration only.
-2. Run `npx threejam check <dir>` until it prints `ok: true`. It type-checks `game.ts` and `view.ts`, checks that the images entities name are in the folder, then runs `start` and the first tick.
+2. Run `npx threejam check <dir>` until it prints `ok: true`. It type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks that the images entities name are in the folder, then runs `start` and the first tick.
 3. Prove each behavior with numbers from `npx threejam sim <dir> --ticks N`:
    - `--press Space@60` presses a key on one tick, and `--hold Left@30-90` holds it on a range of ticks. The mouse buttons are the keys `Mouse` and `MouseRight`, and `--pointer 0.5,-0.2@30` moves the pointer on tick 30, where it stays until the next move.
    - `--driver bot.ts` picks the input each tick with code that reads the game, for input that has to react. It also gets the keys it held and the pointer from the tick before, so it can tap a key, and it can return `{ keys, pointer }` to move the pointer.

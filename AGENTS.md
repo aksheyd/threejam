@@ -14,7 +14,7 @@ ThreeJam starts Chrome with no DevTools port, talks to `shot`'s headless Chrome 
 
 ```bash
 npx threejam new games/catch         # a small playable game and its test, in a new folder
-npx threejam check games/pong        # types of game.ts and view.ts, entities and their images, start, and the first tick
+npx threejam check games/pong        # types and imports of game.ts and view.ts, entities and their images, start, and the first tick
 npx threejam sim games/pong --ticks 120 --press Space@1 --hold W@1-60 --only ball --fields x,y
 npx threejam shot games/pong --at 1,120,600 --press Space@1 -o frame.png
 npx threejam run games/pong          # play it: Esc quits, and saving a file replays it with the same seed

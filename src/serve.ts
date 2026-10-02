@@ -118,6 +118,12 @@ export function pageBuild({ files, driver, address }: { files: GameFiles; driver
   } satisfies esbuild.BuildOptions
 }
 
+// The page that run, shot, and export build, bundled in memory only, so check refuses what they would.
+export async function bundlePage(dir: string): Promise<void> {
+  const built = await esbuild.build({ ...pageBuild({ files: gameFiles(dir), address: (name) => name }), write: false }).catch((failure: esbuild.BuildFailure) => failure)
+  if (built instanceof Error) throw new UsageError(built.errors.map(formatMessage).join('; '))
+}
+
 export function formatMessage(message: esbuild.Message): string {
   const at = message.location && message.location.namespace !== 'threejam' ? `${message.location.file}:${message.location.line}: ` : ''
   return `${at}${message.text}`
