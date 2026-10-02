@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname, extname } from 'node:path'
 import type { Browser, Page } from 'puppeteer-core'
 import { UsageError, quote } from './errors.ts'
-import { buildPage, findChrome, serve, type Server } from './serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, serve, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
 export interface ShotOptions {
@@ -43,6 +43,27 @@ export async function openPage(tab: Page, url: string): Promise<void> {
   }
 }
 
+// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs.
+export async function launchChrome(chrome: string, { protocolTimeout }: { protocolTimeout?: number } = {}): Promise<Browser> {
+  // Only shot loads Puppeteer, so the other commands start without it.
+  const { default: puppeteer } = await import('puppeteer-core')
+  // Puppeteer's defaults turn off IsolateSandboxedIframes so it can reach sandboxed frames, which these pages don't have.
+  const defaults = (await puppeteer.defaultArgs({ browser: 'chrome', headless: true })).map((arg) => {
+    if (!arg.startsWith('--disable-features=')) return arg
+    const features = arg.slice('--disable-features='.length).split(',')
+    return `--disable-features=${features.filter((feature) => feature !== 'IsolateSandboxedIframes').join(',')}`
+  })
+  return puppeteer.launch({
+    executablePath: chrome,
+    pipe: true,
+    env: chromeEnv(),
+    protocolTimeout,
+    ignoreDefaultArgs: true,
+    // Software rendering makes frames the same on every machine.
+    args: [...defaults, '--use-gl=angle', '--use-angle=swiftshader', '--remote-debugging-pipe', NO_DEVTOOLS_PORT],
+  })
+}
+
 export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, set }: ShotOptions): Promise<string[]> {
   const chrome = findChrome()
   if (!chrome) throw new UsageError('shot needs Chrome or Chromium, or Edge on Windows; set CHROME_PATH to its executable')
@@ -51,14 +72,7 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
   let browser: Browser | undefined
   try {
     server = await serve({ page })
-    // Only shot loads Puppeteer, so the other commands start without it.
-    const { default: puppeteer } = await import('puppeteer-core')
-    // Software rendering makes frames the same on every machine.
-    browser = await puppeteer.launch({
-      executablePath: chrome,
-      headless: true,
-      args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--hide-scrollbars'],
-    })
+    browser = await launchChrome(chrome)
     const tab = await browser.newPage()
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const crashed = pageFailure(tab)

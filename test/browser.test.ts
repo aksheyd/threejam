@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
-import puppeteer, { type Page } from 'puppeteer-core'
+import type { Page } from 'puppeteer-core'
 import asteroids from '../games/asteroids/game.ts'
 import flappy from '../games/flappy/game.ts'
 import pong from '../games/pong/game.ts'
@@ -13,11 +13,11 @@ import { exportGame } from '../src/export.ts'
 import { gameFiles, loadDriver, loadGame } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { buildPage, findChrome, serve } from '../src/serve.ts'
-import { openPage, shoot } from '../src/shot.ts'
+import { launchChrome, openPage, shoot } from '../src/shot.ts'
 
 const chrome = findChrome()
 // A page call that hangs fails within a minute, well inside CI's job timeout, so the report says why.
-const launch = () => puppeteer.launch({ executablePath: chrome, headless: true, protocolTimeout: 60_000, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+const launch = () => launchChrome(chrome ?? 'no Chrome', { protocolTimeout: 60_000 })
 const TMP = join(ROOT, 'test', '.tmp')
 mkdirSync(TMP, { recursive: true })
 const made: string[] = []

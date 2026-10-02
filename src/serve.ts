@@ -218,6 +218,26 @@ function decodedName(encoded: string): string | undefined {
   }
 }
 
+// What Chrome needs from our environment to start, find its files, open a window, and play sound, so it never sees the rest, like tokens.
+const CHROME_ENV = [
+  'HOME', 'PATH', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL',
+  'DISPLAY', 'XAUTHORITY', 'WAYLAND_DISPLAY', 'DBUS_SESSION_BUS_ADDRESS', 'PULSE_SERVER', 'CHROME_DEVEL_SANDBOX',
+  'XDG_RUNTIME_DIR', 'XDG_SESSION_TYPE', 'XDG_CURRENT_DESKTOP', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_CONFIG_DIRS', 'XDG_DATA_DIRS',
+  'SystemRoot', 'SystemDrive', 'windir', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'ProgramData', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432',
+]
+
+export function chromeEnv(): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const name of CHROME_ENV) {
+    const value = process.env[name]
+    if (value !== undefined) env[name] = value
+  }
+  return env
+}
+
+// Chrome keeps the last of a switch it's given twice, and a wrapper script puts its own first, so this comes after them: Chrome opens no DevTools port at -1.
+export const NO_DEVTOOLS_PORT = '--remote-debugging-port=-1'
+
 export function findChrome(): string | undefined {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH
   return browserPaths().find((path) => existsSync(path))
@@ -246,20 +266,20 @@ function browserPaths(): string[] {
   return ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].flatMap((name) => folders.map((folder) => join(folder, name)))
 }
 
-interface AppWindow {
+export interface AppWindow {
   readonly exited: Promise<void>
   close(): void
 }
 
-function openWindow(url: string): AppWindow | undefined {
+export function openWindow(url: string): AppWindow | undefined {
   const chrome = findChrome()
   if (!chrome) {
     openBrowser(url)
     return undefined
   }
   const profile = mkdtempSync(join(tmpdir(), 'threejam-profile-'))
-  const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628']
-  const child = spawn(chrome, args, { stdio: 'ignore' })
+  const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628', NO_DEVTOOLS_PORT]
+  const child = spawn(chrome, args, { stdio: 'ignore', env: chromeEnv() })
   const exited = new Promise<void>((done) => child.once('exit', () => done()))
   child.once('error', (error) => {
     process.stderr.write(`Couldn't start ${chrome} (${error.message}), so the default browser opens the game.\n`)
