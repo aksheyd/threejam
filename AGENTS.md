@@ -125,6 +125,7 @@ export function draw({ world, tick, objects }: ViewFrame<typeof game>) {}
 ```
 
 - `world` is the game's world, typed and read-only. `objects` maps entity and part names to the meshes the default view draws, each with a `MeshBasicMaterial`, and a part's mesh is already at its place on the screen.
+- Three.js is the `THREE` that `init` and `draw` receive, the copy the page draws with. `import type` from `'three'` gives its types, but importing `three` at runtime fails, as an import from outside the game's folder does.
 - `init` runs once per page, before the first frame, when `objects` is full. Use it to build meshes, and read entities from `draw`'s `world`: an entity kept from `init` goes stale when a test calls `engine.reset()`.
 - The default view resets each mesh's geometry, place, size, rotation, color, image, and visibility right before `draw`, so a change to one has to be made again every frame.
 - `draw` must depend only on what it's given, not on earlier frames, so `shot` shows exactly what players see.

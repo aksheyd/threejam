@@ -86,7 +86,8 @@ function reason(path: string, target: string, role: Role): string {
         ? "a driver may import only its folder, the game's folder, and ThreeJam's files"
         : "ThreeJam's files import only each other and their dependencies"
   const where = target === path ? '' : `, which is ${target.replaceAll(sep, '/')}`
-  return `can't bundle ${quote(path)}${where}: ${may}`
+  const three = role === 'game' && /^three(\/|$)/.test(path) ? "; use the THREE that init and draw receive in view.ts, and import type from 'three' for its types" : ''
+  return `can't bundle ${quote(path)}${where}: ${may}${three}`
 }
 
 // The esbuild plugin that enforces the rule on every import. Register it last, after any plugin that serves a virtual module (like the page's assets), and handle the entry point in the caller; this plugin maps the threejam package to the engine and confines everything else.
