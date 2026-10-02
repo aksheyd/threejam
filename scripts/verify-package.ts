@@ -23,12 +23,14 @@ try {
   const tarball = join(work, filename)
   done(`packed ${filename}`)
 
-  // A project that installs the package, in a folder whose path has a space.
+  // A project that installs the package, in a folder whose path has a space, with install scripts off as npm 12 has them; the npx and solo installs below run them.
   const project = join(work, 'my project')
   mkdirSync(project)
   writeFileSync(join(project, 'package.json'), `${JSON.stringify({ name: 'my-project', private: true, type: 'module' }, null, 2)}\n`)
-  node([NPM, 'install', '--save-dev', '--no-audit', '--no-fund', tarball], project)
-  done('installed it in a project')
+  node([NPM, 'install', '--save-dev', '--ignore-scripts', '--no-audit', '--no-fund', tarball], project)
+  // esbuild's postinstall replaces this JavaScript launcher with its binary everywhere but Windows.
+  same(readFileSync(join(project, 'node_modules', 'esbuild', 'bin', 'esbuild'), 'latin1').startsWith('#!'), true)
+  done('installed it in a project with install scripts off')
   same(threejam(project, ['new', 'catch']).files, ['game.ts', 'game.test.ts'])
   same(threejam(project, ['check', 'catch']), { ok: true, entities: 6 })
   const input = ['--press', 'Space@1', '--hold', 'Right@2-40']
