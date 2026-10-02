@@ -47,6 +47,7 @@ Run these from the project's root, with the game in `<dir>`.
 - `update(world, ctx)` runs 60 times a second with `ctx.dt` of 1/60. Use `ctx.input` (keys, `Mouse`, and `ctx.input.pointer`), `ctx.random()`, `ctx.print()`, `ctx.play('explode')` for a built-in sound or a sound file in the folder, and `ctx.tick`; the clock, `Math.random()`, timers, and `async` are errors.
 - Text uses a 5x7 pixel font with capitals, digits, and a little punctuation; `size` is the letter height.
 - Keep all changing state on entities, never in variables at the top of `game.ts`.
+- `check`, `sim`, `shot`, and `export` run the game (and any `--driver`) in a sandbox with no files, processes, or network: a game can `import` only `threejam` and files next to it, the clock and `Math.random()` are errors, and a run that passes `--timeout` seconds (default 30) stops with a `TIMEOUT` error, so an endless loop fails instead of hanging.
 - For MCP clients, `npx threejam mcp add` registers `new`, `check`, `sim`, `shot`, and `export` as tools; each call reads the game from disk.
 
 ## Conventions

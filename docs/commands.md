@@ -20,6 +20,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 - `--driver FILE` picks the input each tick with code that reads the world, like the Invaders [autopilot](../games/invaders/autopilot.ts), or the Asteroids [one](../games/asteroids/autopilot.ts) that plays with the mouse.
 - `--set NAME.FIELD=VALUE` changes a starting value before `start` runs, like `--set paddle.w=1` for a wider Breakout paddle, and NAME can be a pattern such as `bricks[*]`.
 - `--seed N` picks the random numbers; the default is 0.
+- `--timeout N` caps how many seconds the game's code may run before the command stops it with the `TIMEOUT` code; the default is 30, and `check`, `shot`, and `export` take it too.
 
 ## What sim prints
 
@@ -27,7 +28,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 
 ## The page and Chrome
 
-`run`, `shot`, and `export` bundle the game into a page that holds only files from the game's folder, a `--driver` file's folder, and ThreeJam itself; an import of anything else, even through a link, fails with its `path:line`.
+Every command that loads a game bundles it first, for the sandbox described below and, in `run`, `shot`, and `export`, for the page. A bundle holds only files from the game's folder, a `--driver` file's folder, and ThreeJam itself; an import of anything else, even through a link, fails with its `path:line`.
 
 `run` serves that page on `127.0.0.1` to the page alone: another page, even one on another local port or opened from a file, gets 403, and an SVG opened directly downloads instead of running its script.
 
@@ -36,5 +37,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 ## Output and errors
 
 Output is [TOON](https://toonformat.dev) by default, `--format json` switches it, and every command takes `--help` and `--schema`. A failure prints a `code` and a one-line `message` and exits 1; for a problem in a game file, the message starts with `path:line:` and ends with when it happened, like `(in update at tick 61)`.
+
+Because loading a game runs its code, `check`, `sim`, `shot`, and `export` run `game.ts` and any `--driver` in a sandbox with no files, processes, or network. A run that passes `--timeout` seconds stops with the `TIMEOUT` code, and an MCP `sim` reply too large for a client is refused with `OUTPUT_TOO_LARGE` and how to narrow it.
 
 [`AGENTS.md`](../AGENTS.md#testing) has every flag in detail, and [For coding agents](agents.md) covers the same commands as MCP tools and skills.
