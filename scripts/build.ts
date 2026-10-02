@@ -13,6 +13,15 @@ if (!isRecord(root) || typeof root.name !== 'string' || typeof root.version !== 
   throw new Error('package.json needs a name, a version, and a homepage on GitHub')
 }
 const repository = new URL(root.homepage).pathname.replace(/^\/|\/$/g, '')
+// A user's install resolves the dependencies again, without the lockfile, so each one names the exact version CI installs from it.
+const lock: unknown = JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8'))
+const locked = isRecord(lock) && isRecord(lock.packages) ? lock.packages : {}
+if (!isRecord(root.dependencies)) throw new Error('package.json needs dependencies')
+for (const [name, wanted] of Object.entries(root.dependencies)) {
+  const entry = locked[`node_modules/${name}`]
+  const tested = isRecord(entry) ? entry.version : undefined
+  if (wanted !== tested) throw new Error(`package.json depends on ${name} ${String(wanted)}, but CI tests ${String(tested ?? 'no version')} from package-lock.json; depend on exactly that version`)
+}
 
 rmSync(DIST, { recursive: true, force: true })
 const tsc = spawnSync(process.execPath, [typescript(), '-p', join(ROOT, 'tsconfig.build.json')], { cwd: ROOT, stdio: 'inherit' })
