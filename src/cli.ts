@@ -161,7 +161,7 @@ const cli = Cli.create('threejam', {
     async run(c) {
       try {
         const files = gameFiles(c.args.dir)
-        const errors = [...typecheck({ file: files.game, dom: false }), ...(files.view ? typecheck({ file: files.view, dom: true }) : [])]
+        const errors = [...typecheck({ file: files.game, dom: false, timeout: c.options.timeout }), ...(files.view ? typecheck({ file: files.view, dom: true, timeout: c.options.timeout }) : [])]
         if (errors.length > 0) return c.error({ code: 'TYPE_ERROR', message: errors.join('; ') })
         const { snapshots } = await runGame(c.args.dir, { ticks: 1, timeout: c.options.timeout })
         return { ok: true, entities: snapshots[0].entities.length }

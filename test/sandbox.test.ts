@@ -48,6 +48,93 @@ test('audit 5: check fails on an import from outside the folder, naming it, not 
   assert.match(String(run.json.message), /is outside the folder/)
 })
 
+// Review blocker 1: the node_modules exemption that lets tsc read lib.d.ts must not exempt an outside file reached through a node_modules path.
+test('audit 5: check rejects an import that reaches outside through a node_modules symlink, without echoing the file', () => {
+  const secret = folder({ 'keep.txt': 'x' }).abs
+  writeFileSync(join(secret, 'real-secret.ts'), "export const token = 'CANARY-SYMLINK-LITERAL'\n")
+  const g = folder({ 'keep.txt': 'x' })
+  mkdirSync(join(g.abs, 'node_modules'), { recursive: true })
+  symlinkSync(secret, join(g.abs, 'node_modules', 'leak'))
+  writeFileSync(
+    join(g.abs, 'game.ts'),
+    [
+      "import { token } from './node_modules/leak/real-secret.ts'",
+      "import { defineGame } from 'threejam'",
+      'type Echo = Record<typeof token, number>',
+      'const missing: Echo = {}',
+      'export default defineGame({ entities: { ball: { x: 0, y: 0, w: 0.1, h: 0.1, seen: missing } }, update() {} })',
+    ].join('\n'),
+  )
+  const run = threejam(['check', g.dir])
+  assert.equal(run.code, 1)
+  assert.match(String(run.json.message), /is outside the folder/)
+  assert.ok(!run.out.includes('CANARY-SYMLINK-LITERAL'), 'the outside file leaked into the check output')
+})
+
+test("audit 5: check rejects an absolute import into another tree's node_modules, without echoing the file", () => {
+  const proj = folder({ 'keep.txt': 'x' }).abs
+  mkdirSync(join(proj, 'node_modules', 'pkg'), { recursive: true })
+  writeFileSync(join(proj, 'node_modules', 'pkg', 'secret.ts'), "export const token = 'CANARY-ABS-NM'\n")
+  const g = folder({ 'keep.txt': 'x' })
+  writeFileSync(
+    join(g.abs, 'game.ts'),
+    [
+      `import { token } from '${join(proj, 'node_modules', 'pkg', 'secret.ts').replaceAll('\\', '/')}'`,
+      "import { defineGame } from 'threejam'",
+      'type Echo = Record<typeof token, number>',
+      'const missing: Echo = {}',
+      'export default defineGame({ entities: { ball: { x: 0, y: 0, w: 0.1, h: 0.1, seen: missing } }, update() {} })',
+    ].join('\n'),
+  )
+  const run = threejam(['check', g.dir])
+  assert.equal(run.code, 1)
+  assert.match(String(run.json.message), /is outside the folder/)
+  assert.ok(!run.out.includes('CANARY-ABS-NM'))
+})
+
+// Review blocker 2: a game or driver whose real path is inside the engine directory must still obey the allowlist.
+test('finding 2: a game or driver placed inside the engine directory cannot import a file outside the folders', () => {
+  const outside = folder({ 'keep.txt': 'x' }).abs
+  writeFileSync(join(outside, 'engine-secret.ts'), "export const tag = 'CANARY-ENGINE-TRUST'\n")
+  const probe = join(ROOT, 'src', '.sandbox-engine-probe')
+  made.push(probe)
+  mkdirSync(probe, { recursive: true })
+  const importOutside = `import { tag } from '${join(outside, 'engine-secret.ts').replaceAll('\\', '/')}'`
+
+  const normal = folder({ 'game.ts': game('') })
+  writeFileSync(join(probe, 'driver.ts'), `${importOutside}\nexport default function () { return tag ? [] : [] }\n`)
+  const byDriver = threejam(['sim', normal.dir, '--ticks', '1', '--driver', relative(ROOT, join(probe, 'driver.ts'))])
+  assert.equal(byDriver.code, 1, byDriver.out)
+  assert.match(String(byDriver.json.message), /can't be inside ThreeJam's own files/)
+  assert.ok(!byDriver.out.includes('CANARY-ENGINE-TRUST'))
+
+  writeFileSync(join(probe, 'game.ts'), `import { defineGame } from 'threejam'\n${importOutside}\nexport default defineGame({ entities: { ball: { x: 0, w: 0.1, tag: '' } }, update(world) { world.ball.tag = tag } })\n`)
+  const byGame = threejam(['sim', relative(ROOT, probe), '--ticks', '1', '--fields', 'tag'])
+  assert.equal(byGame.code, 1, byGame.out)
+  assert.match(String(byGame.json.message), /can't be inside ThreeJam's own files/)
+  assert.ok(!byGame.out.includes('CANARY-ENGINE-TRUST'))
+})
+
+// Review (both branches): the shared rule keys on which entry reached a file. A game must not borrow the driver's folder, even when a driver is loaded.
+test("finding 2: a game cannot import the --driver's folder, though the driver can import its own folder", () => {
+  const driverDir = folder({ 'keep.txt': 'x' }).abs
+  writeFileSync(join(driverDir, 'secret.ts'), "export const token = 'CANARY-DRIVER-SIBLING'\n")
+  writeFileSync(join(driverDir, 'helper.ts'), 'export const tag = 1\n')
+  writeFileSync(join(driverDir, 'bot.ts'), "import { tag } from './helper.ts'\nexport default function () { return tag ? [] : [] }\n")
+  const bot = join(driverDir, 'bot.ts')
+
+  const reaching = folder({ 'game.ts': `import { token } from '${join(driverDir, 'secret.ts').replaceAll('\\', '/')}'\n${game('', "x: 0, w: 0.1, tag: ''")}`.replace('world.ball.x += 0.01', 'world.ball.tag = token') })
+  const byGame = threejam(['sim', reaching.dir, '--ticks', '1', '--driver', bot])
+  assert.equal(byGame.code, 1, byGame.out)
+  assert.match(String(byGame.json.message), /can't bundle .* a game may import only its own folder/)
+  assert.ok(!byGame.out.includes('CANARY-DRIVER-SIBLING'), 'the driver folder leaked into the game')
+
+  // The driver importing a helper in its own folder is allowed, so a clean game runs with it.
+  const clean = folder({ 'game.ts': game('') })
+  const ok = threejam(['sim', clean.dir, '--ticks', '1', '--driver', bot, '--only', 'ball'])
+  assert.equal(ok.code, 0, ok.out)
+})
+
 // finding 1: loading a game or driver is code execution, and the sandbox stops it reaching the process, the filesystem, or a dynamic import.
 test('finding 1: a game cannot run a process, read a file, or reach the host, at load or in update', () => {
   const marks = mkdtempSync(join(TMP, 'marks-'))
@@ -115,7 +202,7 @@ test('finding 2: a game cannot import a file outside its folder, as TypeScript o
   writeFileSync(join(jsonGame.abs, 'game.ts'), `import data from '${relative(jsonGame.abs, join(outside, 'secret.json')).replaceAll('\\', '/')}'\n${game('', 'x: 0, w: 0.1, tag: data.token')}`)
   const jsonRun = threejam(['sim', jsonGame.dir, '--ticks', '1'])
   assert.equal(jsonRun.code, 1)
-  assert.match(String(jsonRun.json.message), /is outside the folder/)
+  assert.match(String(jsonRun.json.message), /can't bundle .* a game may import only its own folder/)
   assert.ok(!jsonRun.out.includes(canary))
 })
 
@@ -126,7 +213,7 @@ test('finding 2: game.ts cannot be a symlink to a file elsewhere, but a sibling 
   symlinkSync(join(outside, 'elsewhere.ts'), join(linked.abs, 'game.ts'))
   const link = threejam(['sim', linked.dir, '--ticks', '1'])
   assert.equal(link.code, 1)
-  assert.match(String(link.json.message), /is outside the folder/)
+  assert.match(String(link.json.message), /must be a file in its own folder, not a link elsewhere/)
 
   const ok = folder({ 'game.ts': `import { vx } from './helper.ts'\n${game('', 'x: 0, w: 0.1, vx')}`.replace('world.ball.x += 0.01', 'world.ball.x += world.ball.vx'), 'helper.ts': 'export const vx = 2\n' })
   const run = threejam(['sim', ok.dir, '--ticks', '3', '--fields', 'x'])

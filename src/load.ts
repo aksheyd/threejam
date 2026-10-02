@@ -1,11 +1,12 @@
 import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { SourceMap } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
 import { isImageFile, isSoundFile } from './assets.ts'
+import { confinePlugin, confineRoots, real, within } from './confine.ts'
 import { RunError, UsageError, type Phase } from './errors.ts'
 import { ENGINE, NAME, ROOT, TYPES, engineFile, manifestsAbove } from './package.ts'
 import { SANDBOX, type Failure, type Place, type Reply, type Request, type Stage, type Thrown } from './sandbox.ts'
@@ -19,8 +20,6 @@ const GRACE_MS = 10_000
 const MAX_REPLY_BYTES = 64 * 1024 * 1024
 const BUNDLE = 'threejam-sandbox.js'
 const ENTRY = 'threejam:entry'
-const RESOLVING = Symbol('resolving')
-const LOOSE_CASE = process.platform === 'darwin' || process.platform === 'win32'
 
 export interface GameFiles {
   readonly folder: string
@@ -101,11 +100,14 @@ function driverFile(path: string): string {
 
 // One script with the engine, the game, and the driver, whose modules load only when the sandbox runs them, after it has fixed the realm's globals.
 async function bundle(files: GameFiles, driver: string | undefined): Promise<{ code: string; map: SourceMap }> {
+  const roots = confineRoots({ game: files.folder, driver: driver === undefined ? undefined : dirname(driver) })
+  const seeds = [files.game, ...(driver === undefined ? [] : [driver])]
   const load = (file: string) => `() => require(${JSON.stringify(file)})`
   const entry = [
     `import { sandbox } from ${JSON.stringify(engineFile('sandbox'))}`,
     `sandbox({ game: ${load(files.game)}, driver: ${driver === undefined ? 'undefined' : load(driver)} })`,
   ].join('\n')
+  const plugins = [entryPlugin(entry), confinePlugin({ roots, seeds })]
   const result = await esbuild
     .build({
       entryPoints: [ENTRY],
@@ -120,7 +122,7 @@ async function bundle(files: GameFiles, driver: string | undefined): Promise<{ c
       // Sources are relative to ROOT, where the bundle would be if it were written.
       outfile: join(ROOT, BUNDLE),
       logLevel: 'silent',
-      plugins: [confine({ entry, game: files.folder, driver: driver === undefined ? undefined : dirname(driver) })],
+      plugins,
     })
     .catch((failure: unknown) => {
       throw new UsageError(buildMessage(failure))
@@ -131,46 +133,15 @@ async function bundle(files: GameFiles, driver: string | undefined): Promise<{ c
   return { code: script.text, map: new SourceMap(JSON.parse(map.text)) }
 }
 
-// The import rule fix/harden-server-chrome enforces for the browser bundle, here for the Node bundle: an import may come only from the game's folder, a --driver file's folder, or ThreeJam's own files, with symlinks resolved first.
-function confine({ entry, game, driver }: { entry: string; game: string; driver: string | undefined }): esbuild.Plugin {
-  const engine = realpathSync(ENGINE)
-  const games = realpathSync(game)
-  const drivers = driver === undefined ? undefined : realpathSync(driver)
-  const allowed = [games, ...(drivers === undefined ? [] : [drivers]), engine]
-  const sources = `an import must come from the game's folder, ${drivers === undefined ? '' : "a --driver file's folder, "}or ThreeJam's own files`
+// The one entry point: the generated glue, loaded from a namespace so it isn't a file on disk. confinePlugin confines everything it pulls in.
+function entryPlugin(entry: string): esbuild.Plugin {
   return {
-    name: 'threejam-confine',
+    name: 'threejam-entry',
     setup(build) {
-      build.onResolve({ filter: /.*/ }, async (args) => {
-        if (args.pluginData === RESOLVING) return undefined
-        if (args.kind === 'entry-point') return { path: 'entry', namespace: 'threejam' }
-        if (args.path === NAME) return { path: engineFile('index') }
-        const found = await build.resolve(args.path, { kind: args.kind, importer: args.importer, namespace: args.namespace, resolveDir: args.resolveDir, pluginData: RESOLVING })
-        if (found.errors.length > 0) return { errors: found.errors }
-        // The engine's files, like Three's internals in the browser build, are trusted by their importer, so the engine can reach its own dependencies.
-        if (args.namespace === 'file' && within(engine, real(args.importer))) return { path: found.path }
-        if (found.namespace !== 'file' || found.external || !allowed.some((root) => within(root, real(found.path)))) {
-          return { errors: [{ text: `${args.path} is outside the folder; ${sources}` }] }
-        }
-        return { path: found.path }
-      })
+      build.onResolve({ filter: new RegExp(`^${ENTRY}$`) }, () => ({ path: 'entry', namespace: 'threejam' }))
       build.onLoad({ filter: /.*/, namespace: 'threejam' }, () => ({ contents: entry, loader: 'ts', resolveDir: ROOT }))
     },
   }
-}
-
-// The real path of a file, with symlinks resolved; an unresolvable path is compared as it is.
-function real(path: string): string {
-  try {
-    return realpathSync(path)
-  } catch {
-    return path
-  }
-}
-
-function within(root: string, path: string): boolean {
-  const rest = LOOSE_CASE ? relative(root.toLowerCase(), path.toLowerCase()) : relative(root, path)
-  return rest === '' || (!isAbsolute(rest) && rest !== '..' && !rest.startsWith(`..${sep}`))
 }
 
 // The child process that runs the bundle. It starts as Node's -e script, so it uses nothing outside its own body: it makes a realm with the language and nothing else, runs the bundle in it, then the run with a time limit, and writes the reply.
@@ -374,7 +345,7 @@ export const COMPILER_OPTIONS = {
   noEmit: true,
 } as const
 
-export function typecheck({ file, dom }: { file: string; dom: boolean }): string[] {
+export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: string; dom: boolean; timeout?: number }): string[] {
   const folder = dirname(file)
   const compilerOptions = {
     ...COMPILER_OPTIONS,
@@ -385,7 +356,8 @@ export function typecheck({ file, dom }: { file: string; dom: boolean }): string
     // The engine that's running, as in sim and the page, so a game checks without the package installed beside it.
     paths: { [NAME]: [TYPES] },
   }
-  const result = runTsc({ compilerOptions, file })
+  const result = runTsc({ compilerOptions, file, timeout })
+  if (hasCode(result.error, 'ETIMEDOUT')) return [`the type check ran past the ${timeout} s time limit; a type in the game may not terminate`]
   if (result.error) return [`the TypeScript check failed: ${result.error.message}`]
   const errors: string[] = []
   const read: string[] = []
@@ -396,7 +368,7 @@ export function typecheck({ file, dom }: { file: string; dom: boolean }): string
     const general = /^error TS\d+: (.*)$/.exec(line)
     if (match) {
       const path = resolve(ROOT, match[1])
-      keep = path.startsWith(folder + sep)
+      keep = within(folder, path)
       if (keep) errors.push(`${shownPath(path)}:${match[2]}: ${hinted(match[3])}`)
     } else if (general) {
       keep = false
@@ -409,9 +381,9 @@ export function typecheck({ file, dom }: { file: string; dom: boolean }): string
       other.push(line)
     }
   }
-  // Type errors can quote what a file holds, so a game that imports past its folder, the engine's types, and packages like TypeScript's and Three.js's fails the check instead of leaking them.
+  // A type error can quote what a file holds, so a game that imports past its folder, the engine's files, and their own node_modules fails the check instead of leaking the file's text. The real path is what counts, so a node_modules symlink out of the folder doesn't exempt it.
   const roots = [real(folder), real(ENGINE)]
-  const stray = read.find((path) => !roots.some((root) => within(root, real(path))) && !path.split(sep).includes('node_modules'))
+  const stray = read.map(real).find((path) => !roots.some((root) => within(root, path)) && !inProjectModules(path, roots))
   if (stray !== undefined) throw new UsageError(`${shownPath(stray)} is outside the folder; an import must come from the game's folder or ThreeJam's own files`)
   if (result.status !== 0 && !/error TS\d+/.test(result.stdout)) {
     errors.push(`the TypeScript check failed: ${`${other.join('\n')}${result.stderr}`.trim() || `exit ${result.status}`}`)
@@ -419,13 +391,31 @@ export function typecheck({ file, dom }: { file: string; dom: boolean }): string
   return errors
 }
 
-// paths is only a tsconfig.json setting, so each check writes one for its file, where only this user can read it.
-function runTsc({ compilerOptions, file }: { compilerOptions: object; file: string }): SpawnSyncReturns<string> {
+// A real path inside a node_modules that belongs to the game's project or ThreeJam's own, which is where tsc reads lib.d.ts and @types; some other tree's node_modules is not trusted.
+function inProjectModules(path: string, roots: readonly string[]): boolean {
+  const segments = path.split(sep)
+  const index = segments.indexOf('node_modules')
+  if (index < 0) return false
+  const project = segments.slice(0, index).join(sep) || sep
+  return roots.some((root) => within(project, root))
+}
+
+function hasCode(error: Error | undefined, code: string): boolean {
+  return error !== undefined && 'code' in error && (error as { code?: unknown }).code === code
+}
+
+// paths is only a tsconfig.json setting, so each check writes one for its file, where only this user can read it; a type that never terminates is stopped at the time limit.
+function runTsc({ compilerOptions, file, timeout }: { compilerOptions: object; file: string; timeout: number }): SpawnSyncReturns<string> {
   const config = mkdtempSync(join(tmpdir(), 'threejam-check-'))
   try {
     const project = join(config, 'tsconfig.json')
     writeFileSync(project, JSON.stringify({ compilerOptions, files: [file] }), { mode: 0o600, flag: 'wx' })
-    return spawnSync(process.execPath, [typescriptEntry(), '-p', project, '--pretty', 'false', '--listFiles'], { cwd: ROOT, encoding: 'utf8' })
+    return spawnSync(process.execPath, [typescriptEntry(), '-p', project, '--pretty', 'false', '--listFiles'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      timeout: Math.min(Math.ceil(timeout * 1000), 2 ** 31 - 1),
+      killSignal: 'SIGKILL',
+    })
   } finally {
     rmSync(config, { recursive: true, force: true })
   }
