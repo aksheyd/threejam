@@ -28,7 +28,7 @@
   },
   "scripts": {
     "threejam": "node src/cli.ts",
-    "test": "node --test",
+    "test": "node --test \"**/*.test.ts\"",
     "typecheck": "tsc -p .",
     "build": "node scripts/build.ts",
     "test:package": "node scripts/verify-package.ts"
