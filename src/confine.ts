@@ -25,22 +25,20 @@ export interface ConfineOptions {
   readonly seeds: readonly string[]
 }
 
-// Case-insensitive filesystems (macOS and Windows defaults) hold one folder under two spellings, so the allowlist folds case there.
-const LOOSE_CASE = process.platform === 'darwin' || process.platform === 'win32'
 const RESOLVING = Symbol('threejam.resolving')
 
-// The real path of a file, with symlinks resolved; an unresolvable path is compared as it is.
+// The path the OS itself gives a file, with links resolved and, on a case-insensitive volume (macOS's and Windows' default), each name spelled as it is on disk, so two spellings of one file come out the same; an unresolvable path is compared as it is.
 export function real(path: string): string {
   try {
-    return realpathSync(path)
+    return realpathSync.native(path)
   } catch {
     return path
   }
 }
 
+// Whether path is root or inside it. Both are real paths, so they compare exactly: folding case by hand could call two folders one, since lowercasing 'İ' adds a character, and path.relative folds case on Windows.
 export function within(root: string, path: string): boolean {
-  const rest = LOOSE_CASE ? relative(root.toLowerCase(), path.toLowerCase()) : relative(root, path)
-  return rest === '' || (!isAbsolute(rest) && rest !== '..' && !rest.startsWith(`..${sep}`))
+  return path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`)
 }
 
 // Realpaths the engine, the game's folder, and a driver's, and refuses a game or driver that sits inside the engine, which would otherwise borrow the engine's trust.

@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { after, test } from 'node:test'
+import { real, within } from '../src/confine.ts'
 import { ROOT } from '../src/package.ts'
 
 const CLI = join(ROOT, 'src', 'cli.ts')
@@ -112,6 +113,18 @@ test("check reads only TypeScript's libs and ThreeJam's type packages from node_
   const besideRun = threejam(['check', beside.dir])
   assert.equal(besideRun.code, 1, besideRun.out)
   assert.match(String(besideRun.json.message), /node_modules\/esbuild\/.* is outside the folder/)
+})
+
+test('a folder holds a file by the name its filesystem gives it, not by case folded by hand', () => {
+  const root = mkdtempSync(join(TMP, 'case-'))
+  made.push(root)
+  // Plain letters name one folder on a case-insensitive volume and two elsewhere; lowercasing İ adds a character, and Windows keeps the two names apart.
+  for (const [name, other] of [['Pong', 'pong'], ['Game\u0130', `game${'\u0130'.toLowerCase()}`]]) {
+    mkdirSync(join(root, name))
+    if (!existsSync(join(root, other))) mkdirSync(join(root, other))
+    writeFileSync(join(root, other, 'secret.ts'), '')
+    assert.equal(within(real(join(root, name)), real(join(root, other, 'secret.ts'))), existsSync(join(root, name, 'secret.ts')), `${name} and ${other}`)
+  }
 })
 
 // Review blocker 2: a game or driver whose real path is inside the engine directory must still obey the allowlist.

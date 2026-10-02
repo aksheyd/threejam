@@ -363,13 +363,14 @@ export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: stri
   const errors: string[] = []
   const read: string[] = []
   const other: string[] = []
+  const game = real(folder)
   let keep = false
   for (const line of result.stdout.split(/\r?\n/)) {
     const match = /^(.+?)\((\d+),\d+\): error TS\d+: (.*)$/.exec(line)
     const general = /^error TS\d+: (.*)$/.exec(line)
     if (match) {
       const path = resolve(ROOT, match[1])
-      keep = within(folder, path)
+      keep = within(game, real(path))
       if (keep) errors.push(`${shownPath(path)}:${match[2]}: ${hinted(match[3])}`)
     } else if (general) {
       keep = false
@@ -383,7 +384,7 @@ export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: stri
     }
   }
   // A type error can quote what a file holds, so a game that imports past its folder, the engine's files, and the type packages check needs fails the check instead of leaking the file's text. The real path is what counts, so a link out of the folder doesn't exempt it.
-  const roots = [real(folder), real(ENGINE), ...typeFolders()]
+  const roots = [game, real(ENGINE), ...typeFolders()]
   const stray = read.map(real).find((path) => !roots.some((root) => within(root, path)))
   if (stray !== undefined) throw new UsageError(`${shownPath(stray)} is outside the folder; an import must come from the game's folder or ThreeJam's own files`)
   if (result.status !== 0 && !/error TS\d+/.test(result.stdout)) {
