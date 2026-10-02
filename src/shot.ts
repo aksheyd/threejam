@@ -1,8 +1,8 @@
 import { mkdirSync } from 'node:fs'
 import { dirname, extname } from 'node:path'
-import puppeteer, { type Page } from 'puppeteer-core'
+import type { Browser, Page } from 'puppeteer-core'
 import { UsageError, quote } from './errors.ts'
-import { buildPage, findChrome, serve } from './serve.ts'
+import { buildPage, findChrome, serve, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
 export interface ShotOptions {
@@ -47,14 +47,18 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
   const chrome = findChrome()
   if (!chrome) throw new UsageError('shot needs Chrome or Chromium, or Edge on Windows; set CHROME_PATH to its executable')
   const page = await buildPage({ dir, config: { mode: 'shot' }, driver })
-  const server = await serve({ page })
-  // Software rendering makes frames the same on every machine.
-  const browser = await puppeteer.launch({
-    executablePath: chrome,
-    headless: true,
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--hide-scrollbars'],
-  })
+  let server: Server | undefined
+  let browser: Browser | undefined
   try {
+    server = await serve({ page })
+    // Only shot loads Puppeteer, so the other commands start without it.
+    const { default: puppeteer } = await import('puppeteer-core')
+    // Software rendering makes frames the same on every machine.
+    browser = await puppeteer.launch({
+      executablePath: chrome,
+      headless: true,
+      args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--hide-scrollbars'],
+    })
     const tab = await browser.newPage()
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const crashed = pageFailure(tab)
@@ -71,8 +75,8 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     }
     return paths
   } finally {
-    await browser.close()
-    server.close()
+    await browser?.close()
+    server?.close()
     await page.dispose()
   }
 }
