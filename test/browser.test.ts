@@ -5,12 +5,10 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import type { Page } from 'puppeteer-core'
-import asteroids from '../games/asteroids/game.ts'
-import flappy from '../games/flappy/game.ts'
 import pong from '../games/pong/game.ts'
 import { simulate } from '../src/engine.ts'
 import { exportGame } from '../src/export.ts'
-import { gameFiles, loadDriver, loadGame } from '../src/load.ts'
+import { runGame } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { buildPage, findChrome, serve } from '../src/serve.ts'
 import { launchChrome, openPage, shoot } from '../src/shot.ts'
@@ -40,7 +38,7 @@ test('with a driver that taps using the keys of the tick before, the page reache
   made.push(dir)
   const driver = join(dir, 'flap.ts')
   writeFileSync(driver, FLAP)
-  const expected = simulate(flappy, { seed: 7, ticks: 900, drive: await loadDriver(driver) }).snapshots[0].entities
+  const expected = (await runGame('games/flappy', { seed: 7, ticks: 900, driver })).snapshots[0].entities
   assert.ok(expected.some((entity) => entity.name === 'pipes[2].parts.bottom_cap'))
   const page = await buildPage({ dir: 'games/flappy', config: { mode: 'shot' }, driver })
   const server = await serve({ page })
@@ -86,7 +84,7 @@ test('with the portable math, trig-heavy code reaches the same state in the page
   const dir = mkdtempSync(join(TMP, 'math-'))
   made.push(dir)
   writeFileSync(join(dir, 'game.ts'), MATH_HEAVY)
-  const expected = simulate(await loadGame(dir), { ticks: 600 }).snapshots[0].entities
+  const expected = (await runGame(dir, { ticks: 600 })).snapshots[0].entities
   const page = await buildPage({ dir, config: { mode: 'shot' } })
   const server = await serve({ page })
   const browser = await launch()
@@ -136,7 +134,7 @@ test('from the first frame the page draws images with square pixels and turned p
   writeFileSync(join(dir, 'game.ts'), PICTURE)
   writeFileSync(join(dir, 'quad.png'), Buffer.from(QUAD_PNG, 'base64'))
   const input = { ticks: 6, press: ['Mouse@2,4'], hold: ['MouseRight@3-5'], pointer: ['0.5,0.25@3', '-1.5,-1@5'] }
-  const expected = simulate(await loadGame(dir), { ...input, assets: gameFiles(dir).assets }).snapshots[0].entities
+  const expected = (await runGame(dir, input)).snapshots[0].entities
   const page = await buildPage({ dir, config: { mode: 'shot' } })
   const server = await serve({ page })
   const browser = await launch()
@@ -174,7 +172,7 @@ test('from the first frame the page draws images with square pixels and turned p
 
 test('played by the mouse autopilot, Asteroids reaches the state sim computes in the page, which records the sounds sim lists', { skip: !chrome && 'needs Chrome' }, async () => {
   const driver = join('games', 'asteroids', 'autopilot.ts')
-  const expected = simulate(asteroids, { ticks: 600, drive: await loadDriver(driver) })
+  const expected = await runGame('games/asteroids', { ticks: 600, driver })
   assert.ok(expected.sounds.some((sound) => sound.name === 'explode'))
   const page = await buildPage({ dir: 'games/asteroids', config: { mode: 'shot' }, driver })
   const server = await serve({ page })

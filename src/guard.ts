@@ -11,8 +11,16 @@ function blocked(name: string, instead: string): () => never {
   }
 }
 
+// A realm with no timers or clock, like the one sim runs a game in, gets ones that fail the way guarded() makes them fail, so a game hears why.
+export function withoutClocks(): void {
+  for (const name of TIMERS) if (Reflect.get(globalThis, name) === undefined) Reflect.set(globalThis, name, blocked(`${name}()`, CLOCK))
+  if (Reflect.get(globalThis, 'performance') === undefined) Reflect.set(globalThis, 'performance', { now: blocked('performance.now()', CLOCK) })
+}
+
+// Swaps the clock, Math.random, and the timers for errors and Math's functions for portable ones while fn runs; it keeps runs repeatable, not code contained.
 export function guarded<T>(fn: () => T): T {
-  const saved = { random: Math.random, Date: globalThis.Date, now: performance.now }
+  const clock: unknown = Reflect.get(globalThis, 'performance')
+  const saved = { random: Math.random, Date: globalThis.Date, now: isObject(clock) ? Reflect.get(clock, 'now') : undefined }
   const timers = TIMERS.filter((name) => typeof Reflect.get(globalThis, name) === 'function').map((name) => ({
     name,
     original: Reflect.get(globalThis, name),
@@ -30,7 +38,7 @@ export function guarded<T>(fn: () => T): T {
       return prop === 'now' ? blocked('Date.now()', CLOCK) : Reflect.get(target, prop)
     },
   })
-  performance.now = blocked('performance.now()', CLOCK)
+  if (isObject(clock)) Reflect.set(clock, 'now', blocked('performance.now()', CLOCK))
   for (const { name } of timers) Reflect.set(globalThis, name, blocked(`${name}()`, CLOCK))
   try {
     const result = fn()
@@ -42,7 +50,11 @@ export function guarded<T>(fn: () => T): T {
     for (const { name, native } of natives) Reflect.set(Math, name, native)
     Math.random = saved.random
     globalThis.Date = saved.Date
-    performance.now = saved.now
+    if (isObject(clock)) Reflect.set(clock, 'now', saved.now)
     for (const { name, original } of timers) Reflect.set(globalThis, name, original)
   }
+}
+
+function isObject(value: unknown): value is object {
+  return typeof value === 'object' && value !== null
 }
