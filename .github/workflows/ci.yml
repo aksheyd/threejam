@@ -8,9 +8,10 @@ on:
 permissions:
   contents: read
 
+# A newer push replaces a pull request's run, while each commit on main gets a run of its own, since a group holds only one waiting run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
