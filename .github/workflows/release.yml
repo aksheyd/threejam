@@ -17,10 +17,49 @@ jobs:
     name: CI
     uses: ./.github/workflows/ci.yml
 
+  # The tarball npm gets comes from here, with install scripts off, so the only dependency code that runs is the TypeScript compiler.
+  build:
+    name: Build the package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      integrity: ${{ steps.pack.outputs.integrity }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # setup-node turns on npm's cache by itself once package.json names npm as its package manager, and nothing here should come from a cache.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26'
+          package-manager-cache: false
+
+      - run: npm ci --ignore-scripts
+
+      - name: Check that the tag names the version in package.json
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+
+      - run: npm run build
+
+      - name: Pack
+        id: pack
+        run: |
+          mkdir package
+          npm pack ./dist --pack-destination package --json > pack.json
+          echo "integrity=$(node -p "require('./pack.json')[0].integrity")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package
+          path: package
+          if-no-files-found: error
+
+  # A second build from its own checkout, which test:package installs and uses; publish checks that it packed the same bytes.
   test:
-    name: Test and build
+    name: Build again and prove the package
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      integrity: ${{ steps.package.outputs.integrity }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -31,9 +70,6 @@ jobs:
 
       - run: npm ci
 
-      - name: Check that the tag names the version in package.json
-        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
-
       - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
         id: chrome
 
@@ -43,31 +79,22 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
 
-      - name: Typecheck
-        run: npx tsc -p .
-
-      - name: Test
-        run: npm test
-        env:
-          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-
+      # Naming bash adds pipefail, without which tee would hide a failing test:package.
       - name: Build, pack, and prove the package
-        run: npm run test:package
+        id: package
+        shell: bash
+        run: |
+          npm run test:package | tee package.log
+          echo "integrity=$(sed -n 's/^ok - packed .* (\(sha512-.*\))$/\1/p' package.log)" >> "$GITHUB_OUTPUT"
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: dist
-          path: dist
-          if-no-files-found: error
 
   publish:
     name: Publish to npm
-    needs: [ci, test]
+    needs: [ci, build, test]
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Only this job can sign in to npm through trusted publishing, and it runs no dependency code, just npm publish on the tested build.
+    # Only this job can sign in to npm through trusted publishing, and it runs no dependency code: it checks the build job's tarball and publishes it.
     permissions:
       contents: read
       id-token: write
@@ -77,11 +104,22 @@ jobs:
         with:
           node-version: '26'
           registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: dist
-          path: dist
+          name: package
+          path: package
 
+      - name: Check that both builds packed this tarball
+        env:
+          BUILT: ${{ needs.build.outputs.integrity }}
+          TESTED: ${{ needs.test.outputs.integrity }}
+        run: |
+          downloaded="sha512-$(openssl dgst -sha512 -binary "./package/threejam-${GITHUB_REF_NAME#v}.tgz" | base64 -w0)"
+          printf 'built      %s\ntested     %s\ndownloaded %s\n' "$BUILT" "$TESTED" "$downloaded"
+          test -n "$BUILT" && test "$TESTED" = "$BUILT" && test "$downloaded" = "$BUILT"
+
+      # Without ./ npm would read the path as a GitHub repository.
       - name: Publish
-        run: npm publish ./dist
+        run: npm publish "./package/threejam-${GITHUB_REF_NAME#v}.tgz"

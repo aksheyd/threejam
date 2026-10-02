@@ -18,10 +18,12 @@ const cached = new Set(existsSync(npxCache) ? readdirSync(npxCache) : [])
 try {
   node([join(ROOT, 'scripts', 'build.ts')], ROOT)
   const packed: unknown = JSON.parse(node([NPM, 'pack', join(ROOT, 'dist'), '--json', '--pack-destination', work], ROOT))
-  const filename = Array.isArray(packed) && isRecord(packed[0]) ? packed[0].filename : undefined
-  if (typeof filename !== 'string') throw new Error(`npm pack printed no tarball name: ${JSON.stringify(packed)}`)
+  const entry: Record<string, unknown> = Array.isArray(packed) && isRecord(packed[0]) ? packed[0] : {}
+  const { filename, integrity } = entry
+  if (typeof filename !== 'string' || typeof integrity !== 'string') throw new Error(`npm pack printed no tarball name and integrity: ${JSON.stringify(packed)}`)
   const tarball = join(work, filename)
-  done(`packed ${filename}`)
+  // release.yml reads the digest from this line and publishes only a tarball another job built with the same one.
+  done(`packed ${filename} (${integrity})`)
 
   // A project that installs the package, in a folder whose path has a space, with install scripts off as npm 12 has them; the npx and solo installs below run them.
   const project = join(work, 'my project')
