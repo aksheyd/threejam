@@ -2,7 +2,7 @@ import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { SourceMap } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
 import { isImageFile, isSoundFile } from './assets.ts'
@@ -347,14 +347,15 @@ export const COMPILER_OPTIONS = {
 
 export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: string; dom: boolean; timeout?: number }): string[] {
   const folder = dirname(file)
+  const three = packageFolder('@types/three', ROOT)
   const compilerOptions = {
     ...COMPILER_OPTIONS,
     // TypeScript reads a .ts file as CommonJS unless the nearest package.json says "type": "module", but the engine bundles every game as an ES module.
     ...(isModuleScope(folder) ? {} : { module: 'preserve', moduleResolution: 'bundler' }),
     lib: dom ? ['es2023', 'dom', 'dom.iterable'] : ['es2023'],
     types: [],
-    // The engine that's running, as in sim and the page, so a game checks without the package installed beside it.
-    paths: { [NAME]: [TYPES] },
+    // The engine that's running, as in sim and the page, so a game checks without the package installed beside it, and Three.js's types as that engine has them, which describe the THREE a view receives.
+    paths: { [NAME]: [TYPES], ...(three === undefined ? {} : { three: [join(three, 'index.d.ts')] }) },
   }
   const result = runTsc({ compilerOptions, file, timeout })
   if (hasCode(result.error, 'ETIMEDOUT')) return [`the type check ran past the ${timeout} s time limit; a type in the game may not terminate`]
@@ -381,9 +382,9 @@ export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: stri
       other.push(line)
     }
   }
-  // A type error can quote what a file holds, so a game that imports past its folder, the engine's files, and their own node_modules fails the check instead of leaking the file's text. The real path is what counts, so a node_modules symlink out of the folder doesn't exempt it.
-  const roots = [real(folder), real(ENGINE)]
-  const stray = read.map(real).find((path) => !roots.some((root) => within(root, path)) && !inProjectModules(path, roots))
+  // A type error can quote what a file holds, so a game that imports past its folder, the engine's files, and the type packages check needs fails the check instead of leaking the file's text. The real path is what counts, so a link out of the folder doesn't exempt it.
+  const roots = [real(folder), real(ENGINE), ...typeFolders()]
+  const stray = read.map(real).find((path) => !roots.some((root) => within(root, path)))
   if (stray !== undefined) throw new UsageError(`${shownPath(stray)} is outside the folder; an import must come from the game's folder or ThreeJam's own files`)
   if (result.status !== 0 && !/error TS\d+/.test(result.stdout)) {
     errors.push(`the TypeScript check failed: ${`${other.join('\n')}${result.stderr}`.trim() || `exit ${result.status}`}`)
@@ -391,13 +392,38 @@ export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: stri
   return errors
 }
 
-// A real path inside a node_modules that belongs to the game's project or ThreeJam's own, which is where tsc reads lib.d.ts and @types; some other tree's node_modules is not trusted.
-function inProjectModules(path: string, roots: readonly string[]): boolean {
-  const segments = path.split(sep)
-  const index = segments.indexOf('node_modules')
-  if (index < 0) return false
-  const project = segments.slice(0, index).join(sep) || sep
-  return roots.some((root) => within(project, root))
+// The folders check may read outside the game's and the engine's: TypeScript's libs, and the packages ThreeJam's own types depend on (@types/three and what it needs), as this ThreeJam finds them. Any other node_modules, even one above the game or beside ThreeJam, is outside.
+function typeFolders(): string[] {
+  const folders: string[] = []
+  const typescript = packageFolder('typescript', ROOT)
+  if (typescript !== undefined) {
+    folders.push(join(typescript, 'lib'))
+    // TypeScript 7 keeps its libs beside its compiler, in the package built for this platform.
+    const native = packageFolder(`@typescript/typescript-${process.platform}-${process.arch}`, typescript)
+    if (native !== undefined) folders.push(join(native, 'lib'))
+  }
+  const visit = (name: string, from: string): void => {
+    const found = packageFolder(name, from)
+    if (found === undefined || folders.includes(found)) return
+    folders.push(found)
+    for (const dependency of dependenciesOf(found)) visit(dependency, found)
+  }
+  for (const name of dependenciesOf(ROOT)) if (name.startsWith('@types/')) visit(name, ROOT)
+  return folders.map(real)
+}
+
+// Where Node finds a package from a folder: in the nearest node_modules above it that has one.
+function packageFolder(name: string, from: string): string | undefined {
+  for (let folder = from; ; folder = dirname(folder)) {
+    const found = join(folder, 'node_modules', name)
+    if (basename(folder) !== 'node_modules' && existsSync(join(found, 'package.json'))) return found
+    if (dirname(folder) === folder) return undefined
+  }
+}
+
+function dependenciesOf(folder: string): string[] {
+  const parsed: unknown = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8'))
+  return isRecord(parsed) && isRecord(parsed.dependencies) ? Object.keys(parsed.dependencies) : []
 }
 
 function hasCode(error: Error | undefined, code: string): boolean {

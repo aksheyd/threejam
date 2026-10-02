@@ -92,6 +92,28 @@ test("audit 5: check rejects an absolute import into another tree's node_modules
   assert.ok(!run.out.includes('CANARY-ABS-NM'))
 })
 
+test("check reads only TypeScript's libs and ThreeJam's type packages from node_modules, not one above the game or another package beside ThreeJam", () => {
+  const above = folder({
+    'node_modules/evil/secret.ts': "export const token = 'CANARY-ANCESTOR-NM'\n",
+    'game/game.ts': [
+      "import { token } from '../node_modules/evil/secret.ts'",
+      "import { defineGame } from 'threejam'",
+      'type Echo = Record<typeof token, number>',
+      'const missing: Echo = {}',
+      'export default defineGame({ entities: { ball: { x: 0, y: 0, w: 0.1, h: 0.1, seen: missing } }, update() {} })',
+    ].join('\n'),
+  })
+  const run = threejam(['check', join(above.dir, 'game')])
+  assert.equal(run.code, 1, run.out)
+  assert.match(String(run.json.message), /node_modules\/evil\/secret\.ts is outside the folder/)
+  assert.ok(!run.out.includes('CANARY-ANCESTOR-NM'), 'a node_modules above the game leaked into the check output')
+
+  const beside = folder({ 'game.ts': `import type { BuildOptions } from 'esbuild'\n${game('const options: BuildOptions = {}', 'x: 0, w: 0.1, n: Object.keys(options).length')}` })
+  const besideRun = threejam(['check', beside.dir])
+  assert.equal(besideRun.code, 1, besideRun.out)
+  assert.match(String(besideRun.json.message), /node_modules\/esbuild\/.* is outside the folder/)
+})
+
 // Review blocker 2: a game or driver whose real path is inside the engine directory must still obey the allowlist.
 test('finding 2: a game or driver placed inside the engine directory cannot import a file outside the folders', () => {
   const outside = folder({ 'keep.txt': 'x' }).abs
