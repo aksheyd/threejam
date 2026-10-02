@@ -1,6 +1,6 @@
 // Proves the package the ways people get it: builds and packs it, installs the tarball in a project outside the repo, and runs it once through npx with nothing installed.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -43,10 +43,16 @@ try {
   mkdirSync(join(project, 'broken'))
   const random = ["import { defineGame } from 'threejam'", '', 'export default defineGame({', '  entities: { ball: { w: 0.1 } },', '  update(world) {', '    world.ball.x = Math.random()', '  },', '})', '']
   writeFileSync(join(project, 'broken', 'game.ts'), random.join('\n'))
-  const failed = spawnSync(process.execPath, [NPX, 'threejam', 'sim', 'broken', '--ticks', '1', '--format', 'json'], { cwd: project, encoding: 'utf8' })
-  const message: unknown = JSON.parse(failed.stdout || '{}').message
-  same([failed.status, typeof message === 'string' && message.startsWith('broken/game.ts:6: Math.random() would make runs differ')], [1, true])
-  done('new, check, sim, shot, export, run, the starter test, an error naming its line, and the MCP command in the project')
+  const clock = failure(project, ['sim', 'broken', '--ticks', '1'])
+  same([clock.status, clock.message.startsWith('broken/game.ts:6: Math.random() would make runs differ')], [1, true])
+  // The declarations import three, which ships no types, so without @types/three beside the package check would pass this view.ts with scene as any.
+  mkdirSync(join(project, 'viewed'))
+  copyFileSync(join(project, 'catch', 'game.ts'), join(project, 'viewed', 'game.ts'))
+  const view = ["import type { ViewSetup } from 'threejam'", "import type game from './game.ts'", '', 'export function init({ scene }: ViewSetup<typeof game>): void {', '  scene.add(42)', '}', '']
+  writeFileSync(join(project, 'viewed', 'view.ts'), view.join('\n'))
+  const typed = failure(project, ['check', 'viewed'])
+  same([typed.status, typed.message.startsWith("viewed/view.ts:5: Argument of type 'number' is not assignable to parameter of type 'Object3D")], [1, true])
+  done('new, check, sim, shot, export, run, the starter test, a runtime error and a Three.js type error naming their lines, and the MCP command in the project')
 
   // Once through npx, outside any project, where new writes a project of its own.
   const once = (args: string[]) => threejam(work, args, ['--yes', `--package=${tarball}`, '--'])
@@ -89,6 +95,13 @@ function threejam(cwd: string, args: string[], npx: string[] = []): Record<strin
   const parsed: unknown = JSON.parse(node([NPX, ...npx, 'threejam', ...args, '--format', 'json'], cwd))
   if (!isRecord(parsed)) throw new Error(`threejam ${args.join(' ')} printed ${JSON.stringify(parsed)}`)
   return parsed
+}
+
+// Runs npx threejam in a project where the command should fail, for its exit code and message.
+function failure(cwd: string, args: string[]): { status: number | null; message: string } {
+  const result = spawnSync(process.execPath, [NPX, 'threejam', ...args, '--format', 'json'], { cwd, encoding: 'utf8' })
+  const parsed: unknown = JSON.parse(result.stdout || '{}')
+  return { status: result.status, message: isRecord(parsed) && typeof parsed.message === 'string' ? parsed.message : '' }
 }
 
 function same(actual: unknown, expected: unknown): void {
