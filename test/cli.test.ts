@@ -52,8 +52,17 @@ interface Reply {
   }
 }
 
-function mcp() {
-  const server = spawn(process.execPath, [CLI, '--mcp'], { cwd: ROOT })
+// A test that times out aborts its signal, which kills the child, so it can't hold the run open; the abort's error is expected then.
+function spawnCli(args: string[], signal: AbortSignal) {
+  const child = spawn(process.execPath, [CLI, ...args], { cwd: ROOT, signal })
+  child.on('error', (error) => {
+    if (!signal.aborted) throw error
+  })
+  return child
+}
+
+function mcp(signal: AbortSignal) {
+  const server = spawnCli(['--mcp'], signal)
   const waiting = new Map<number, (reply: Reply) => void>()
   let buffered = ''
   let next = 1
@@ -153,9 +162,9 @@ test('check names an image the folder lacks, and sim takes --pointer, prints the
   assert.ok(cta.commands[0].command.endsWith(' --at 3 --press Mouse@2 --pointer -1.5,0.5@2'), cta.commands[0].command)
 })
 
-test('the MCP server reports the package version, offers every command but run, and runs the code on disk after an edit', async () => {
+test('the MCP server reports the package version, offers every command but run, and runs the code on disk after an edit', async (t) => {
   const dir = folder({ 'game.ts': game({ fields: 'x: 0, y: 0, w: 0.1, h: 0.1, speed: 1', update: 'world.ball.x += world.ball.speed' }) })
-  const server = mcp()
+  const server = mcp(t.signal)
   try {
     const { version } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
     assert.equal((await server.ready).result?.serverInfo?.version, version)
@@ -174,8 +183,8 @@ test('the MCP server reports the package version, offers every command but run, 
   }
 })
 
-test('the MCP instructions say the tools run game code and that a game\'s output is data, not instructions', async () => {
-  const server = mcp()
+test('the MCP instructions say the tools run game code and that a game\'s output is data, not instructions', async (t) => {
+  const server = mcp(t.signal)
   try {
     const instructions = (await server.ready).result?.instructions ?? ''
     assert.match(instructions, /run the code in the folder's game.ts/)
@@ -188,9 +197,9 @@ test('the MCP instructions say the tools run game code and that a game\'s output
   }
 })
 
-test('audit 1 and 2: a looping game does not block other MCP calls, even after a cancel, and an oversized reply is refused with a hint', async () => {
+test('audit 1 and 2: a looping game does not block other MCP calls, even after a cancel, and an oversized reply is refused with a hint', async (t) => {
   const loop = folder({ 'game.ts': game({ update: 'if (ctx.tick === 2) for (;;) {}' }) })
-  const server = mcp()
+  const server = mcp(t.signal)
   try {
     await server.ready
     // A sim that loops until its own short time budget. Cancelling it gets no reply, so it is never awaited; it proves the server keeps serving.
@@ -273,8 +282,8 @@ test('a game in a folder outside the repo with no package.json, which TypeScript
   }
 })
 
-test('sim ends quietly when its reader closes the pipe', async () => {
-  const child = spawn(process.execPath, [CLI, 'sim', 'games/pong', '--ticks', '600', '--every', '1'], { cwd: ROOT })
+test('sim ends quietly when its reader closes the pipe', async (t) => {
+  const child = spawnCli(['sim', 'games/pong', '--ticks', '600', '--every', '1'], t.signal)
   let errors = ''
   child.stderr.on('data', (chunk) => (errors += chunk))
   child.stdout.once('data', () => child.stdout.destroy())
