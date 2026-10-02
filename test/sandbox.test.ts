@@ -36,6 +36,18 @@ function threejam(args: string[], env?: Record<string, string>) {
 const game = (body: string, fields = 'x: 0, y: 0, w: 0.1') =>
   ["import { defineGame } from 'threejam'", '', body, 'export default defineGame({', `  entities: { ball: { ${fields} } },`, '  update(world, ctx) {', '    world.ball.x += 0.01', '  },', '})', ''].join('\n')
 
+// audit 5: check rejects an import from outside the folder instead of hiding the type errors in it.
+test('audit 5: check fails on an import from outside the folder, naming it, not ok with hidden errors', () => {
+  const shared = folder({ 'keep.txt': 'x' }).abs
+  writeFileSync(join(shared, 'util.ts'), 'export function label(n: number): string {\n  return n\n}\n')
+  const g = folder({ 'keep.txt': 'x' })
+  writeFileSync(join(g.abs, 'game.ts'), `import { label } from '${relative(g.abs, join(shared, 'util.ts')).replaceAll('\\', '/')}'\n${game('', 'x: 0, w: 1, tag: 0')}`.replace('world.ball.x += 0.01', 'world.ball.tag = Number(label(3))'))
+  const run = threejam(['check', g.dir])
+  assert.notEqual(run.json.ok, true)
+  assert.equal(run.code, 1)
+  assert.match(String(run.json.message), /is outside the folder/)
+})
+
 // finding 1: loading a game or driver is code execution, and the sandbox stops it reaching the process, the filesystem, or a dynamic import.
 test('finding 1: a game cannot run a process, read a file, or reach the host, at load or in update', () => {
   const marks = mkdtempSync(join(TMP, 'marks-'))
@@ -46,7 +58,7 @@ test('finding 1: a game cannot run a process, read a file, or reach the host, at
   for (const { dir } of [atLoad, atUpdate]) {
     const sim = threejam(['sim', dir, '--ticks', '1'])
     assert.equal(sim.code, 1, sim.out)
-    assert.match(String(sim.json.message), /Code generation from strings disallowed|is not available to game code|outside the folder/)
+    assert.match(String(sim.json.message), /Code generation from strings disallowed|is not available to game code|is outside the folder/)
   }
   assert.deepEqual(readdirSync(marks), [], 'the sandbox let the game touch a file')
 })
@@ -96,7 +108,7 @@ test('finding 2: a game cannot import a file outside its folder, as TypeScript o
   const ts = folder({ 'game.ts': `import { secret } from '${join(outside, 'secret.ts')}'\n${game('', 'x: 0, w: 0.1, tag: secret')}` })
   const tsRun = threejam(['check', ts.dir])
   assert.equal(tsRun.code, 1)
-  assert.match(String(tsRun.json.message), /is outside the (game's )?folder/)
+  assert.match(String(tsRun.json.message), /is outside the folder/)
   assert.ok(!tsRun.out.includes(canary), 'the outside file leaked into the output')
 
   const jsonGame = folder({ 'keep.txt': 'x' })
@@ -114,7 +126,7 @@ test('finding 2: game.ts cannot be a symlink to a file elsewhere, but a sibling 
   symlinkSync(join(outside, 'elsewhere.ts'), join(linked.abs, 'game.ts'))
   const link = threejam(['sim', linked.dir, '--ticks', '1'])
   assert.equal(link.code, 1)
-  assert.match(String(link.json.message), /not links to files elsewhere|outside the folder/)
+  assert.match(String(link.json.message), /is outside the folder/)
 
   const ok = folder({ 'game.ts': `import { vx } from './helper.ts'\n${game('', 'x: 0, w: 0.1, vx')}`.replace('world.ball.x += 0.01', 'world.ball.x += world.ball.vx'), 'helper.ts': 'export const vx = 2\n' })
   const run = threejam(['sim', ok.dir, '--ticks', '3', '--fields', 'x'])

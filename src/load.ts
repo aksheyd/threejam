@@ -131,19 +131,13 @@ async function bundle(files: GameFiles, driver: string | undefined): Promise<{ c
   return { code: script.text, map: new SourceMap(JSON.parse(map.text)) }
 }
 
-// Keeps the bundle to the engine's own files, the game's folder, and the driver's: a game file imports only from the game's folder, and a driver file from either folder.
+// The import rule fix/harden-server-chrome enforces for the browser bundle, here for the Node bundle: an import may come only from the game's folder, a --driver file's folder, or ThreeJam's own files, with symlinks resolved first.
 function confine({ entry, game, driver }: { entry: string; game: string; driver: string | undefined }): esbuild.Plugin {
   const engine = realpathSync(ENGINE)
   const games = realpathSync(game)
   const drivers = driver === undefined ? undefined : realpathSync(driver)
-  const rule = (importer: string, namespace: string) =>
-    namespace === 'threejam'
-      ? { roots: [engine, games, ...(drivers === undefined ? [] : [drivers])], what: 'game.ts and a driver must be files in their folders, not links to files elsewhere' }
-      : within(games, importer)
-        ? { roots: [games], what: 'a game can import only threejam and files in its folder' }
-        : drivers !== undefined && within(drivers, importer)
-          ? { roots: [drivers, games], what: "a driver can import only threejam and files in its folder or the game's" }
-          : { roots: within(engine, importer) ? [engine] : [], what: "ThreeJam's files import only each other" }
+  const allowed = [games, ...(drivers === undefined ? [] : [drivers]), engine]
+  const sources = `an import must come from the game's folder, ${drivers === undefined ? '' : "a --driver file's folder, "}or ThreeJam's own files`
   return {
     name: 'threejam-confine',
     setup(build) {
@@ -151,17 +145,26 @@ function confine({ entry, game, driver }: { entry: string; game: string; driver:
         if (args.pluginData === RESOLVING) return undefined
         if (args.kind === 'entry-point') return { path: 'entry', namespace: 'threejam' }
         if (args.path === NAME) return { path: engineFile('index') }
-        const { roots, what } = rule(args.importer, args.namespace)
-        if (!/^(\.{1,2}([\\/]|$)|[\\/]|[A-Za-z]:[\\/])/.test(args.path)) return { errors: [{ text: `${args.path} isn't a file in the folder; ${what}` }] }
         const found = await build.resolve(args.path, { kind: args.kind, importer: args.importer, namespace: args.namespace, resolveDir: args.resolveDir, pluginData: RESOLVING })
         if (found.errors.length > 0) return { errors: found.errors }
-        if (found.namespace !== 'file' || found.external || !roots.some((root) => within(root, found.path))) {
-          return { errors: [{ text: `${args.path} is outside the folder; ${what}` }] }
+        // The engine's files, like Three's internals in the browser build, are trusted by their importer, so the engine can reach its own dependencies.
+        if (args.namespace === 'file' && within(engine, real(args.importer))) return { path: found.path }
+        if (found.namespace !== 'file' || found.external || !allowed.some((root) => within(root, real(found.path)))) {
+          return { errors: [{ text: `${args.path} is outside the folder; ${sources}` }] }
         }
         return { path: found.path }
       })
       build.onLoad({ filter: /.*/, namespace: 'threejam' }, () => ({ contents: entry, loader: 'ts', resolveDir: ROOT }))
     },
+  }
+}
+
+// The real path of a file, with symlinks resolved; an unresolvable path is compared as it is.
+function real(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    return path
   }
 }
 
@@ -406,10 +409,10 @@ export function typecheck({ file, dom }: { file: string; dom: boolean }): string
       other.push(line)
     }
   }
-  // Type errors can quote what a file holds, so a game that reaches past its folder, the engine's types, and packages like TypeScript's and Three.js's hears only that.
-  const roots = [folder, realpathSync(folder), ENGINE, realpathSync(ENGINE)]
-  const stray = read.find((path) => !roots.some((root) => within(root, path)) && !path.split(sep).includes('node_modules'))
-  if (stray !== undefined) throw new UsageError(`${shownPath(stray)} is outside the game's folder; a game can import only threejam and files in its folder`)
+  // Type errors can quote what a file holds, so a game that imports past its folder, the engine's types, and packages like TypeScript's and Three.js's fails the check instead of leaking them.
+  const roots = [real(folder), real(ENGINE)]
+  const stray = read.find((path) => !roots.some((root) => within(root, real(path))) && !path.split(sep).includes('node_modules'))
+  if (stray !== undefined) throw new UsageError(`${shownPath(stray)} is outside the folder; an import must come from the game's folder or ThreeJam's own files`)
   if (result.status !== 0 && !/error TS\d+/.test(result.stdout)) {
     errors.push(`the TypeScript check failed: ${`${other.join('\n')}${result.stderr}`.trim() || `exit ${result.status}`}`)
   }
