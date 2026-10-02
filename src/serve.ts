@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process'
-import { randomInt } from 'node:crypto'
+import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
-import { createServer, type ServerResponse } from 'node:http'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, join, resolve } from 'node:path'
 import * as esbuild from 'esbuild'
@@ -149,10 +149,30 @@ export interface Server {
   close(): void
 }
 
-export function serve({ page, onQuit = () => {} }: { page: Page; onQuit?: () => void }): Promise<Server> {
+// Every response: never cached or read as another type, and never loaded into a page from another origin.
+const HEADERS = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin' }
+// No page may frame the game or its files, and an image or sound opened as a page runs and loads nothing.
+const PAGE_POLICY = "frame-ancestors 'none'"
+const ASSET_POLICY = "sandbox; default-src 'none'; frame-ancestors 'none'"
+
+// The server answers only the page itself, and /events and /quit only with the token that run gives its page; without one, as for shot, it refuses them.
+export function serve({ page, token, onQuit = () => {} }: { page: Page; token?: string; onQuit?: () => void }): Promise<Server> {
   const listeners = new Set<ServerResponse>()
+  const secret = token === undefined ? undefined : Buffer.from(token)
+  const granted = (given: string | null) => {
+    const offered = Buffer.from(given ?? '')
+    return secret !== undefined && offered.length === secret.length && timingSafeEqual(offered, secret)
+  }
+  let hosts: readonly string[] = []
   const server = createServer((request, response) => {
-    const path = (request.url ?? '/').split('?')[0]
+    const target = request.url ?? '/'
+    const mark = target.indexOf('?')
+    const path = mark < 0 ? target : target.slice(0, mark)
+    const query = new URLSearchParams(mark < 0 ? '' : target.slice(mark + 1))
+    if (!fromPage(request, hosts) || ((path === '/quit' || path === '/events') && !granted(query.get('token')))) {
+      response.writeHead(403, HEADERS).end()
+      return
+    }
     if (request.method === 'POST' && path === '/quit') {
       response.end()
       onQuit()
@@ -165,12 +185,14 @@ export function serve({ page, onQuit = () => {} }: { page: Page; onQuit?: () => 
         response.writeHead(404).end()
         return
       }
-      response.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' })
+      // An SVG can hold script, so opening one downloads it instead.
+      const download = type === 'image/svg+xml' ? { 'content-disposition': 'attachment' } : {}
+      response.writeHead(200, { ...HEADERS, 'content-type': type, 'content-security-policy': ASSET_POLICY, ...download })
       response.end(readFileSync(join(page.folder, name)))
       return
     }
     if (path === '/events') {
-      response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' })
+      response.writeHead(200, { ...HEADERS, 'content-type': 'text/event-stream' })
       response.write(':\n\n')
       listeners.add(response)
       request.on('close', () => listeners.delete(response))
@@ -185,8 +207,8 @@ export function serve({ page, onQuit = () => {} }: { page: Page; onQuit?: () => 
       response.writeHead(404).end()
       return
     }
-    const type = name.endsWith('.js') ? 'text/javascript' : 'text/html'
-    response.writeHead(200, { 'content-type': `${type}; charset=utf-8`, 'cache-control': 'no-store' })
+    const headers = name === 'bundle.js' ? { 'content-type': 'text/javascript; charset=utf-8' } : { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': PAGE_POLICY }
+    response.writeHead(200, { ...HEADERS, ...headers })
     response.end(readFileSync(join(page.outdir, name)))
   })
   return new Promise((ready, fail) => {
@@ -196,6 +218,7 @@ export function serve({ page, onQuit = () => {} }: { page: Page; onQuit?: () => 
         fail(new Error(`the page server has no port: ${String(address)}`))
         return
       }
+      hosts = [`127.0.0.1:${address.port}`, `localhost:${address.port}`]
       ready({
         url: `http://127.0.0.1:${address.port}/`,
         reload() {
@@ -208,6 +231,18 @@ export function serve({ page, onQuit = () => {} }: { page: Page; onQuit?: () => 
       })
     })
   })
+}
+
+// Host stops DNS rebinding, and Origin and Sec-Fetch-Site stop every other page, even one on another port or opened from a file.
+function fromPage({ headers }: IncomingMessage, hosts: readonly string[]): boolean {
+  const { host, origin } = headers
+  const site = headers['sec-fetch-site']
+  return (
+    host !== undefined &&
+    hosts.includes(host) &&
+    (origin === undefined || origin === `http://${host}`) &&
+    (site === undefined || site === 'same-origin' || site === 'none')
+  )
 }
 
 function decodedName(encoded: string): string | undefined {
@@ -304,12 +339,14 @@ export async function* play({ dir, seed = randomInt(2 ** 31), window }: { dir: s
   let quit = () => {}
   const done = new Promise<void>((resolve) => (quit = resolve))
   let server: Server | undefined
+  // The page sends it with /events and /quit, so no other page can follow its reloads or end the session.
+  const token = randomBytes(32).toString('base64url')
   const page = await buildPage({
     dir,
-    config: { mode: 'run', seed },
+    config: { mode: 'run', seed, token },
     onRebuild: (errors) => (errors.length > 0 ? void process.stderr.write(`${errors.join('\n')}\n`) : server?.reload()),
   })
-  server = await serve({ page, onQuit: () => quit() })
+  server = await serve({ page, token, onQuit: () => quit() })
   const app = window ? openWindow(server.url) : undefined
   void app?.exited.then(() => quit())
   process.once('SIGINT', () => quit())

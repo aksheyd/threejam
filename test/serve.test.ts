@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:http'
+import { createServer, request, type IncomingHttpHeaders } from 'node:http'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { ROOT } from '../src/package.ts'
-import { NO_DEVTOOLS_PORT, findChrome, openWindow } from '../src/serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, findChrome, openWindow, serve } from '../src/serve.ts'
 import { launchChrome } from '../src/shot.ts'
 
 const chrome = findChrome()
@@ -15,12 +15,158 @@ mkdirSync(TMP, { recursive: true })
 const made: string[] = []
 after(() => made.forEach((dir) => rmSync(dir, { recursive: true, force: true })))
 
+function folder(files: Record<string, string | Buffer>): string {
+  const dir = mkdtempSync(join(TMP, 'serve-'))
+  made.push(dir)
+  for (const [name, contents] of Object.entries(files)) writeFileSync(join(dir, name), contents)
+  return dir
+}
+
+const GAME = "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n"
+// A 2x2 image: red and green on top, blue and white below.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwHwyBNBgAAEnICff5q7YNAAAAAElFTkSuQmCC', 'base64')
+
 // Fails after 10 s, naming what it waited for, so a page that never gets there fails the test instead of hanging it.
 async function until(what: string, check: () => boolean): Promise<void> {
   for (const deadline = Date.now() + 10_000; !check(); await new Promise((wait) => setTimeout(wait, 20))) {
     if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}`)
   }
 }
+
+// The status and headers of one request, with the headers a browser would send, including ones fetch won't let a caller set, like Host.
+function call(url: string, { method = 'GET', headers = {} }: { method?: string; headers?: Record<string, string> } = {}): Promise<{ status: number; headers: IncomingHttpHeaders }> {
+  return new Promise((done, fail) => {
+    const sent = request(url, { method, headers }, (response) => {
+      done({ status: response.statusCode ?? 0, headers: response.headers })
+      response.destroy()
+    })
+    sent.on('error', fail)
+    sent.end()
+  })
+}
+
+test('the run server answers only its own page, and /quit and /events only with the session token, whatever another page or host sends', async () => {
+  const token = 'session-token'
+  const page = await buildPage({ dir: folder({ 'game.ts': GAME }), config: { mode: 'run', seed: 0, token } })
+  let quits = 0
+  const server = await serve({ page, token, onQuit: () => (quits += 1) })
+  try {
+    const { host, port } = new URL(server.url)
+    const status = async (path: string, headers: Record<string, string> = {}, method = 'GET') => (await call(new URL(path, server.url).href, { method, headers })).status
+    const quit = `/quit?token=${token}`
+    assert.deepEqual(
+      {
+        noToken: await status('/quit', {}, 'POST'),
+        wrongToken: await status('/quit?token=session-tokem', {}, 'POST'),
+        otherPort: await status(quit, { origin: 'http://127.0.0.1:8765' }, 'POST'),
+        website: await status(quit, { origin: 'https://evil.example' }, 'POST'),
+        file: await status(quit, { origin: 'null' }, 'POST'),
+        rebound: await status(quit, { host: `evil.example:${port}` }, 'POST'),
+        events: await status('/events'),
+        includedScript: await status('/bundle.js', { 'sec-fetch-site': 'same-site' }),
+      },
+      { noToken: 403, wrongToken: 403, otherPort: 403, website: 403, file: 403, rebound: 403, events: 403, includedScript: 403 },
+    )
+    assert.equal(quits, 0)
+    assert.equal(await status(`/events?token=${token}`, { 'sec-fetch-site': 'same-origin' }), 200)
+    assert.equal(await status(quit, { origin: `http://${host}`, 'sec-fetch-site': 'same-origin' }, 'POST'), 200)
+    assert.equal(quits, 1)
+  } finally {
+    server.close()
+    await page.dispose()
+  }
+})
+
+test('no page may frame the game, and its images, SVGs above all, run nothing when opened, and an SVG downloads instead', async () => {
+  const page = await buildPage({ dir: folder({ 'game.ts': GAME, 'tile.png': PNG, 'evil.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>' }), config: { mode: 'shot' } })
+  const server = await serve({ page })
+  try {
+    const headers = async (path: string) => {
+      const { status, headers } = await call(new URL(path, server.url).href)
+      return [status, headers['content-security-policy'], headers['x-content-type-options'], headers['content-disposition']]
+    }
+    const asset = "sandbox; default-src 'none'; frame-ancestors 'none'"
+    assert.deepEqual(
+      [await headers('/'), await headers('/assets/tile.png'), await headers('/assets/evil.svg')],
+      [
+        [200, "frame-ancestors 'none'", 'nosniff', undefined],
+        [200, asset, 'nosniff', undefined],
+        [200, asset, 'nosniff', 'attachment'],
+      ],
+    )
+  } finally {
+    server.close()
+    await page.dispose()
+  }
+})
+
+const HOSTILE = (game: string) => `<!doctype html><body><script>
+const report = (what) => fetch('/report?' + what)
+addEventListener('message', () => report('svg-message'))
+const frame = document.createElement('iframe')
+frame.onload = () => report('framed')
+frame.src = '${game}assets/evil.svg'
+document.body.append(frame)
+fetch('${game}quit', { method: 'POST', mode: 'no-cors' }).then(() => report('posted'), () => report('posted'))
+</script></body>`
+
+test('another page on this machine, or a file, can neither end a run nor run script from its SVG, while the game page follows reloads and quits with Esc', { skip: !chrome && 'needs Chrome', timeout: 60_000 }, async () => {
+  const reports: string[] = []
+  let game = ''
+  const hostile = createServer((incoming, response) => {
+    if (incoming.url?.startsWith('/report?')) {
+      reports.push(incoming.url.slice('/report?'.length))
+      response.writeHead(204).end()
+      return
+    }
+    response.writeHead(200, { 'content-type': 'text/html' }).end(HOSTILE(game))
+  })
+  await new Promise<void>((ready) => hostile.listen(0, '127.0.0.1', ready))
+  const address = hostile.address()
+  if (address === null || typeof address === 'string') throw new Error('the hostile server has no port')
+  const attacker = `http://127.0.0.1:${address.port}/`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#fff"/><script>document.title = 'ran'; parent.postMessage('ran', '*'); fetch('${attacker}report?svg-ran', { mode: 'no-cors' })</script></svg>`
+  const dir = folder({ 'game.ts': GAME, 'evil.svg': svg, 'tile.png': PNG })
+  const token = 'session-token'
+  const page = await buildPage({ dir, config: { mode: 'run', seed: 0, token } })
+  let quits = 0
+  const server = await serve({ page, token, onQuit: () => (quits += 1) })
+  game = server.url
+  const file = join(dir, 'hostile.html')
+  writeFileSync(file, `<script>const done = () => fetch('${attacker}report?file-posted', { mode: 'no-cors' }); fetch('${game}quit', { method: 'POST', mode: 'no-cors' }).then(done, done)</script>`)
+  const browser = await launchChrome(chrome ?? 'no Chrome', { protocolTimeout: 60_000 })
+  try {
+    const tab = await browser.newPage()
+    await tab.goto(attacker)
+    await until('the attacking page to post /quit', () => reports.includes('posted'))
+    assert.equal(quits, 0, 'a page on another port ended the session')
+    await until('the attacking page to frame the SVG', () => reports.includes('framed'))
+    await tab.goto(pathToFileURL(file).href)
+    await until('the file to post /quit', () => reports.includes('file-posted'))
+    assert.equal(quits, 0, 'a file ended the session')
+    const session = await tab.createCDPSession()
+    await session.send('Browser.setDownloadBehavior', { behavior: 'deny' })
+    await tab.goto(`${game}assets/evil.svg`).catch(() => {})
+    assert.deepEqual({ reports: reports.filter((what) => what.startsWith('svg')), title: await tab.title() }, { reports: [], title: '' })
+
+    const player = await browser.newPage()
+    let listening = false
+    player.on('response', (response) => void (response.url().includes('/events?') && response.status() === 200 && (listening = true)))
+    await player.goto(game)
+    await until('the game page to listen for reloads', () => listening)
+    const reloaded = player.waitForNavigation()
+    server.reload()
+    await reloaded
+    await player.waitForFunction('window.engine !== undefined')
+    await player.keyboard.press('Escape')
+    await until('Esc to end the session', () => quits === 1)
+  } finally {
+    await browser.close()
+    server.close()
+    hostile.close()
+    await page.dispose()
+  }
+})
 
 test('when Chrome fails to start, shot closes its server and esbuild and removes its temporary folder', () => {
   const temp = mkdtempSync(join(TMP, 'temp-'))

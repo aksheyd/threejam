@@ -5,11 +5,11 @@ import { loadImages, parseAssets } from './assets.ts'
 import { Speaker } from './sound.ts'
 import { View, parseView } from './view.ts'
 
-// run is served by threejam run, shot by threejam shot, and export is one file opened from disk, with no server behind it.
-export interface Config {
-  readonly mode: 'run' | 'shot' | 'export'
-  readonly seed?: number
-}
+// run is served by threejam run, whose server takes the token with /events and /quit, shot by threejam shot, and export is one file opened from disk, with no server behind it.
+export type Config =
+  | { readonly mode: 'run'; readonly seed: number; readonly token: string }
+  | { readonly mode: 'shot' }
+  | { readonly mode: 'export'; readonly seed?: number }
 
 export interface ResetOptions {
   readonly seed?: number
@@ -61,7 +61,7 @@ export async function play(page: { game: unknown; view: unknown; driver: unknown
   if (!canvas) throw new Error('the page needs a <canvas>')
   if (game.title) document.title = game.title
   const reloads = config.mode === 'run'
-  if (reloads) new EventSource('/events').onmessage = () => location.reload()
+  if (config.mode === 'run') new EventSource(`/events?token=${encodeURIComponent(config.token)}`).onmessage = () => location.reload()
   // Every image is ready before the first frame, so no frame shows one half loaded.
   const images = await loadImages(assets).catch((error: unknown) => {
     const fix = reloads ? '\n\nFix the file and save; the page reloads.' : ''
@@ -70,7 +70,7 @@ export async function play(page: { game: unknown; view: unknown; driver: unknown
   })
   const view = new View({ canvas, game, custom: parseView(page.view), images })
   const speaker = config.mode === 'shot' ? undefined : new Speaker(assets)
-  const seed = config.seed ?? (config.mode === 'export' ? Math.floor(Math.random() * 2 ** 31) : 0)
+  const seed = config.mode === 'shot' ? 0 : (config.seed ?? Math.floor(Math.random() * 2 ** 31))
   const down = new Set<Key>()
   // A tap shorter than a tick still counts as held for one tick.
   const tapped = new Set<Key>()
@@ -175,7 +175,7 @@ export async function play(page: { game: unknown; view: unknown; driver: unknown
     speaker?.unlock()
     if (event.code === 'Escape' && config.mode === 'run') {
       stopped = true
-      fetch('/quit', { method: 'POST' }).catch(() => {})
+      fetch(`/quit?token=${encodeURIComponent(config.token)}`, { method: 'POST' }).catch(() => {})
       notice('Session ended.')
       window.close()
       return
@@ -258,8 +258,19 @@ function inputSource(options: ResetOptions, drive: Drive | undefined): Source {
 function parseConfig(value: unknown): Config {
   if (typeof value !== 'object' || value === null || !('mode' in value)) throw new Error('the page has no ThreeJam config')
   const seed = 'seed' in value && typeof value.seed === 'number' ? value.seed : undefined
-  if (value.mode === 'run' || value.mode === 'shot' || value.mode === 'export') return { mode: value.mode, seed }
-  throw new Error(`unknown page mode ${String(value.mode)}`)
+  switch (value.mode) {
+    case 'run': {
+      const token = 'token' in value && typeof value.token === 'string' ? value.token : undefined
+      if (seed === undefined || token === undefined) throw new Error('the run page has no seed or token')
+      return { mode: 'run', seed, token }
+    }
+    case 'shot':
+      return { mode: 'shot' }
+    case 'export':
+      return { mode: 'export', seed }
+    default:
+      throw new Error(`unknown page mode ${String(value.mode)}`)
+  }
 }
 
 function parseDrive(value: unknown): Drive | undefined {
