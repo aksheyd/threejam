@@ -451,7 +451,7 @@ test('audit 48: shot repeats a frame byte for byte on one machine, images and te
   }
 })
 
-test("a run page whose game or view.ts fails as it loads says why on the page instead of staying blank", { skip: !chrome && 'needs Chrome' }, async () => {
+test("a run page whose game or view.ts fails as it loads says why on the page, instead of staying blank, and still reloads when a fix is saved", { skip: !chrome && 'needs Chrome' }, async () => {
   const game = "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n"
   const cases: ReadonlyArray<readonly [Record<string, string>, string]> = [
     [{ 'game.ts': game, 'view.ts': 'export const init = 5\n' }, 'view.ts: init must be a function'],
@@ -469,10 +469,12 @@ test("a run page whose game or view.ts fails as it loads says why on the page in
       const server = await serve({ page, token })
       try {
         const tab = await browser.newPage()
+        const listening = tab.waitForResponse((response) => response.url().includes('/events?'))
         await openPage(tab, server.url)
         await tab.waitForSelector('pre')
         const shown = await tab.$eval('pre', (box) => box.textContent ?? '')
         assert.ok(shown.startsWith(reason) && shown.endsWith('\n\nFix the game and save; the page reloads.'), shown)
+        assert.equal((await listening).status(), 200, `the page ${reason} doesn't listen for reloads`)
       } finally {
         server.close()
         await page.dispose()
