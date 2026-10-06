@@ -10,7 +10,7 @@
 | [Tetris](../games/tetris) | Space starts; Left and Right move the piece, Up rotates it, and Down drops it faster. | A [driver](../games/tetris/plan.ts) that plays seed 0's first seven pieces into two cleared rows |
 | [Asteroids](../games/asteroids) | Space or a click starts; Left and Right (or A and D) turn, Up (or W) thrusts, and Space fires. Or hold the mouse to aim at the pointer and fire, and the right button to thrust. | SVG rocks that spin and split, bullets and rocks pooled with `spawn`, a ship of turned parts, sounds, and a [driver](../games/asteroids/autopilot.ts) that plays with the mouse |
 
-In a clone of this repo, play any of them with `npx threejam run games/<name>`. The frames at the top of the [README](../README.md) come from `shot`, three of them played by those drivers:
+Keys are places on the keyboard, named for what a US keyboard has there, so on a French AZERTY keyboard W, A, S, and D are the keys marked Z, Q, S, and D. In a clone of this repo, play any of them with `npx threejam run games/<name>`. The frames at the top of the [README](../README.md) come from `shot`, three of them played by those drivers:
 
 ```bash
 npx threejam shot games/asteroids --driver games/asteroids/autopilot.ts --at 420 -o docs/images/asteroids.png

@@ -116,7 +116,7 @@ export default defineGame({
 `ctx` gives `start` and `update` everything they may use, and it's read-only, so assigning to it, as in `ctx.dt = 1`, is an error:
 
 - `ctx.tick` is 1 on the first update, and `ctx.dt` is always 1/60.
-- `ctx.input.held(key)`, `ctx.input.pressed(key)` for the first tick a key is down, and `ctx.input.released(key)` for the first tick it's up. Keys are A-Z, 0-9, Space, Enter, Tab, Backspace, Shift, Ctrl, Alt, Up, Down, Left, and Right, plus `Mouse` and `MouseRight` for the mouse buttons, and a misspelled name fails `check`.
+- `ctx.input.held(key)`, `ctx.input.pressed(key)` for the first tick a key is down, and `ctx.input.released(key)` for the first tick it's up. Keys are A-Z, 0-9, Space, Enter, Tab, Backspace, Shift, Ctrl, Alt, Up, Down, Left, and Right, plus `Mouse` and `MouseRight` for the mouse buttons, and a misspelled name fails `check`. Each key is a place on the keyboard, named for what a US keyboard has there, so on a French AZERTY keyboard a game's W, A, S, and D are the keys marked Z, Q, S, and D.
 - `ctx.input.pointer` is where the mouse points, as `{ x, y }` in world units, read-only and the same for the whole tick. It starts at (0, 0), moves only when the mouse does, and stays on the screen: past an edge it's at that edge, and when the mouse leaves the window it keeps its last place.
 - `ctx.random()` returns a seeded number from 0 up to 1.
 - `ctx.print(...values)` adds `{ tick, text }` to `sim`'s `log`.
