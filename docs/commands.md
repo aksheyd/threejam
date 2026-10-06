@@ -48,7 +48,8 @@ Output is [TOON](https://toonformat.dev) by default, `--format json` switches it
 | `BUILD_ERROR` | The game's files couldn't be bundled: a syntax error, or an import that doesn't resolve or comes from outside the folder |
 | `TYPE_ERROR` | `check` found type errors |
 | `GAME_ERROR` | The game's or driver's code threw or broke an engine rule, in the sandbox or in the page, or ran out of memory |
-| `TIMEOUT`, `OUTPUT_TOO_LARGE` | A run passed one of the sandbox's limits |
+| `TIMEOUT` | The game's code, its page in `shot`, or the type check ran past `--timeout` |
+| `OUTPUT_TOO_LARGE` | A run printed more than its reply can hold |
 | `BROWSER_ERROR` | Chrome is missing, didn't start, or failed while drawing |
 | `IO_ERROR` | A file or folder couldn't be read, made, or written |
 | `INTERNAL_ERROR` | ThreeJam itself failed, which is a bug to report |
