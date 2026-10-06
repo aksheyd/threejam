@@ -827,3 +827,39 @@ test('sim ends quietly when its reader closes the pipe', async (t) => {
   const code = await new Promise((resolve) => child.on('close', resolve))
   assert.deepEqual({ code, errors }, { code: 0, errors: '' })
 })
+
+// A Node option that fails a write to stdout with code, once there are as many listeners for that as ThreeJam adds: one in a command, two in the MCP server, whose SDK adds its own.
+function failingStdout(code: string, listeners: number): string {
+  const dir = mkdtempSync(join(TMP, 'stdout-'))
+  made.push(dir)
+  const file = join(dir, 'fail.mjs')
+  const error = `Object.assign(new Error('write ${code}'), { code: '${code}', syscall: 'write' })`
+  writeFileSync(file, `const fail = () => process.stdout.listenerCount('error') < ${listeners} ? setImmediate(fail) : process.stdout.emit('error', ${error})\nsetImmediate(fail)\n`)
+  return `--import=${pathToFileURL(file).href}`
+}
+
+test('a command and the MCP server end quietly when stdout fails as it does once its reader has closed the pipe, with EPIPE, or with the ENOTCONN macOS or the ECONNRESET Linux gives when the reader closes during the write, and still fail on any other write error', async (t) => {
+  // The esbuild that sim starts holds the command's stderr for a moment after the command exits, so its stdout and how it ended tell what happened.
+  const command = (code: string) => {
+    const env = { ...process.env, NODE_OPTIONS: failingStdout(code, 1) }
+    const result = spawnSync(process.execPath, [CLI, 'sim', 'games/pong', '--ticks', '600', '--every', '1'], { cwd: ROOT, encoding: 'utf8', env, stdio: ['pipe', 'pipe', 'ignore'], timeout: 60_000, killSignal: 'SIGKILL' })
+    return { code: result.status, out: result.stdout }
+  }
+  // The server's stdin stays open, so only the failed write can end it.
+  const server = async (code: string) => {
+    const child = spawnCli(['--mcp'], t.signal, ROOT, { ...process.env, NODE_OPTIONS: failingStdout(code, 2) })
+    let out = ''
+    child.stderr.on('data', (chunk) => (out += chunk))
+    const closed = new Promise((done) => child.once('close', done))
+    return { code: await Promise.race([closed, new Promise((done) => setTimeout(done, 10_000, 'still running').unref())]), out }
+  }
+  const [serverEPIPE, serverENOTCONN, serverECONNRESET, serverEIO] = await Promise.all([server('EPIPE'), server('ENOTCONN'), server('ECONNRESET'), server('EIO')])
+  const quiet = { code: 0, out: '' }
+  assert.deepEqual(
+    { EPIPE: command('EPIPE'), ENOTCONN: command('ENOTCONN'), ECONNRESET: command('ECONNRESET'), serverEPIPE, serverENOTCONN, serverECONNRESET },
+    { EPIPE: quiet, ENOTCONN: quiet, ECONNRESET: quiet, serverEPIPE: quiet, serverENOTCONN: quiet, serverECONNRESET: quiet },
+  )
+  assert.deepEqual(command('EIO'), { code: 1, out: '' })
+  assert.equal(serverEIO.code, 1)
+  assert.match(serverEIO.out, /Error: write EIO/)
+})

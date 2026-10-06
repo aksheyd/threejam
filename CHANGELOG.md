@@ -29,6 +29,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - `check` removes the folder its type check reads when Ctrl-C, SIGTERM, or the SIGHUP of a closed terminal stops it, or stops the MCP server running it, and then ends by that signal as `shot` does: after any `shot` running beside it has cleaned up, and on Windows with 128 plus the signal's number. Before, a `threejam-check-*` folder stayed in the system's temporary folder.
 - An MCP server answers other calls while `check` type-checks a game. Before, every other call waited until the type check finished or ran past `--timeout`.
 - `check` of a game with thousands of type errors fails with `OUTPUT_TOO_LARGE` once the type check prints 1 MB. Before, it failed with `INTERNAL_ERROR`.
+- A command like `sim`, or the MCP server, ends quietly when whatever reads its output closes the pipe during a write, as it does between writes. Before, macOS could report that as `ENOTCONN`, and Linux, when the reader left output unread, as `ECONNRESET`, rather than `EPIPE`, and the command failed with `Error: write ENOTCONN` or `Error: write ECONNRESET`.
 
 ## [0.0.4](https://github.com/aksheyd/threejam/compare/v0.0.3...v0.0.4) - 2026-10-06
 

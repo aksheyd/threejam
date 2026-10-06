@@ -17,8 +17,13 @@ function shutDown(): void {
   exiting ??= endShots(2000).then(() => process.exit(0))
 }
 
+// A write to stdout fails with EPIPE once its reader has closed the pipe. But a parent process gives its child a socket pair as that pipe, and a reader that closes one during a write can fail the write with ENOTCONN on macOS, or on Linux, when the reader left data unread, with ECONNRESET.
+function readerGone(error: Error): boolean {
+  return 'code' in error && (error.code === 'EPIPE' || error.code === 'ENOTCONN' || error.code === 'ECONNRESET')
+}
+
 process.stdout.on('error', (error) => {
-  if ('code' in error && error.code === 'EPIPE') return shutDown()
+  if (readerGone(error)) return shutDown()
   throw error
 })
 
