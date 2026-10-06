@@ -1,6 +1,8 @@
+import { once } from 'node:events'
 import { accessSync, constants, mkdtempSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
+import { finished } from 'node:stream/promises'
 import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { LimitError, gameFailure, isSystemError, timeLimit } from './load.ts'
@@ -147,7 +149,7 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     if (known || isSystemError(error)) throw error
     throw new BrowserError(`Chrome failed while drawing the game: ${firstLine(error)}`)
   } finally {
-    await closeChrome(browser, stuck, killer)
+    await closeChrome(browser, killer, { stuck })
     server?.close()
     await page.dispose()
     if (profile !== undefined) removeProfile(profile)
@@ -160,13 +162,14 @@ export function callLimit(seconds: number): number {
 }
 
 // A page stuck in the game's loop isn't waited on: Chrome is killed then, as when closing takes too long.
-async function closeChrome(browser: Browser | undefined, stuck: boolean, killer: AbortController): Promise<void> {
+export async function closeChrome(browser: Browser | undefined, killer: AbortController, { stuck = false }: { stuck?: boolean } = {}): Promise<void> {
   const chrome = browser?.process()
-  if (browser === undefined || !chrome || chrome.exitCode !== null || chrome.signalCode !== null) return
-  // Every process Chrome starts shares its stdio, so close comes once none is left to write to the profile.
-  const gone = new Promise<void>((done) => chrome.once('close', () => done()))
+  if (browser === undefined || !chrome) return
+  const running = chrome.exitCode === null && chrome.signalCode === null
+  // On macOS and Linux every process Chrome starts shares its output, which ends once none is left to write to the profile, even after Chrome itself has crashed; on Windows its sandboxed helpers don't inherit it.
+  const gone = Promise.allSettled([running && once(chrome, 'exit'), ...[chrome.stdout, chrome.stderr].map((output) => output && finished(output))])
   // Aborting has Puppeteer kill Chrome's process group, or its process tree on Windows; on Linux that leaves only Chrome's crash handlers, which exit once Chrome is gone.
-  if (stuck || !(await within(10_000, browser.close().catch(() => {})))) killer.abort()
+  if (running && (stuck || !(await within(10_000, browser.close().catch(() => {}))))) killer.abort()
   await within(10_000, gone)
 }
 

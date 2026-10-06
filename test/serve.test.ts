@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { once } from 'node:events'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, request, type IncomingHttpHeaders } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -8,8 +9,8 @@ import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { exportGame } from '../src/export.ts'
 import { ROOT } from '../src/package.ts'
-import { NO_DEVTOOLS_PORT, buildPage, openWindow, serve } from '../src/serve.ts'
-import { launchChrome, openPage } from '../src/shot.ts'
+import { NO_DEVTOOLS_PORT, buildPage, openWindow, removeProfile, serve } from '../src/serve.ts'
+import { closeChrome, launchChrome, openPage } from '../src/shot.ts'
 import { CHROME as chrome, testChrome } from './chrome.ts'
 import { spawnCli } from './children.ts'
 
@@ -312,6 +313,34 @@ test("a Chrome that shot kills for a page that never returns leaves nothing in t
   const left = readdirSync(temp).filter((name) => process.platform !== 'win32' || !name.startsWith('threejam-chrome-'))
   const printed = 'TIMEOUT: the page ran past the 2 s time limit as it loaded; look for a loop that never ends in view.ts, or allow more time with --timeout'
   assert.deepEqual({ status: result.status, printed: result.stdout.trim(), left }, { status: 0, printed, left: [] }, result.stderr)
+})
+
+test('closing a Chrome that crashed waits for the processes it started, which outlive it a moment and can still write to its profile', { skip: !chrome && 'needs Chrome', timeout: 60_000 }, async () => {
+  const profile = folder({})
+  const killer = new AbortController()
+  const browser = await launchChrome(chrome ?? 'no Chrome', { profile, signal: killer.signal })
+  const crashed = browser.process()
+  try {
+    if (!crashed?.pid) throw new Error('Chrome has no process')
+    await browser.newPage()
+    const exited = once(crashed, 'exit')
+    const closed = once(crashed, 'close')
+    // Chrome's own process alone, as when it crashes.
+    process.kill(crashed.pid, 'SIGKILL')
+    await exited
+    await closeChrome(browser, killer)
+    // On macOS and Linux every process Chrome starts shares its output, which ends once all of them have exited.
+    assert.deepEqual([crashed.stdout?.readableEnded, crashed.stderr?.readableEnded], [true, true])
+    // Once Chrome's close event has come, closing it again returns at once, where waiting for that event would wait out its 10 s.
+    await closed
+    const started = Date.now()
+    await closeChrome(browser, killer)
+    const took = Date.now() - started
+    assert.ok(took < 1000, `closing again took ${took} ms`)
+  } finally {
+    killer.abort()
+    removeProfile(profile)
+  }
 })
 
 // The system's temporary folder can hold a 50-byte TMPDIR, of threejam- and mkdtemp's 6 characters at the least.
