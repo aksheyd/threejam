@@ -320,7 +320,7 @@ const cli = Cli.create('threejam', {
         const { press, hold, pointer, driver, set, seed, timeout, out } = c.options
         framePaths(out, at)
         await runGame(c.args.dir, { ticks: Math.max(...at), press, hold, pointer, driver, set, seed, clip: true, timeout })
-        return { files: await shoot({ dir: c.args.dir, at, out, press, hold, pointer, driver, set, seed }) }
+        return { files: await shoot({ dir: c.args.dir, at, out, press, hold, pointer, driver, set, seed, timeout }) }
       } catch (error) {
         return c.error(failure(error))
       }

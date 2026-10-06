@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { dirname, extname, sep } from 'node:path'
 import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
-import { LimitError, gameFailure, isSystemError } from './load.ts'
+import { DEFAULT_TIMEOUT, LimitError, gameFailure, isSystemError } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
 import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, serve, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
@@ -17,6 +17,8 @@ export interface ShotOptions {
   readonly pointer?: readonly string[]
   readonly driver?: string
   readonly set?: readonly string[]
+  // Seconds the page may spend running the game and its view.ts, DEFAULT_TIMEOUT unless given.
+  readonly timeout?: number
 }
 
 export function parseTicks(text: string): number[] {
@@ -76,13 +78,14 @@ export async function launchChrome(chrome: string, { protocolTimeout }: { protoc
   }
 }
 
-export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, set }: ShotOptions): Promise<string[]> {
+export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, set, timeout = DEFAULT_TIMEOUT }: ShotOptions): Promise<string[]> {
   const paths = framePaths(out, at)
   const chrome = findChrome()
   if (!chrome) throw new BrowserError('shot needs Chrome or Chromium, or Edge on Windows; set CHROME_PATH to its executable')
   const page = await buildPage({ dir, config: { mode: 'shot' }, driver })
   let server: Server | undefined
   let browser: Browser | undefined
+  let stuck = false
   try {
     const { PuppeteerError } = await import('puppeteer-core')
     server = await serve({ page })
@@ -91,20 +94,33 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const crashed = pageFailure(tab)
     const until = <T>(work: Promise<T>) => Promise.race([work, crashed])
-    // The page runs the game's start, update, and view.ts here, so what they throw is the game's, while Puppeteer's own errors mean Chrome failed.
-    const inPage = <T>(work: Promise<T>) =>
-      until(
-        work.catch((error: unknown) => {
-          throw error instanceof PuppeteerError ? error : gameFailure(firstLine(error))
-        }),
-      )
     await until(openPage(tab, server.url))
     await until(tab.waitForFunction('window.engine !== undefined', { timeout: 15000 }))
+    // The page runs the game's start, update, and view.ts here, within one time limit for them all, and what they throw is the game's, while Puppeteer's own errors mean Chrome failed.
+    const deadline = Date.now() + timeout * 1000
+    const inPage = async <T>(tick: number, work: Promise<T>): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const late = new Promise<never>((_, reject) => {
+        const message = `the page ran past the ${timeout} s time limit drawing tick ${tick}; look for a loop that never ends in view.ts, or allow more time with --timeout`
+        timer = setTimeout(() => {
+          stuck = true
+          reject(new LimitError('TIMEOUT', message))
+        }, Math.max(0, deadline - Date.now()))
+      })
+      const ran = work.catch((error: unknown) => {
+        throw error instanceof PuppeteerError ? error : gameFailure(firstLine(error))
+      })
+      try {
+        return await until(Promise.race([ran, late]))
+      } finally {
+        clearTimeout(timer)
+      }
+    }
     const reset: ResetOptions = { seed: seed ?? 0, ticks: Math.max(...at), press, hold, pointer, set, drive: driver !== undefined }
-    await inPage(tab.evaluate((options) => window.engine.reset(options), reset))
+    await inPage(0, tab.evaluate((options) => window.engine.reset(options), reset))
     for (const path of paths) makeFolder(dirname(path))
     for (const [i, tick] of at.entries()) {
-      await inPage(tab.evaluate((t) => window.engine.advanceTo(t), tick))
+      await inPage(tick, tab.evaluate((t) => window.engine.advanceTo(t), tick))
       saveFile(paths[i], await tab.screenshot({ type: 'png', clip: { x: 0, y: 0, width: 800, height: 600 } }))
     }
     return paths
@@ -113,10 +129,23 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     if (known || isSystemError(error)) throw error
     throw new BrowserError(`Chrome failed while drawing the game: ${firstLine(error)}`)
   } finally {
-    await browser?.close()
+    await closeChrome(browser, stuck)
     server?.close()
     await page.dispose()
   }
+}
+
+// Chrome can't close a tab whose page is stuck in the game's loop, so then, or when closing takes too long, it's killed instead.
+async function closeChrome(browser: Browser | undefined, stuck: boolean): Promise<void> {
+  if (browser === undefined) return
+  if (!stuck) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const waited = new Promise<false>((done) => (timer = setTimeout(() => done(false), 10_000)))
+    const closed = await Promise.race([browser.close().then(() => true, () => true), waited])
+    clearTimeout(timer)
+    if (closed) return
+  }
+  browser.process()?.kill('SIGKILL')
 }
 
 // Puppeteer puts the page's stack, with the page server's address, in an error's message after its first line.
