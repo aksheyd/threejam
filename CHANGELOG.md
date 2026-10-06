@@ -9,6 +9,10 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - `AGENTS.md` says that keys are places on the keyboard, so a game's W, A, S, and D are the keys marked Z, Q, S, and D on a French AZERTY keyboard.
 - `AGENTS.md` and the commands guide name `run --serve-only`, which serves the page without opening a window, and `--out`, the long form of `-o`.
 
+### Fixed
+
+- `run` reloads the page only when a save builds. Before, it could also reload once by itself a moment after it started, restarting the game a player had just begun.
+
 ## [0.0.4](https://github.com/aksheyd/threejam/compare/v0.0.3...v0.0.4) - 2026-10-06
 
 The same files and seed now give the same run on every machine, every failure is one line with a code that says what went wrong, and flags are checked before any work starts. From [#2](https://github.com/aksheyd/threejam/pull/2) and [#3](https://github.com/aksheyd/threejam/pull/3).

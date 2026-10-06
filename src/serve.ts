@@ -33,7 +33,8 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
   const page = pageBuild({ files, driver, address: (name) => `assets/${encodeURIComponent(name)}` })
   const outdir = mkdtempSync(join(tmpdir(), 'threejam-'))
   writeFileSync(join(outdir, 'index.html'), html({ title: basename(files.folder), config, script: { kind: 'file', src: '/bundle.js' } }))
-  let watching = false
+  let firstEnded: ((errors: esbuild.Message[]) => void) | undefined
+  const first = new Promise<esbuild.Message[]>((ended) => (firstEnded = ended))
   const context = await esbuild.context({
     ...page,
     outfile: join(outdir, 'bundle.js'),
@@ -44,20 +45,19 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
         name: 'threejam-rebuild',
         setup: (build) =>
           void build.onEnd((result) => {
-            if (watching) onRebuild?.(result.errors.map(formatMessage))
+            if (firstEnded === undefined) onRebuild?.(result.errors.map(formatMessage))
+            else firstEnded(result.errors)
+            firstEnded = undefined
           }),
       },
     ],
   })
-  const result = await context.rebuild().catch((failure: esbuild.BuildFailure) => failure)
-  if (result.errors.length > 0) {
+  // A page that follows saves takes its first build from watch mode, since a build before it would leave watch mode a first build of its own, whose end would read as a save.
+  const errors = onRebuild ? await context.watch().then(() => first) : (await context.rebuild().catch((failure: esbuild.BuildFailure) => failure)).errors
+  if (errors.length > 0) {
     await context.dispose()
     rmSync(outdir, { recursive: true, force: true })
-    throw new BuildError(result.errors.map(formatMessage).join('; '))
-  }
-  if (onRebuild) {
-    watching = true
-    await context.watch()
+    throw new BuildError(errors.map(formatMessage).join('; '))
   }
   return {
     outdir,
