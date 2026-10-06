@@ -341,7 +341,8 @@ export function openWindow(url: string): AppWindow | undefined {
   }
   const profile = mkdtempSync(join(tmpdir(), 'threejam-profile-'))
   const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628', NO_DEVTOOLS_PORT]
-  const child = spawn(chrome, args, { stdio: 'ignore', env: chromeEnv() })
+  // A Chrome that's stopped, as Esc stops this one, leaves its sockets in its temporary folder, so that's in the profile, which goes when Chrome does.
+  const child = spawn(chrome, args, { stdio: 'ignore', env: { ...chromeEnv(), TMPDIR: profile, TMP: profile, TEMP: profile } })
   const exited = new Promise<void>((done) => child.once('exit', () => done()))
   child.once('error', (error) => {
     process.stderr.write(`Couldn't start ${chrome} (${error.message}), so the default browser opens the game.\n`)

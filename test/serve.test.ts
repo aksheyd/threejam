@@ -364,8 +364,9 @@ test("run's window opens no DevTools port even when a wrapper script asks for on
         activePort: profile !== undefined && existsSync(join(profile, 'DevToolsActivePort')),
         wrapperProfile: existsSync(join(dir, 'profile')),
         canary: env.some((line) => line.startsWith('THREEJAM_CANARY=')),
+        temporaryInProfile: env.includes(`TMPDIR=${profile}`),
       },
-      { port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, canary: false },
+      { port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, canary: false, temporaryInProfile: true },
     )
   } finally {
     app?.close()
