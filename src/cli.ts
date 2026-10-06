@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { randomInt } from 'node:crypto'
 import { basename } from 'node:path'
-import { Cli, Errors, z } from 'incur'
+import { Cli, Errors, Formatter, z } from 'incur'
 import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, show, type Code } from './errors.ts'
 import { exportGame, exportPath } from './export.ts'
 import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
 import { createGame } from './new.ts'
-import { VERSION, mcpCommand } from './package.ts'
+import { NAME, VERSION, mcpCommand } from './package.ts'
 import { bundlePage, play } from './serve.ts'
 import { framePaths, parseTicks, shoot } from './shot.ts'
 import type { EntityState, Value } from './types.ts'
@@ -368,6 +368,42 @@ const cli = Cli.create('threejam', {
     },
   })
 
-cli.serve()
+// incur's global flags that take a value, which it reads wherever they stand.
+const VALUED = new Set(['--format', '--filter-output', '--token-limit', '--token-offset'])
+
+// incur's mcp add reads --agent NAME from the command line itself, and skips an --agent with no name, or one written --agent=NAME, so it registers ThreeJam with every agent it finds.
+export function agentRefusal(argv: readonly string[]): string | undefined {
+  const words = argv.filter((word, i) => !VALUED.has(word) && !(i > 0 && VALUED.has(argv[i - 1])))
+  const first = words.findIndex((word) => !word.startsWith('-'))
+  const at = words[first] === NAME ? first + 1 : first
+  if (first === -1 || words[at] !== 'mcp' || words[at + 1] !== 'add') return undefined
+  const rest = words.slice(at + 2)
+  for (const [i, word] of rest.entries()) {
+    if (word.startsWith('--agent=')) {
+      return `write --agent and the agent's name apart, like --agent ${word.slice('--agent='.length) || 'claude-code'}; mcp add reads no other form, and would register ThreeJam with every agent it finds`
+    }
+    const name = rest[i + 1]
+    if (word === '--agent' && (name === undefined || name === '' || name.startsWith('-'))) {
+      return "--agent needs an agent's name, like --agent claude-code; without one, mcp add would register ThreeJam with every agent it finds"
+    }
+  }
+  return undefined
+}
+
+const FORMATS: readonly Formatter.Format[] = ['toon', 'json', 'yaml', 'md', 'jsonl']
+
+function formatIn(argv: readonly string[]): Formatter.Format {
+  if (argv.includes('--json')) return 'json'
+  const at = argv.indexOf('--format')
+  return FORMATS.find((format) => at !== -1 && format === argv[at + 1]) ?? 'toon'
+}
+
+const commandLine = process.argv.slice(2)
+const refused = agentRefusal(commandLine)
+if (refused === undefined) cli.serve()
+else {
+  process.stdout.write(`${Formatter.format({ code: 'USAGE', message: refused }, formatIn(commandLine))}\n`)
+  process.exitCode = 1
+}
 
 export default cli

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
@@ -422,6 +422,28 @@ test('mcp add registers node with this CLI from a clone or an install, and npx f
   assert.equal(command('/home/ada/.npm/_npx/2c3b1a/node_modules/threejam/lib/cli.js'), 'npx -y threejam@1.2.3 --mcp')
   assert.equal(command('C:\\Users\\Ada Byron\\AppData\\Local\\npm-cache\\_npx\\2c3b1a\\node_modules\\threejam\\lib\\cli.js'), 'npx -y threejam@1.2.3 --mcp')
   assert.equal(mcpCommand(), mcpCommand({ cli: CLI, version: VERSION }))
+})
+
+test("mcp add refuses an --agent with no name, which incur would read as every agent, while one with a name reaches incur", () => {
+  const home = mkdtempSync(join(TMP, 'home-'))
+  const bin = mkdtempSync(join(TMP, 'bin-'))
+  made.push(home, bin)
+  // Were the check to fail, PATH has no npx for incur to register through, and Amp's settings would land in this home.
+  const env = { HOME: home, USERPROFILE: home, APPDATA: home, XDG_CONFIG_HOME: home, PATH: bin }
+  const nameless = "--agent needs an agent's name, like --agent claude-code; without one, mcp add would register ThreeJam with every agent it finds"
+  const refused = [
+    [['mcp', 'add', '--agent'], nameless],
+    [['mcp', 'add', '--agent', '', '--no-global'], nameless],
+    [['mcp', 'add', '--agent', '--no-global'], nameless],
+    [['mcp', 'add', '--agent=cursor'], "write --agent and the agent's name apart, like --agent cursor; mcp add reads no other form, and would register ThreeJam with every agent it finds"],
+  ] as const
+  for (const [args, message] of refused) {
+    const { code, out } = threejamWith(env, '--format', 'json', ...args)
+    assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'USAGE', message } }, args.join(' '))
+  }
+  const named = threejamWith(env, 'mcp', 'add', '--agent', 'cursor')
+  assert.match(named.out, /MCP_ADD_FAILED/)
+  assert.deepEqual(readdirSync(home), [])
 })
 
 test('new writes a starter game that passes check and its own test, and only the game files inside a project', () => {
