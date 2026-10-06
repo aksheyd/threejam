@@ -271,6 +271,20 @@ test("a page that follows saves rebuilds once when an image stops being readable
   }
 })
 
+test("a page that follows saves reports a game file it can't read once, not on each of esbuild's polls of it", unreadable, async () => {
+  const dir = folder({ 'game.ts': GAME })
+  const reports: string[][] = []
+  const page = await buildPage({ dir, config: { mode: 'run', seed: 0, token: 'session-token' }, onRebuild: (errors) => reports.push(errors) })
+  try {
+    chmodSync(join(dir, 'game.ts'), 0)
+    await until('the page to rebuild', () => reports.length > 0)
+    await new Promise((wait) => setTimeout(wait, 1000))
+    assert.deepEqual(reports.map((errors) => errors.length > 0), [true])
+  } finally {
+    await page.dispose()
+  }
+})
+
 test('run keeps its page in memory, so even killed while it serves, it leaves nothing in the temporary folder', async (t) => {
   const temp = mkdtempSync(join(TMP, 'temp-'))
   made.push(temp)

@@ -49,10 +49,13 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
         setup: (build) =>
           void build.onEnd((result) => {
             const errors = result.errors.map(formatMessage)
-            if (errors.length === 0 && result.outputFiles) bundle = result.outputFiles[0].contents
-            failure = errors.length === 0 ? undefined : errors.join('\n')
-            if (firstEnded === undefined) onRebuild?.(errors)
-            else firstEnded(result.errors)
+            const why = errors.length === 0 ? undefined : errors.join('\n')
+            // esbuild rebuilds over and over while a file it reads can't be, failing the same way each time, so a repeat isn't reported.
+            const repeated = why !== undefined && why === failure
+            if (why === undefined && result.outputFiles) bundle = result.outputFiles[0].contents
+            failure = why
+            if (firstEnded !== undefined) firstEnded(result.errors)
+            else if (!repeated) onRebuild?.(errors)
             firstEnded = undefined
           }),
       },
