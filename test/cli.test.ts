@@ -22,8 +22,9 @@ function threejam(...args: string[]) {
   return threejamWith({}, ...args)
 }
 
+// spawnSync holds up the test's own timeout, so a run that never ends, like a run that starts serving, is killed here.
 function threejamWith(env: Record<string, string>, ...args: string[]) {
-  const result = spawnSync(process.execPath, [CLI, ...args], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, ...env } })
+  const result = spawnSync(process.execPath, [CLI, ...args], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, ...env }, timeout: 60_000, killSignal: 'SIGKILL' })
   return { code: result.status, out: result.stdout + result.stderr }
 }
 
