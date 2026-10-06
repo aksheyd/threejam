@@ -340,7 +340,9 @@ export function openWindow(url: string): AppWindow | undefined {
   }
   const profile = mkdtempSync(join(tmpdir(), 'threejam-profile-'))
   const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628', NO_DEVTOOLS_PORT]
-  const child = spawn(chrome, args, { stdio: 'ignore', env: chromeEnv() })
+  // Every process Chrome starts shares its stderr, so close comes once none is left to write to the profile.
+  const child = spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'], env: chromeEnv() })
+  child.stderr?.resume()
   const exited = new Promise<void>((done) => child.once('exit', () => done()))
   child.once('error', (error) => {
     process.stderr.write(`Couldn't start ${chrome} (${error.message}), so the default browser opens the game.\n`)
