@@ -8,7 +8,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 | `npx threejam check <dir>` | Type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks that the images entities name are in the folder, then runs `start` and the first tick |
 | `npx threejam sim <dir> --ticks N` | Runs N ticks, 60 to a second, without a window and prints the entities |
 | `npx threejam shot <dir> --at T,T,...` | Saves an 800x600 PNG at each tick, drawn by the same page players see, to the `.png` file `-o` or `--out` names |
-| `npx threejam run <dir>` | Checks that the game starts, then opens it in a window for a person to play, with sound after the first key press or click; Esc quits, and `--serve-only` serves the page and prints its address without opening a window |
+| `npx threejam run <dir>` | Checks that the game starts, then opens it in a window for a person to play, with sound after the first key press or click; Esc quits, `--serve-only` serves the page and prints its address without opening a window, and `--record FILE` saves what the person plays, as a driver that replays it exactly |
 | `npx threejam export <dir> -o <file>.html` | Writes one HTML file that plays the game offline, with its images and sounds inside; `--seed N` fixes the seed, which is otherwise new each time the page loads |
 
 ## Input
@@ -17,7 +17,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 
 - `--press KEY@T[,T...]` presses a key on those ticks, and `--hold KEY[@SPANS]` holds one on every tick or on spans like `30-90,120-`; the mouse buttons are the keys `Mouse` and `MouseRight`.
 - `--pointer X,Y@T` moves the mouse pointer to X,Y in world units on tick T, where it stays until the next move.
-- `--driver FILE` picks the input each tick with code that reads the world, like the Invaders [autopilot](../games/invaders/autopilot.ts), or the Asteroids [one](../games/asteroids/autopilot.ts) that plays with the mouse.
+- `--driver FILE` picks the input each tick with code that reads the world, like the Invaders [autopilot](../games/invaders/autopilot.ts), or the Asteroids [one](../games/asteroids/autopilot.ts) that plays with the mouse. A playtest that `run --record` saved is a driver too, which replays a person's play with the seed `run` printed.
 - `--set NAME.FIELD=VALUE` changes a starting value before `start` runs, like `--set paddle.w=1` for a wider Breakout paddle, and NAME can be a pattern such as `bricks[*]`.
 - `--seed N` picks the random numbers, from any whole number; the default is 0.
 - `--timeout N` caps how many seconds the game's code may run before the command stops it with the `TIMEOUT` code; the default is 30 and the most 86400, a day, and `check`, `shot`, and `export` take it too, `shot` for its page's `view.ts` as well.

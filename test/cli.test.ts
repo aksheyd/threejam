@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { test } from 'node:test'
@@ -9,6 +9,7 @@ import pong from '../games/pong/game.ts'
 import { simulate } from '../src/engine.ts'
 import { crashed, describe } from '../src/load.ts'
 import { ENGINE, ROOT, VERSION, mcpCommand } from '../src/package.ts'
+import { playtestSource } from '../src/playtest.ts'
 import { findChrome } from '../src/serve.ts'
 import { callLimit, framePaths } from '../src/shot.ts'
 import { CLI, mcp, spawnCli } from './children.ts'
@@ -169,6 +170,55 @@ test("run reports a page that doesn't build with its code instead of a bare erro
   const { code, out } = threejam('run', dir, '--serve-only')
   assert.equal(code, 1, out)
   assert.match(out, /^Error \(BUILD_ERROR\): test\/\.tmp\/game-\w+\/view\.ts:2: [^\n]+\n$/)
+})
+
+// A game that can't start, so a check of --record that came after the game's first tick, or never came, fails at once with GAME_ERROR.
+const UNSTARTABLE = 'export default {}\n'
+
+test("run checks --record before it runs anything, so the playtest goes to a .ts file and never takes the place of a folder or of a file run didn't record, like the game's own game.ts", () => {
+  const dir = folder({ 'game.ts': UNSTARTABLE }).replaceAll(sep, '/')
+  mkdirSync(join(ROOT, dir, 'saved.ts'))
+  const record = (path: string) => threejam('run', dir, '--serve-only', '--record', path)
+  const named = (path: string) => `${path} (${join(ROOT, path).replaceAll(sep, '/')})`
+  assert.deepEqual([record(`${dir}/playtest.json`), record(`${dir}/saved.ts`), record(`${dir}/game.ts`)], [
+    { code: 1, out: `Error (USAGE): --record "${dir}/playtest.json" should be a .ts file, like playtest.ts\n` },
+    { code: 1, out: `Error (USAGE): --record ${named(`${dir}/saved.ts`)} is a folder; name a new file, or a playtest to replace\n` },
+    { code: 1, out: `Error (USAGE): --record ${named(`${dir}/game.ts`)} is a file run didn't record; name a new file, or a playtest to replace\n` },
+  ])
+})
+
+test('run refuses a link or a FIFO at --record before it runs anything, even a link to a playtest it saved, so it never writes through a link or waits on a FIFO', { skip: process.platform === 'win32' && 'the links and the FIFO are made with POSIX tools' }, () => {
+  const dir = folder({ 'game.ts': UNSTARTABLE, 'earlier.ts': playtestSource({ seed: 1, ticks: 2, changes: [[1, ['Space']]] }) }).replaceAll(sep, '/')
+  symlinkSync('earlier.ts', join(ROOT, dir, 'linked.ts'))
+  symlinkSync('missing.ts', join(ROOT, dir, 'dangling.ts'))
+  assert.equal(spawnSync('mkfifo', [join(ROOT, dir, 'fifo.ts')]).status, 0)
+  const refused = (name: string, why: string) => {
+    const path = `${dir}/${name}`
+    return { code: 1, out: `Error (USAGE): --record ${path} (${join(ROOT, path)}) ${why}; name a new file, or a playtest to replace\n` }
+  }
+  assert.deepEqual(
+    ['linked.ts', 'dangling.ts', 'fifo.ts'].map((name) => threejam('run', dir, '--serve-only', '--record', `${dir}/${name}`)),
+    [refused('linked.ts', 'is a link'), refused('dangling.ts', 'is a link'), refused('fifo.ts', "isn't a regular file")],
+  )
+})
+
+test("run checks that it can write the --record file before it runs anything, in its folder too, which the save renames a new file into, so a playtest is never lost as run stops", { skip: (process.platform === 'win32' && "a folder's mode doesn't stop Windows writing in it") || (process.getuid?.() === 0 && 'root writes anywhere') }, () => {
+  const dir = folder({ 'game.ts': UNSTARTABLE }).replaceAll(sep, '/')
+  const locked = join(ROOT, dir, 'locked')
+  mkdirSync(locked)
+  // A playtest that can be written, in a folder that can't.
+  writeFileSync(join(locked, 'earlier.ts'), playtestSource({ seed: 1, ticks: 2, changes: [[1, ['Space']]] }))
+  chmodSync(locked, 0o555)
+  try {
+    const refused = (file: string) => ({ code: 1, out: `Error (IO_ERROR): couldn't write ${file} (${join(ROOT, file)}): permission denied\n` })
+    const files = [`${dir}/locked/tests/playtest.ts`, `${dir}/locked/earlier.ts`]
+    assert.deepEqual(
+      files.map((file) => threejam('run', dir, '--serve-only', '--record', file)),
+      files.map(refused),
+    )
+  } finally {
+    chmodSync(locked, 0o755)
+  }
 })
 
 test("a sandbox V8 stopped for want of memory is the game's failure, and another stop names the last line before V8's native stack", () => {

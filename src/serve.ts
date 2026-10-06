@@ -12,6 +12,7 @@ import { BuildError } from './errors.ts'
 import { STAND_INS } from './guard.ts'
 import { assetsIn, gameFiles, type GameFiles } from './load.ts'
 import { NAME, engineFile } from './package.ts'
+import { Recording, savePlaytest, type Taken } from './playtest.ts'
 import type { Config } from './browser/client.ts'
 
 export interface Page {
@@ -28,7 +29,7 @@ export interface Page {
 export interface PageOptions {
   readonly dir: string
   // A run page's config also gets the build the page comes from, and why that build failed, if it did.
-  readonly config: { readonly mode: 'run'; readonly seed: number; readonly token: string } | { readonly mode: 'shot' }
+  readonly config: { readonly mode: 'run'; readonly seed: number; readonly token: string; readonly record?: boolean } | { readonly mode: 'shot' }
   readonly driver?: string
   readonly onRebuild?: (errors: string[]) => void
 }
@@ -215,8 +216,12 @@ const HEADERS = { 'cache-control': 'no-store', 'x-content-type-options': 'nosnif
 const PAGE_POLICY = "frame-ancestors 'none'"
 const ASSET_POLICY = "sandbox; default-src 'none'; frame-ancestors 'none'"
 
-// The server answers only the page itself, and /events and /quit only with the token that run gives its page; without one, as for shot, it refuses them.
-export function serve({ page, token, onQuit = () => {} }: { page: Page; token?: string; onQuit?: () => void }): Promise<Server> {
+// The most of a playtest one request may send; a page sends far less at a time.
+const MOST_RECORD_BYTES = 1024 * 1024
+const RECORDED: Readonly<Record<Taken, number>> = { taken: 204, stale: 409, invalid: 400 }
+
+// The server answers only the page itself, and /events, /quit, and /record only with the token that run gives its page; without one, as for shot, it refuses them. /record is there only while run records the playtest.
+export function serve({ page, token, onQuit = () => {}, recording }: { page: Page; token?: string; onQuit?: () => void; recording?: Recording }): Promise<Server> {
   const listeners = new Set<ServerResponse>()
   const secret = token === undefined ? undefined : Buffer.from(token)
   const granted = (given: string | null) => {
@@ -229,13 +234,17 @@ export function serve({ page, token, onQuit = () => {} }: { page: Page; token?: 
     const mark = target.indexOf('?')
     const path = mark < 0 ? target : target.slice(0, mark)
     const query = new URLSearchParams(mark < 0 ? '' : target.slice(mark + 1))
-    if (!fromPage(request, hosts) || ((path === '/quit' || path === '/events') && !granted(query.get('token')))) {
+    if (!fromPage(request, hosts) || ((path === '/quit' || path === '/events' || path === '/record') && !granted(query.get('token')))) {
       response.writeHead(403, HEADERS).end()
       return
     }
     if (request.method === 'POST' && path === '/quit') {
       response.end()
       onQuit()
+      return
+    }
+    if (request.method === 'POST' && path === '/record' && recording !== undefined) {
+      void bodyOf(request, MOST_RECORD_BYTES).then((body) => response.writeHead(body === undefined ? 413 : RECORDED[recording.take(query, body, page.build)], HEADERS).end())
       return
     }
     if (path.startsWith('/assets/')) {
@@ -312,6 +321,20 @@ function fromPage({ headers }: IncomingMessage, hosts: readonly string[]): boole
     (origin === undefined || origin === `http://${host}`) &&
     (site === undefined || site === 'same-origin' || site === 'none')
   )
+}
+
+// What a request sends, or undefined once that passes most bytes or the request ends early.
+function bodyOf(request: IncomingMessage, most: number): Promise<string | undefined> {
+  return new Promise((done) => {
+    const chunks: Buffer[] = []
+    let bytes = 0
+    request.on('data', (chunk: Buffer) => {
+      bytes += chunk.length
+      if (bytes <= most) chunks.push(chunk)
+    })
+    request.once('end', () => done(bytes <= most ? Buffer.concat(chunks).toString('utf8') : undefined))
+    request.once('close', () => done(undefined))
+  })
 }
 
 function decodedName(encoded: string): string | undefined {
@@ -488,34 +511,41 @@ function openBrowser(url: string): void {
   opener.unref()
 }
 
-export async function* play({ dir, seed = randomInt(2 ** 31), window }: { dir: string; seed?: number; window: boolean }): AsyncGenerator<string> {
+// With record, the page sends what a person plays as they go, and run saves it there as a driver file once the window and the server are gone.
+export async function* play({ dir, seed = randomInt(2 ** 31), window, record }: { dir: string; seed?: number; window: boolean; record?: string }): AsyncGenerator<string> {
   let quit = () => {}
   const done = new Promise<void>((resolve) => (quit = resolve))
   let server: Server | undefined
-  // The page sends it with /events and /quit, so no other page can follow its reloads or end the session.
+  // The page sends it with /events, /quit, and /record, so no other page can follow its reloads, end the session, or add to the playtest.
   const token = randomBytes(32).toString('base64url')
+  const recording = record === undefined ? undefined : new Recording()
   const page = await buildPage({
     dir,
-    config: { mode: 'run', seed, token },
+    config: { mode: 'run', seed, token, record: recording !== undefined },
     // Every save reloads the page, which says why when the save doesn't build.
     onRebuild: (errors) => {
       if (errors.length > 0) process.stderr.write(`${errors.join('\n')}\n`)
       server?.reload()
     },
   })
-  server = await serve({ page, token, onQuit: () => quit() })
+  server = await serve({ page, token, onQuit: () => quit(), recording })
   const app = window ? openWindow(server.url) : undefined
   void app?.exited.then(() => quit())
   process.once('SIGINT', () => quit())
   process.once('SIGTERM', () => quit())
   // A terminal that closes hangs up on run twice, from its shell and from the kernel, and the second must not end run before it has closed its window.
   process.on('SIGHUP', () => quit())
-  yield `Playing ${dir} with seed ${seed} at ${server.url}${window ? '. Esc quits, and saving a file replays the game with the same seed.' : ''}`
+  const keys =
+    record === undefined
+      ? 'Esc quits, and saving a file replays the game with the same seed'
+      : 'Esc quits and saves the playtest, and saving a file replays the game with the same seed and starts the playtest over'
+  yield `Playing ${dir} with seed ${seed}${record === undefined ? '' : `, recording to ${record},`} at ${server.url}${window ? `. ${keys}.` : ''}`
   await done
   app?.close()
   server.close()
   await page.dispose()
   // Writing to a terminal that's gone fails and ends run, so the window and its profile go first.
   await app?.closed
+  if (record !== undefined) yield savePlaytest({ file: record, dir, session: recording?.latest(page.build) })
   yield 'Stopped.'
 }

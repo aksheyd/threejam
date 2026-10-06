@@ -5,12 +5,13 @@ import { CENTER, keyFromCode, pointerMoves, schedule } from '../input.ts'
 import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Game, type Key, type Point, type SoundEntry } from '../types.ts'
 import { loadImages, parseAssets, type Assets } from './assets.ts'
 import { barePage } from './bare.ts'
+import { Recorder } from './playtest.ts'
 import { Speaker } from './sound.ts'
 import { View, parseView, type ViewModule } from './view.ts'
 
-// run is served by threejam run, whose server takes the token with /events and /quit, and the build the page comes from with /events, and gives the failure when the latest save didn't build, shot by threejam shot, and export is one file opened from disk, with no server behind it.
+// run is served by threejam run, whose server takes the token with /events, /quit, and /record, and the build the page comes from with /events and /record, gives the failure when the latest save didn't build, and says whether to record the playtest, shot by threejam shot, and export is one file opened from disk, with no server behind it.
 export type Config =
-  | { readonly mode: 'run'; readonly seed: number; readonly token: string; readonly build: number; readonly failure?: string }
+  | { readonly mode: 'run'; readonly seed: number; readonly token: string; readonly build: number; readonly failure?: string; readonly record?: boolean }
   | { readonly mode: 'shot' }
   | { readonly mode: 'export'; readonly seed?: number }
 
@@ -71,6 +72,7 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   const bare = barePage(page.realm)
   const config = parseConfig(page.config)
   const reloads = config.mode === 'run'
+  const recorder = config.mode === 'run' && config.record ? new Recorder({ token: config.token, build: config.build }) : undefined
   let stopped = false
   // First, so the page of a game that fails below still reloads when a fix is saved, and still quits with Esc.
   if (config.mode === 'run') {
@@ -78,9 +80,13 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     addEventListener('keydown', (event) => {
       if (event.code !== 'Escape') return
       stopped = true
-      fetch(`/quit?token=${encodeURIComponent(config.token)}`, { method: 'POST' }).catch(() => {})
+      // run saves the playtest as it stops, so the rest of it goes first.
+      const quit = () => fetch(`/quit?token=${encodeURIComponent(config.token)}`, { method: 'POST' })
+      void (recorder?.flush() ?? Promise.resolve())
+        .then(quit)
+        .catch(() => {})
+        .finally(() => window.close())
       notice('Session ended.')
-      window.close()
     })
   }
   const hooks = config.mode === 'shot' ? undefined : answerHooks()
@@ -138,10 +144,13 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   const stepOnce = () => {
     const s = current()
     switch (source.kind) {
-      case 'keyboard':
-        s.step({ keys: [...down, ...tapped], pointer })
+      case 'keyboard': {
+        const keys = [...down, ...tapped]
+        recorder?.add(s.tick + 1, keys, pointer)
+        s.step({ keys, pointer })
         tapped.clear()
         return
+      }
       case 'schedule':
         s.step({ keys: source.keysAt(s.tick + 1), pointer: source.pointerAt(s.tick + 1) })
         return
@@ -159,6 +168,9 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     const next = new Session(game, { seed: options.seed ?? seed, set: options.set, assets: Object.keys(assets) })
     session = next
     heard = 0
+    // The playtest is what a person plays, not what a test schedules or drives, and has no --set changes, which its replay would need too.
+    if (options.ticks === undefined && !options.drive && (options.set ?? []).length === 0) recorder?.start(next.seed)
+    else recorder?.stop()
     resetWith = options
     if (spare !== undefined) spare = 0
     ticking(() => {
@@ -218,6 +230,8 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   const fail = (error: unknown) => {
     stopped = true
     hooks?.fail(error)
+    // A replay reaches the tick that failed, as the playtest has it.
+    void recorder?.flush()
     console.error(error)
     notice(`${error instanceof Error ? error.message : String(error)}${reloads ? '\n\nFix the game and save; the page reloads.' : ''}`)
   }
@@ -317,6 +331,7 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
         }
       }
       last = now
+      recorder?.pace(now)
       const { sounds } = current()
       for (; heard < sounds.length; heard++) speaker?.play(sounds[heard])
       draw()
@@ -422,7 +437,7 @@ function parseConfig(value: unknown): Config {
       const build = 'build' in value && typeof value.build === 'number' ? value.build : undefined
       if (seed === undefined || token === undefined || build === undefined) throw new Error('the run page has no seed, token, or build')
       const failure = 'failure' in value && typeof value.failure === 'string' ? value.failure : undefined
-      return { mode: 'run', seed, token, build, failure }
+      return { mode: 'run', seed, token, build, failure, record: 'record' in value && value.record === true }
     }
     case 'shot':
       return { mode: 'shot' }

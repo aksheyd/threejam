@@ -1,5 +1,6 @@
-// The folders and files that new, shot, and export write.
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
+// The folders and files that new, shot, export, and run write.
+import { randomBytes } from 'node:crypto'
+import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
 import { IoError } from './errors.ts'
 import { isSystemError, reasonOf } from './load.ts'
@@ -27,6 +28,19 @@ export function saveFile(file: string, data: string | Uint8Array): void {
   try {
     writeFileSync(file, data)
   } catch (error) {
+    throw new IoError(`couldn't write ${shown(file)}: ${reasonOf(error)}`)
+  }
+}
+
+// Writes a new file beside the one named, then renames it into place: a link there is replaced rather than written through, and a write cut short leaves the file as it was.
+export function replaceFile(file: string, data: string | Uint8Array): void {
+  const beside = `${file}.${randomBytes(6).toString('hex')}.tmp`
+  try {
+    writeFileSync(beside, data, { flag: 'wx' })
+    renameSync(beside, file)
+  } catch (error) {
+    // Whatever was already at the name beside isn't this write's to remove.
+    if (!(isSystemError(error) && error.code === 'EEXIST')) rmSync(beside, { force: true })
     throw new IoError(`couldn't write ${shown(file)}: ${reasonOf(error)}`)
   }
 }

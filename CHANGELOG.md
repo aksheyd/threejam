@@ -4,6 +4,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 
 ## Unreleased
 
+- `run --record FILE` records a playtest: the keys and pointer of every tick a person plays. When `run` stops, it saves them in FILE as a driver that `sim`, `shot`, and `simulate` replay exactly, and prints the `sim` command that does, so a moment that feels off becomes a tick to inspect and a test to keep. It never replaces a file it didn't record, and never writes through a link.
 - The manual the package ships, `AGENTS.md`, leaves out working on ThreeJam itself, which moves to `CONTRIBUTING.md` in the repo.
 - The package ships the agent skill, as `node_modules/threejam/skills/threejam/SKILL.md`, and the docs' `npx skills add` installs it from the latest release's tag instead of from `main`, so the skill describes the version npm installs.
 - `AGENTS.md` says that keys are places on the keyboard, so a game's W, A, S, and D are the keys marked Z, Q, S, and D on a French AZERTY keyboard.

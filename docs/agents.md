@@ -13,6 +13,16 @@ gh skill install aksheyd/threejam threejam
 
 A skill installed from a tag stays on that version, so after you upgrade ThreeJam, run `npx skills add` again with the new tag. Releases after 0.0.4 also ship the skill, as `node_modules/threejam/skills/threejam/SKILL.md`, so a project with one of them installed can take the matching copy with `npx skills add ./node_modules/threejam/skills/threejam`.
 
+## Playtests
+
+Numbers and frames can't show whether a game feels right, so the loop ends with a person playing it. Ask them to play with `npx threejam run <dir> --record <dir>/playtest.ts` and to press Esc right where something feels off. `run` saves every tick they played as a driver file, from the game's first tick, and prints the `sim` command that replays it exactly:
+
+```console
+Saved the playtest, 1834 ticks with seed 5, to games/pong/playtest.ts; replay it with threejam sim games/pong --driver games/pong/playtest.ts --seed 5 --ticks 1834
+```
+
+The file's first line names the same ticks and seed, so a playtest the person saved in their own terminal needs nothing they saw there. The last tick is where they stopped, so `shot --at 1834` with the same `--driver` and `--seed` shows that moment, and `sim` prints the state there. Once it's fixed, keep the playtest as a test that pins what the game does now: import it with `import playtest from './playtest.ts'`, and run `simulate(game, { ticks: 1834, seed: 5, drive: playtest })`. A replay with another seed fails at its first tick, since the game would play out otherwise.
+
 ## MCP tools and other forms
 
 ```bash

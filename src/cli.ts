@@ -7,6 +7,7 @@ import { exportGame, exportPath } from './export.ts'
 import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
 import { createGame } from './new.ts'
 import { NAME, VERSION, mcpCommand } from './package.ts'
+import { playtestFile } from './playtest.ts'
 import { bundlePage, play } from './serve.ts'
 import { endShots, framePaths, parseTicks, shoot } from './shot.ts'
 import type { EntityState, Value } from './types.ts'
@@ -341,14 +342,22 @@ const cli = Cli.create('threejam', {
     options: z.object({
       seed: integer().optional().describe('Random seed, a whole number; without one, run picks one and prints it, and reloads replay it'),
       serveOnly: z.boolean().optional().describe('Serve the page and print its address without opening a window'),
+      record: z
+        .string()
+        .optional()
+        .describe(
+          'When run stops, save what the person played to this .ts file, new or a playtest run saved before, as a driver that sim and shot replay ' +
+            'with --driver and the seed run prints; absolute, or relative to the working directory',
+        ),
     }),
     mcp: false,
     async *run(c) {
       const seed = c.options.seed ?? randomInt(2 ** 31)
       try {
+        const record = c.options.record === undefined ? undefined : playtestFile(c.options.record)
         // A game that can't start would otherwise give its player a page with nothing on it.
         await runGame(c.args.dir, { ticks: 1, seed })
-        yield* play({ dir: c.args.dir, seed, window: !c.options.serveOnly })
+        yield* play({ dir: c.args.dir, seed, window: !c.options.serveOnly, record })
       } catch (error) {
         return c.error(failure(error))
       }

@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url'
 import type { BoundingBox, HTTPRequest, KeyInput, Page } from 'puppeteer-core'
 import pong from '../games/pong/game.ts'
 import { parseGame, simulate } from '../src/engine.ts'
+import { RunError } from '../src/errors.ts'
 import { exportGame } from '../src/export.ts'
 import { runGame } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
@@ -1121,6 +1122,182 @@ test("run's page ends on the newest save even when that save builds while the pa
   const settled = { loads, listens: asked.length }
   await new Promise((wait) => setTimeout(wait, 500))
   assert.deepEqual({ loads, listens: asked.length }, settled, 'the page that plays save 4 went on reloading')
+})
+
+// Each tick, what the game sees of its input: the keys held, the keys pressed, both in KEYS's order, and where the pointer is, exactly; and a number from ctx.random(), which only the seed decides. Enter ends the game with an error.
+const SEEN = [
+  "import { KEYS, defineGame, listOf } from 'threejam'",
+  '',
+  'export default defineGame({',
+  "  entities: { probe: { w: 0.1, h: 0.1, seen: listOf('') } },",
+  '  update({ probe }, ctx) {',
+  "    if (ctx.input.pressed('Enter')) throw new Error('Enter ends this game')",
+  '    const { x, y } = ctx.input.pointer',
+  "    const held = KEYS.filter((key) => ctx.input.held(key)).join(' ')",
+  "    const pressed = KEYS.filter((key) => ctx.input.pressed(key)).join(' ')",
+  '    probe.seen.push(`${held} / ${pressed} @ ${x} ${y} ${ctx.random()}`)',
+  '  },',
+  '})',
+  '',
+].join('\n')
+
+// run with --record on a game in a folder of its own, and what it prints.
+async function recordRun(t: TestContext, seed: number) {
+  const dir = mkdtempSync(join(TMP, 'playtest-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), SEEN)
+  const shown = relative(ROOT, dir).replaceAll(sep, '/')
+  const record = `${shown}/tests/playtest.ts`
+  const run = spawnCli(['run', shown, '--serve-only', '--seed', String(seed), '--record', record], t.signal)
+  const printed = { out: '' }
+  run.stdout.on('data', (chunk) => (printed.out += chunk))
+  const exited = new Promise((done) => run.once('close', done))
+  await until('run to serve the page', () => printed.out.includes('\n'))
+  const url = printed.out.slice(printed.out.lastIndexOf(' ') + 1, -1)
+  assert.equal(printed.out, `Playing ${shown} with seed ${seed}, recording to ${record}, at ${url}\n`)
+  const tab = await newTab(t)
+  await openPage(tab, url)
+  await tab.waitForFunction('window.engine !== undefined')
+  // Waits until the page has played count more ticks, in its own time.
+  const ticks = async (count: number) => {
+    const from = await tab.evaluate(() => window.engine.tick)
+    await tab.waitForFunction((last: number) => window.engine.tick >= last, {}, from + count)
+  }
+  const pause = () => tab.evaluate(() => (window.engine.pause(), { tick: window.engine.tick, entities: window.engine.state() }))
+  return { dir, shown, record, file: join(ROOT, record), run, printed, exited, tab, ticks, pause }
+}
+
+test('a playtest that run records replays in sim, in simulate, and in a page to the state the page reached tick for tick, keys, taps, and the mouse alike, holds nothing after its last tick, and refuses another seed', { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const { dir, shown, record, file, printed, exited, tab, ticks, pause } = await recordRun(t, 7)
+  await tab.keyboard.down('KeyD')
+  await ticks(3)
+  await tab.keyboard.up('KeyD')
+  // A save reloads the page, which starts the game and the playtest over.
+  const reloaded = tab.waitForNavigation()
+  writeFileSync(join(dir, 'game.ts'), SEEN.replace('w: 0.1', 'w: 0.2'))
+  await reloaded
+  await tab.waitForFunction('window.engine !== undefined')
+  await tab.keyboard.down('KeyW')
+  await ticks(4)
+  // Between pixels, so the pointer lands on numbers like 0.061249999999999805, which a replay must have exactly.
+  await tab.mouse.move(412.25, 150.75)
+  await ticks(2)
+  await tab.keyboard.press('Space')
+  await ticks(2)
+  await tab.keyboard.up('KeyW')
+  await tab.mouse.down()
+  await tab.mouse.move(799.5, 0.25, { steps: 3 })
+  await ticks(3)
+  await tab.mouse.up()
+  await tab.mouse.down({ button: 'right' })
+  await ticks(2)
+  await tab.mouse.up({ button: 'right' })
+  // Held through Esc, so the ticks after the playtest's last show whether it lets go.
+  await tab.keyboard.down('KeyS')
+  await ticks(2)
+  const played = await pause()
+  await tab.keyboard.press('Escape')
+  await tab.keyboard.up('KeyS')
+  assert.equal(await exited, 0)
+  const replay = `threejam sim ${shown} --driver ${record} --seed 7 --ticks ${played.tick}`
+  assert.equal(printed.out.slice(printed.out.indexOf('\n') + 1), `Saved the playtest, ${played.tick} ticks with seed 7, to ${record}; replay it with ${replay}\nStopped.\n`)
+  const [probe] = played.entities
+  assert.ok(probe.w === 0.2 && Array.isArray(probe.seen) && probe.seen.length === played.tick, JSON.stringify(probe))
+
+  assert.deepEqual((await runGame(dir, { ticks: played.tick, seed: 7, driver: file })).snapshots[0].entities, played.entities)
+  const game = parseGame(Reflect.get(await import(pathToFileURL(join(dir, 'game.ts')).href), 'default'))
+  const drive: unknown = Reflect.get(await import(pathToFileURL(file).href), 'default')
+  assert.ok(isDrive(drive))
+  assert.deepEqual(simulate(game, { ticks: played.tick, seed: 7, drive }).snapshots[0].entities, played.entities)
+  const [{ seen: longer }] = simulate(game, { ticks: played.tick + 3, seed: 7, drive }).snapshots[0].entities
+  assert.ok(Array.isArray(longer) && longer.slice(-3).every((seen) => String(seen).startsWith(' /  @ ')), JSON.stringify(longer))
+  await assert.rejects(runGame(dir, { ticks: 1, seed: 8, driver: file }), { message: 'this playtest was recorded with seed 7, so replay it with seed 7' })
+
+  const page = await buildPage({ dir, config: { mode: 'shot' }, driver: file })
+  const server = await serve({ page })
+  try {
+    const replayTab = await newTab(t)
+    await openPage(replayTab, server.url)
+    await replayTab.waitForFunction('window.engine !== undefined')
+    const replayed = await replayTab.evaluate((last: number) => {
+      window.engine.reset({ seed: 7, drive: true })
+      window.engine.advanceTo(last)
+      return window.engine.state()
+    }, played.tick)
+    assert.deepEqual(replayed, played.entities)
+  } finally {
+    server.close()
+    await page.dispose()
+  }
+})
+
+test('run saves what its page has sent when a signal stops it instead of Esc: the parts the page sends as it plays, and every tick through one where the game fails, at which the replay fails too', { skip: (!chrome && 'needs Chrome') || (process.platform === 'win32' && 'Node ends a process on Windows without the signal its handlers would hear') }, async (t) => {
+  const { dir, record, file, run, printed, exited, tab, ticks, pause } = await recordRun(t, 3)
+  const sent: string[] = []
+  tab.on('response', (response) => void (response.url().includes('/record?') && response.status() === 204 && sent.push(new URL(response.url()).searchParams.get('ticks') ?? '')))
+  await tab.keyboard.down('ArrowLeft')
+  await ticks(5)
+  await tab.mouse.click(200.5, 450.5)
+  await ticks(3)
+  // Paused, the page sends only as it goes, since nothing has ended the session.
+  const played = await pause()
+  await until('the page to send run every tick it played', () => sent.includes(String(played.tick)))
+  await tab.evaluate(() => window.engine.resume())
+  await ticks(2)
+  await tab.keyboard.press('Enter')
+  await tab.waitForSelector('pre')
+  const failed = await tab.evaluate(() => window.engine.tick)
+  await until('the page to send run the tick where the game failed', () => sent.includes(String(failed)))
+  run.kill('SIGTERM')
+  assert.equal(await exited, 0)
+  assert.match(printed.out, new RegExp(`\nSaved the playtest, ${failed} ticks with seed 3, to ${record.replaceAll('.', '\\.')}; replay it with [^\n]+\nStopped\\.\n$`))
+  assert.deepEqual((await runGame(dir, { ticks: played.tick, seed: 3, driver: file })).snapshots[0].entities, played.entities)
+  await assert.rejects(runGame(dir, { ticks: failed, seed: 3, driver: file }), (error: unknown) => error instanceof RunError && error.phase === 'update' && error.tick === failed && error.message === 'Enter ends this game')
+})
+
+test("a run --record page that a browser client takes over with advanceTime records from the takeover's tick 0, with a key still held then, the pointer where the mouse was, and without a tap from before, sends it as the client steps it, and the playtest replays in simulate to what render_game_to_text gave", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const { dir, shown, record, file, printed, exited, tab, ticks } = await recordRun(t, 4)
+  // The ticks each send runs through, of the sends the page starts once the client has taken it over, which can only be the new session's.
+  let takenOver = false
+  const sentSince = new WeakSet<HTTPRequest>()
+  const sent: string[] = []
+  tab.on('request', (request) => void (takenOver && request.url().includes('/record?') && sentSince.add(request)))
+  tab.on('response', (response) => void (sentSince.has(response.request()) && response.status() === 204 && sent.push(new URL(response.url()).searchParams.get('ticks') ?? '')))
+  // As the client's first burst does, before its first call: the page plays on with them, so the session before the takeover has them too.
+  await tab.keyboard.down('KeyA')
+  await tab.mouse.move(600, 450)
+  await ticks(5)
+  // A tap just before the first call, which starts the run over without it.
+  await tab.evaluate(async () => {
+    for (const type of ['keydown', 'keyup']) window.dispatchEvent(new KeyboardEvent(type, { code: 'Space' }))
+    await window.advanceTime(1000 / 60)
+  })
+  takenOver = true
+  // One call a frame, each in a call of its own, as the client makes them.
+  const frames = async (count: number) => {
+    for (let frame = 0; frame < count; frame++) await tab.evaluate(() => window.advanceTime(1000 / 60))
+  }
+  await frames(2)
+  await tab.keyboard.down('KeyD')
+  await frames(3)
+  await tab.mouse.move(250.5, 120.25)
+  await frames(2)
+  await tab.keyboard.up('KeyA')
+  await tab.keyboard.press('Space')
+  await frames(3)
+  const text = JSON.parse(await tab.evaluate(() => window.render_game_to_text()))
+  // A client never presses Esc, which sends the rest, so the playtest is what the page sends while the client holds its clock.
+  await until('the page to send run every tick the client stepped', () => sent.includes('11'))
+  await tab.keyboard.press('Escape')
+  await tab.keyboard.up('KeyD')
+  assert.equal(await exited, 0)
+  const replay = `threejam sim ${shown} --driver ${record} --seed 4 --ticks 11`
+  assert.equal(printed.out.slice(printed.out.indexOf('\n') + 1), `Saved the playtest, 11 ticks with seed 4, to ${record}; replay it with ${replay}\nStopped.\n`)
+  assert.match(text.entities[0].seen[0], /^A \/ A @ 1 -0\.75 /)
+  const game = parseGame(Reflect.get(await import(pathToFileURL(join(dir, 'game.ts')).href), 'default'))
+  const drive: unknown = Reflect.get(await import(pathToFileURL(file).href), 'default')
+  assert.ok(isDrive(drive))
+  assert.deepEqual(asText(simulate(game, { ticks: 11, seed: 4, drive }).snapshots[0]), text)
 })
 
 test("a played page that fails as it runs, or whose image won't load, stops and says why on the page, and in run what to fix", { skip: !chrome && 'needs Chrome' }, async (t) => {

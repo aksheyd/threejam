@@ -9,6 +9,7 @@ import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { exportGame } from '../src/export.ts'
 import { ROOT } from '../src/package.ts'
+import { Recording } from '../src/playtest.ts'
 import { NO_DEVTOOLS_PORT, buildPage, openWindow, removeProfile, removeSocketFolders, serve, socketFolders } from '../src/serve.ts'
 import { closeChrome, launchChrome, openPage } from '../src/shot.ts'
 import { CHROME as chrome, testChrome } from './chrome.ts'
@@ -49,15 +50,17 @@ function call(url: string, { method = 'GET', headers = {} }: { method?: string; 
   })
 }
 
-test('the run server answers only its own page, and /quit and /events only with the session token, whatever another page or host sends', async () => {
+test('the run server answers only its own page, and /quit, /events, and /record only with the session token, whatever another page or host sends', async () => {
   const token = 'session-token'
-  const page = await buildPage({ dir: folder({ 'game.ts': GAME }), config: { mode: 'run', seed: 0, token } })
+  const page = await buildPage({ dir: folder({ 'game.ts': GAME }), config: { mode: 'run', seed: 0, token, record: true } })
   let quits = 0
-  const server = await serve({ page, token, onQuit: () => (quits += 1) })
+  const recording = new Recording()
+  const server = await serve({ page, token, onQuit: () => (quits += 1), recording })
   try {
     const { host, port } = new URL(server.url)
     const status = async (path: string, headers: Record<string, string> = {}, method = 'GET') => (await call(new URL(path, server.url).href, { method, headers })).status
     const quit = `/quit?token=${token}`
+    const record = `/record?build=${page.build}&session=a&seed=0&from=0&ticks=0`
     assert.deepEqual(
       {
         noToken: await status('/quit', {}, 'POST'),
@@ -68,11 +71,14 @@ test('the run server answers only its own page, and /quit and /events only with 
         rebound: await status(quit, { host: `evil.example:${port}` }, 'POST'),
         events: await status('/events'),
         includedScript: await status('/bundle.js', { 'sec-fetch-site': 'same-site' }),
+        recordWithoutToken: await status(record, {}, 'POST'),
+        recordFromElsewhere: await status(`${record}&token=${token}`, { origin: 'http://127.0.0.1:8765' }, 'POST'),
       },
-      { noToken: 403, wrongToken: 403, otherPort: 403, website: 403, file: 403, rebound: 403, events: 403, includedScript: 403 },
+      { noToken: 403, wrongToken: 403, otherPort: 403, website: 403, file: 403, rebound: 403, events: 403, includedScript: 403, recordWithoutToken: 403, recordFromElsewhere: 403 },
     )
-    assert.equal(quits, 0)
+    assert.deepEqual([quits, recording.latest(page.build)], [0, undefined])
     assert.equal(await status(`/events?token=${token}`, { 'sec-fetch-site': 'same-origin' }), 200)
+    assert.equal(await status(`${record}&token=${token}`, { origin: `http://${host}`, 'sec-fetch-site': 'same-origin' }, 'POST'), 400)
     assert.equal(await status(quit, { origin: `http://${host}`, 'sec-fetch-site': 'same-origin' }, 'POST'), 200)
     assert.equal(quits, 1)
   } finally {
