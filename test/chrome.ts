@@ -19,7 +19,8 @@ export async function testChrome(executable = CHROME ?? 'no Chrome'): Promise<Te
   const profile = join(temp, 'profile')
   let browser: Browser
   try {
-    browser = await launchChrome(executable, { protocolTimeout: 60_000, profile, temp })
+    // Compositing in software halves the CPU Chrome spends while a page loads and draws; the tests read a page's pixels from its canvas, which WebGL draws the same either way.
+    browser = await launchChrome(executable, { protocolTimeout: 60_000, profile, temp, switches: ['--disable-gpu-compositing'] })
   } catch (error) {
     remove(temp, profile)
     throw error

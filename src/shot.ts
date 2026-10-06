@@ -50,8 +50,8 @@ export async function openPage(tab: Page, url: string, { timeout }: { timeout?: 
   }
 }
 
-// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs; profile, when given, holds its profile, temp its temporary files in place of TMPDIR, and signal kills it with every process it started.
-export async function launchChrome(chrome: string, { protocolTimeout, profile, temp, signal }: { protocolTimeout?: number; profile?: string; temp?: string; signal?: AbortSignal } = {}): Promise<Browser> {
+// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs; profile, when given, holds its profile, temp its temporary files in place of TMPDIR, switches go before ThreeJam's own, which they can't override, and signal kills it with every process it started.
+export async function launchChrome(chrome: string, { protocolTimeout, profile, temp, switches = [], signal }: { protocolTimeout?: number; profile?: string; temp?: string; switches?: readonly string[]; signal?: AbortSignal } = {}): Promise<Browser> {
   const where = chrome.replaceAll(sep, '/')
   const found = statSync(chrome, { throwIfNoEntry: false })
   if (found === undefined) throw new BrowserError(`there's no Chrome at ${where}; set CHROME_PATH to the executable of Chrome or Chromium, or Edge on Windows`)
@@ -75,7 +75,7 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
       signal,
       ignoreDefaultArgs: true,
       // Software rendering repeats a frame byte for byte on one machine; on another it looks the same, though some pixels can be one shade off.
-      args: [...defaults, '--use-gl=angle', '--use-angle=swiftshader', '--remote-debugging-pipe', NO_DEVTOOLS_PORT],
+      args: [...defaults, ...switches, '--use-gl=angle', '--use-angle=swiftshader', '--remote-debugging-pipe', NO_DEVTOOLS_PORT],
     })
   } catch (error) {
     // Over a pipe, a Chrome that exits as it starts only closes the connection, which Puppeteer reports with a TargetCloseError its types don't export.
