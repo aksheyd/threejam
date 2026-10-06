@@ -19,11 +19,11 @@ export interface ShotOptions {
 }
 
 export function parseTicks(text: string): number[] {
-  const ticks = text.split(',').map((part) => Number(part.trim()))
-  if (ticks.some((tick) => !Number.isInteger(tick) || tick < 0)) {
+  const parts = text.split(',').map((part) => part.trim())
+  if (parts.some((part) => !/^\d+$/.test(part) || !Number.isSafeInteger(Number(part)))) {
     throw new UsageError(`--at ${quote(text)} should be whole ticks from 0 up, like 1,120,600`)
   }
-  return [...new Set(ticks)].sort((a, b) => a - b)
+  return [...new Set(parts.map(Number))].sort((a, b) => a - b)
 }
 
 export function framePaths(out: string, at: readonly number[]): string[] {

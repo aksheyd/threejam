@@ -172,9 +172,10 @@ function split(flag: string, value: string): { key: Key; at: string | undefined 
   }
 }
 
+// Digits only, since Number() would also read 0x5, 1e1, and an empty string as ticks.
 function tickIn(flag: string, value: string, text: string, ticks: number): number {
-  const tick = Number(text.trim())
-  if (!Number.isInteger(tick) || tick < 1) throw new UsageError(`${flag} ${quote(value)}: "${text}" should be a tick from 1 up`)
+  const tick = /^\d+$/.test(text.trim()) ? Number(text) : Number.NaN
+  if (!Number.isSafeInteger(tick) || tick < 1) throw new UsageError(`${flag} ${quote(value)}: "${text}" should be a tick from 1 up`)
   if (tick > ticks) throw new UsageError(`${flag} ${quote(value)}: tick ${tick} is after --ticks ${ticks}`)
   return tick
 }

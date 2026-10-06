@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { basename } from 'node:path'
 import { Cli, Errors, z } from 'incur'
-import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, type Code } from './errors.ts'
+import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, show, type Code } from './errors.ts'
 import { exportGame } from './export.ts'
 import { DEFAULT_TIMEOUT, LimitError, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
 import { createGame } from './new.ts'
@@ -18,7 +18,31 @@ process.stdout.on('error', (error) => {
 // An MCP client can start the server in any folder, so a path says what it's relative to.
 const PATHS = "absolute, or relative to the working directory, which for MCP is the server's"
 
-const args = z.object({ dir: z.string().describe(`Game folder with a game.ts, ${PATHS}`) })
+// Read after a flag's name on the command line and after a field's name in the MCP SDK's own refusal.
+function expected(what: string) {
+  return (issue: { readonly input?: unknown }) => (issue.input === undefined ? 'required' : `expected ${what}, got ${show(issue.input)}`)
+}
+
+// incur reads a number flag with Number(), which takes 0x10, 1e2, and an empty string, so these read their own digits, and MCP's JSON numbers pass as they are.
+function digits(pattern: RegExp, schema: z.ZodNumber) {
+  return z.preprocess((value) => (typeof value === 'string' && pattern.test(value) ? Number(value) : value), schema)
+}
+
+function whole(min: number) {
+  const error = expected(`a whole number from ${min} up`)
+  return digits(/^\d+$/, z.number({ error }).int({ error }).min(min, { error }))
+}
+
+function seed() {
+  const error = expected('a whole number')
+  return digits(/^-?\d+$/, z.number({ error }).int({ error }))
+}
+
+function folderArg(description: string) {
+  return z.string({ error: expected('a folder') }).min(1, { error: "can't be empty" }).describe(description)
+}
+
+const args = z.object({ dir: folderArg(`Game folder with a game.ts, ${PATHS}`) })
 
 const inputs = {
   press: z.array(z.string()).optional().describe('Press a key or mouse button on some ticks, like Space@60, Space@60,120, or Mouse@30; repeatable'),
@@ -41,12 +65,11 @@ const inputs = {
     .array(z.string())
     .optional()
     .describe('Change a starting value before start runs, like paddle.w=1, bricks[*].points=5, or pipes[*].parts.top.h=2; repeatable'),
-  seed: z.number().int().optional().describe('Random seed; the same files, flags, and seed give the same run (default 0)'),
+  seed: seed().optional().describe('Random seed, a whole number; the same files, flags, and seed give the same run (default 0)'),
 }
 
-const timeout = z
-  .number()
-  .positive()
+const seconds = expected('a number of seconds above 0')
+const timeout = digits(/^(\d+\.?\d*|\.\d+)$/, z.number({ error: seconds }).positive({ error: seconds }))
   .optional()
   .describe(`Seconds the game's code may run before the command stops it and fails with TIMEOUT (default ${DEFAULT_TIMEOUT})`)
 
@@ -164,7 +187,7 @@ const cli = Cli.create('threejam', {
   .command('new', {
     description:
       'Start a game: write a small playable game.ts and its test into a new or empty folder, plus a package.json and tsconfig.json when no project above it depends on ThreeJam',
-    args: z.object({ dir: z.string().describe(`Folder to create, which must be new or empty, ${PATHS}`) }),
+    args: z.object({ dir: folderArg(`Folder to create, which must be new or empty, ${PATHS}`) }),
     examples: [
       { args: { dir: 'games/catch' }, description: 'Add a game to a project that depends on ThreeJam' },
       { args: { dir: 'my-game' }, description: 'Start a project of its own; run npm install in it next' },
@@ -215,7 +238,7 @@ const cli = Cli.create('threejam', {
       `as an MCP tool, a reply over ${MCP_REPLY_LIMIT} characters fails, so narrow it with only, fields, every, or until`,
     args,
     options: z.object({
-      ticks: z.number().int().describe('How many ticks to run, 60 to a second; with --until, the most to run'),
+      ticks: whole(0).describe('How many ticks to run, 60 to a second; with --until, the most to run'),
       ...inputs,
       timeout,
       until: z
@@ -230,7 +253,7 @@ const cli = Cli.create('threejam', {
         .optional()
         .describe('Print only these entities, like ball,bricks: * matches anything but a dot, a group name matches its members, and an entity brings its parts'),
       fields: z.string().optional().describe('Print only these fields, like x,y,vx; name is always printed'),
-      every: z.number().int().optional().describe('Also print the entities after tick 0 and every N ticks'),
+      every: whole(1).optional().describe('Also print the entities after tick 0 and every N ticks'),
     }),
     examples: [
       {
@@ -300,7 +323,7 @@ const cli = Cli.create('threejam', {
     description: 'Play a game in a browser window; Esc quits and saving a file reloads it. For people, not agents',
     args,
     options: z.object({
-      seed: z.number().int().optional().describe('Random seed; without one, run picks one and prints it, and reloads replay it'),
+      seed: seed().optional().describe('Random seed, a whole number; without one, run picks one and prints it, and reloads replay it'),
       serveOnly: z.boolean().optional().describe('Serve the page and print its address without opening a window'),
     }),
     mcp: false,
@@ -319,7 +342,7 @@ const cli = Cli.create('threejam', {
     args,
     options: z.object({
       out: z.string().optional().describe(`HTML path, ${PATHS} (default: the game folder's name, like pong.html)`),
-      seed: z.number().int().optional().describe('Random seed; without one, the page picks a new one each time it loads'),
+      seed: seed().optional().describe('Random seed, a whole number; without one, the page picks a new one each time it loads'),
       timeout,
     }),
     alias: { out: 'o' },

@@ -19,8 +19,10 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 - `--pointer X,Y@T` moves the mouse pointer to X,Y in world units on tick T, where it stays until the next move.
 - `--driver FILE` picks the input each tick with code that reads the world, like the Invaders [autopilot](../games/invaders/autopilot.ts), or the Asteroids [one](../games/asteroids/autopilot.ts) that plays with the mouse.
 - `--set NAME.FIELD=VALUE` changes a starting value before `start` runs, like `--set paddle.w=1` for a wider Breakout paddle, and NAME can be a pattern such as `bricks[*]`.
-- `--seed N` picks the random numbers; the default is 0.
+- `--seed N` picks the random numbers, from any whole number; the default is 0.
 - `--timeout N` caps how many seconds the game's code may run before the command stops it with the `TIMEOUT` code; the default is 30, and `check`, `shot`, and `export` take it too.
+
+Ticks and other whole numbers in flags are plain digits, so `--ticks 1e2` or `--press Space@0x5` fails with `USAGE` instead of meaning 100 or 5.
 
 ## What sim prints
 

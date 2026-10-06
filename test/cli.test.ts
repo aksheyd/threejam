@@ -150,6 +150,25 @@ test("incur's own refusals print one line with the code USAGE: a missing or frac
   }
 })
 
+test('a number on the command line is digits, so hex, exponents, and an empty string fail as USAGE, and the schema clients see has the real minimums', () => {
+  const refused = [
+    [['sim', 'games/pong', '--ticks', '0x10'], '--ticks: expected a whole number from 0 up, got "0x10"'],
+    [['sim', 'games/pong', '--ticks', ''], '--ticks: expected a whole number from 0 up, got ""'],
+    [['sim', 'games/pong', '--ticks', '5', '--every', '0'], '--every: expected a whole number from 1 up, got 0'],
+    [['sim', 'games/pong', '--ticks', '5', '--seed', '1e2'], '--seed: expected a whole number, got "1e2"'],
+    [['sim', 'games/pong', '--ticks', '5', '--press', 'Space@0x5'], '--press "Space@0x5": "0x5" should be a tick from 1 up'],
+    [['shot', 'games/pong', '--at', ''], '--at "" should be whole ticks from 0 up, like 1,120,600'],
+    [['sim', '', '--ticks', '5'], "<dir>: can't be empty"],
+  ]
+  for (const [args, message] of refused) {
+    const { code, out } = threejam(...args, '--format', 'json')
+    assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'USAGE', message } })
+  }
+  const { options } = JSON.parse(threejam('sim', '--schema', '--format', 'json').out)
+  const { ticks, every, seed } = options.properties
+  assert.deepEqual([ticks.type, ticks.minimum, every.minimum, seed.type, options.required], ['integer', 0, 1, 'integer', ['ticks']])
+})
+
 test("run reports a page that doesn't build with its code instead of a bare error", () => {
   const dir = folder({ 'game.ts': game({ update: 'world.ball.x += 1' }), 'view.ts': 'export function draw( {\n' })
   const { code, out } = threejam('run', dir, '--serve-only')
