@@ -62,7 +62,7 @@ const manifest = {
 }
 writeFileSync(join(DIST, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 copyFileSync(join(ROOT, 'LICENSE'), join(DIST, 'LICENSE'))
-copyFileSync(join(ROOT, 'AGENTS.md'), join(DIST, 'AGENTS.md'))
+writeFileSync(join(DIST, 'AGENTS.md'), withoutSection(readFileSync(join(ROOT, 'AGENTS.md'), 'utf8'), 'Working on ThreeJam'))
 writeFileSync(join(DIST, 'README.md'), absoluteLinks(readFileSync(join(ROOT, 'README.md'), 'utf8')))
 console.log(`Built ${root.name}@${root.version} in ${relative(process.cwd(), DIST).replaceAll(sep, '/') || '.'}; publish it with npm publish ./dist`)
 
@@ -84,6 +84,15 @@ function absoluteLinks(markdown: string): string {
         : part.replace(/\]\(([^)\s]+)\)/g, (_, url: string) => `](${absolute(url)})`).replace(/\b(src|href)="([^"]+)"/g, (_, name: string, url: string) => `${name}="${absolute(url)}"`),
     )
     .join('')
+}
+
+// The package's manual is for making games, so it leaves out the section that sends contributors to CONTRIBUTING.md.
+function withoutSection(markdown: string, title: string): string {
+  const heading = `\n## ${title}\n`
+  const start = markdown.indexOf(heading)
+  if (start === -1) throw new Error(`AGENTS.md has no "## ${title}" section to leave out of the package`)
+  const next = markdown.indexOf('\n## ', start + heading.length)
+  return `${markdown.slice(0, start).trimEnd()}\n${next === -1 ? '' : markdown.slice(next)}`
 }
 
 // npm's shims in node_modules/.bin are .cmd files on Windows, so this Node runs the script the package names.

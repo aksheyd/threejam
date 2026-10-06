@@ -2,6 +2,10 @@
 
 Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest first. Until 1.0, a release can break a game or a script that worked with the one before, and each one that does says how under Breaking changes.
 
+## Unreleased
+
+- The manual the package ships, `AGENTS.md`, leaves out working on ThreeJam itself, which moves to `CONTRIBUTING.md` in the repo.
+
 ## [0.0.4](https://github.com/aksheyd/threejam/compare/v0.0.3...v0.0.4) - 2026-10-06
 
 The same files and seed now give the same run on every machine, every failure is one line with a code that says what went wrong, and flags are checked before any work starts. From [#2](https://github.com/aksheyd/threejam/pull/2) and [#3](https://github.com/aksheyd/threejam/pull/3).
