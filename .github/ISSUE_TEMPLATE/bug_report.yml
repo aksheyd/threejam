@@ -2,6 +2,9 @@ name: Bug report
 description: ThreeJam does something it shouldn't, or something the docs say it does doesn't happen
 labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: For a security vulnerability, don't open an issue. Report it privately, as [SECURITY.md](https://github.com/aksheyd/threejam/blob/main/SECURITY.md) says.
   - type: textarea
     id: happened
     attributes:

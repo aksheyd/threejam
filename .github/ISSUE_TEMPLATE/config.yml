@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/aksheyd/threejam/security/advisories/new
+    about: Report it privately, as SECURITY.md says, not in a public issue.
