@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { after, before, test, type TestContext } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import type { Page } from 'puppeteer-core'
@@ -13,6 +13,7 @@ import { ROOT } from '../src/package.ts'
 import { buildPage, serve } from '../src/serve.ts'
 import { openPage } from '../src/shot.ts'
 import { CHROME as chrome, testChrome, type TestChrome } from './chrome.ts'
+import { spawnCli } from './children.ts'
 import { PROBE, checkProbe } from './probe.ts'
 
 const TMP = join(ROOT, 'test', '.tmp')
@@ -471,6 +472,51 @@ test('exported Asteroids draws its SVG rocks and plays sounds with nothing but t
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+async function until(what: string, check: () => boolean): Promise<void> {
+  for (const deadline = Date.now() + 10_000; !check(); await new Promise((wait) => setTimeout(wait, 20))) {
+    if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}`)
+  }
+}
+
+test("run serves the game at its seed, reloads the page at that seed when a save builds, prints a save that doesn't and plays on, and stops once Esc ends the session", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'run-'))
+  made.push(dir)
+  const version = (n: number) => `import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1, version: ${n} } }, update() {} })\n`
+  writeFileSync(join(dir, 'game.ts'), version(1))
+  const shown = relative(ROOT, dir).replaceAll(sep, '/')
+  const run = spawnCli(['run', shown, '--serve-only', '--seed', '5'], t.signal)
+  let [out, errors] = ['', '']
+  run.stdout.on('data', (chunk) => (out += chunk))
+  run.stderr.on('data', (chunk) => (errors += chunk))
+  const exited = new Promise((done) => run.once('close', done))
+  await until('run to serve the page', () => out.includes('\n'))
+  const url = out.slice(out.lastIndexOf(' ') + 1, -1)
+  assert.equal(out, `Playing ${shown} with seed 5 at ${url}\n`)
+  const tab = await newTab(t)
+  const listening = tab.waitForResponse((response) => response.url().includes('/events?'))
+  await openPage(tab, url)
+  await tab.waitForFunction('window.engine !== undefined')
+  await listening
+  // The seed, the game's version, and whether this is still the page marked before the saves.
+  const playing = () => tab.evaluate(() => [window.engine.seed, window.engine.state('dot')[0].version, Reflect.has(window, 'marked')])
+  await tab.evaluate(() => Reflect.set(window, 'marked', true))
+
+  writeFileSync(join(dir, 'game.ts'), version(1).replace('update() {}', 'update() {'))
+  await until("run to print the save that doesn't build", () => errors.includes('\n'))
+  assert.ok(errors.startsWith(`${shown}/game.ts:3: `) && errors.indexOf('\n') === errors.length - 1, errors)
+  assert.deepEqual(await playing(), [5, 1, true])
+
+  const reloaded = tab.waitForNavigation()
+  writeFileSync(join(dir, 'game.ts'), version(2))
+  await reloaded
+  await tab.waitForFunction('window.engine !== undefined')
+  assert.deepEqual(await playing(), [5, 2, false])
+
+  await tab.keyboard.press('Escape')
+  assert.equal(await exited, 0)
+  assert.deepEqual({ out, notice: await tab.$eval('pre', (box) => box.textContent) }, { out: `Playing ${shown} with seed 5 at ${url}\nStopped.\n`, notice: 'Session ended.' })
 })
 
 test("a run page whose game or view.ts fails as it loads says why on the page, instead of staying blank, and still reloads when a fix is saved", { skip: !chrome && 'needs Chrome' }, async (t) => {
