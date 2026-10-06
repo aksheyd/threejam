@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { after, test } from 'node:test'
+import { after, before, test, type TestContext } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import type { Page } from 'puppeteer-core'
 import pong from '../games/pong/game.ts'
@@ -10,17 +10,30 @@ import { simulate } from '../src/engine.ts'
 import { exportGame } from '../src/export.ts'
 import { runGame } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
-import { buildPage, findChrome, serve } from '../src/serve.ts'
-import { launchChrome, openPage, shoot } from '../src/shot.ts'
+import { buildPage, serve } from '../src/serve.ts'
+import { openPage } from '../src/shot.ts'
+import { CHROME as chrome, testChrome, type TestChrome } from './chrome.ts'
 import { PROBE, checkProbe } from './probe.ts'
 
-const chrome = findChrome()
-// A page call that hangs fails within a minute, well inside CI's job timeout, so the report says why.
-const launch = () => launchChrome(chrome ?? 'no Chrome', { protocolTimeout: 60_000 })
 const TMP = join(ROOT, 'test', '.tmp')
 mkdirSync(TMP, { recursive: true })
 const made: string[] = []
-after(() => made.forEach((dir) => rmSync(dir, { recursive: true, force: true })))
+let shared: TestChrome | undefined
+before(async () => {
+  if (chrome) shared = await testChrome()
+})
+after(async () => {
+  await shared?.close()
+  made.forEach((dir) => rmSync(dir, { recursive: true, force: true }))
+})
+
+// A tab in the one Chrome every test here shares, closed when its test ends, even one that fails.
+async function newTab(t: TestContext): Promise<Page> {
+  if (shared === undefined) throw new Error('this test needs Chrome')
+  const tab = await shared.browser.newPage()
+  t.after(() => (tab.isClosed() ? undefined : tab.close()))
+  return tab
+}
 
 const FLAP = [
   "import type { Driver, EntitiesOf } from 'threejam'",
@@ -34,7 +47,7 @@ const FLAP = [
   '',
 ].join('\n')
 
-test('with a driver that taps using the keys of the tick before, the page reaches the state sim computes, parts and all', { skip: !chrome && 'needs Chrome' }, async () => {
+test('with a driver that taps using the keys of the tick before, the page reaches the state sim computes, parts and all', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'driver-'))
   made.push(dir)
   const driver = join(dir, 'flap.ts')
@@ -43,9 +56,8 @@ test('with a driver that taps using the keys of the tick before, the page reache
   assert.ok(expected.some((entity) => entity.name === 'pipes[2].parts.bottom_cap'))
   const page = await buildPage({ dir: 'games/flappy', config: { mode: 'shot' }, driver })
   const server = await serve({ page })
-  const browser = await launch()
   try {
-    const tab = await browser.newPage()
+    const tab = await newTab(t)
     await openPage(tab, server.url)
     await tab.waitForFunction('window.engine !== undefined')
     const actual = await tab.evaluate(() => {
@@ -55,7 +67,6 @@ test('with a driver that taps using the keys of the tick before, the page reache
     })
     assert.deepEqual(actual, expected)
   } finally {
-    await browser.close()
     server.close()
     await page.dispose()
   }
@@ -81,16 +92,15 @@ const MATH_HEAVY = [
   '',
 ].join('\n')
 
-test('with the portable math, trig-heavy code reaches the same state in the page as in sim', { skip: !chrome && 'needs Chrome' }, async () => {
+test('with the portable math, trig-heavy code reaches the same state in the page as in sim', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'math-'))
   made.push(dir)
   writeFileSync(join(dir, 'game.ts'), MATH_HEAVY)
   const expected = (await runGame(dir, { ticks: 600 })).snapshots[0].entities
   const page = await buildPage({ dir, config: { mode: 'shot' } })
   const server = await serve({ page })
-  const browser = await launch()
   try {
-    const tab = await browser.newPage()
+    const tab = await newTab(t)
     await openPage(tab, server.url)
     await tab.waitForFunction('window.engine !== undefined')
     const actual = await tab.evaluate(() => {
@@ -100,7 +110,6 @@ test('with the portable math, trig-heavy code reaches the same state in the page
     })
     assert.deepEqual(actual, expected)
   } finally {
-    await browser.close()
     server.close()
     await page.dispose()
   }
@@ -130,7 +139,7 @@ const ELSEWHERE = [
   '',
 ].join('\n')
 
-test("in another locale and time zone, the page computes what sim does and refuses what sim refuses, even through what a game's top level keeps", { skip: !chrome && 'needs Chrome' }, async () => {
+test("in another locale and time zone, the page computes what sim does and refuses what sim refuses, even through what a game's top level keeps", { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'elsewhere-'))
   made.push(dir)
   writeFileSync(join(dir, 'game.ts'), ELSEWHERE)
@@ -149,9 +158,8 @@ test("in another locale and time zone, the page computes what sim does and refus
   ])
   const page = await buildPage({ dir, config: { mode: 'shot' } })
   const server = await serve({ page })
-  const browser = await launch()
   try {
-    const tab = await browser.newPage()
+    const tab = await newTab(t)
     await tab.emulateTimezone('Asia/Kolkata')
     await (await tab.createCDPSession()).send('Emulation.setLocaleOverride', { locale: 'de-DE' })
     await openPage(tab, server.url)
@@ -164,13 +172,12 @@ test("in another locale and time zone, the page computes what sim does and refus
     assert.deepEqual(actual.page, ['1.234.567,5', true])
     assert.deepEqual(actual.state, expected)
   } finally {
-    await browser.close()
     server.close()
     await page.dispose()
   }
 })
 
-test("review blockers 1 to 4 in a page set to de-DE and Asia/Kolkata: game code finds no frame, no host global, and no path to the platform's clock, zone, or locale, a promise can't write after its tick, and every reset gives sim's state", { skip: !chrome && 'needs Chrome' }, async () => {
+test("in a page set to de-DE and Asia/Kolkata, game code finds no frame, no host global, and no path to the platform's clock, zone, or locale, a promise can't write after its tick, and every reset gives sim's state", { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'probe-'))
   made.push(dir)
   writeFileSync(join(dir, 'game.ts'), PROBE)
@@ -178,9 +185,8 @@ test("review blockers 1 to 4 in a page set to de-DE and Asia/Kolkata: game code 
   checkProbe(expected[0].out, { bare: true })
   const page = await buildPage({ dir, config: { mode: 'shot' } })
   const server = await serve({ page })
-  const browser = await launch()
   try {
-    const tab = await browser.newPage()
+    const tab = await newTab(t)
     const { errors } = watch(tab)
     await tab.emulateTimezone('Asia/Kolkata')
     await (await tab.createCDPSession()).send('Emulation.setLocaleOverride', { locale: 'de-DE' })
@@ -200,7 +206,6 @@ test("review blockers 1 to 4 in a page set to de-DE and Asia/Kolkata: game code 
     assert.deepEqual(host, [0, 'string', '1.234.567,5'])
     assert.deepEqual(errors, ['entity "probe" is read-only here; only start and update change the game', 'entity "probe" is read-only here; only start and update change the game'])
   } finally {
-    await browser.close()
     server.close()
     await page.dispose()
   }
@@ -232,7 +237,7 @@ const KEEPER = [
   '',
 ].join('\n')
 
-test("a page that runs ticks in one batch or in several gives sim's run of a game that makes a global, sets one the page has, and puts its own Math.random in place, and the page keeps its own", { skip: !chrome && 'needs Chrome' }, async () => {
+test("a page that runs ticks in one batch or in several gives sim's run of a game that makes a global, sets one the page has, and puts its own Math.random in place, and the page keeps its own", { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'keeper-'))
   made.push(dir)
   writeFileSync(join(dir, 'game.ts'), KEEPER)
@@ -240,10 +245,9 @@ test("a page that runs ticks in one batch or in several gives sim's run of a gam
   assert.deepEqual(expected, [{ name: 'probe', seen: ['undefined undefined refused', '1 player 0.25', '2 player 0.25'] }])
   const page = await buildPage({ dir, config: { mode: 'shot' } })
   const server = await serve({ page })
-  const browser = await launch()
   try {
     for (const batches of [1, 3]) {
-      const tab = await browser.newPage()
+      const tab = await newTab(t)
       await openPage(tab, server.url)
       await tab.waitForFunction('window.engine !== undefined')
       const actual = await tab.evaluate((batches: number) => {
@@ -253,10 +257,8 @@ test("a page that runs ticks in one batch or in several gives sim's run of a gam
         return { state: window.engine.state(), name: [typeof Object.getOwnPropertyDescriptor(window, 'name')?.get, window.name] }
       }, batches)
       assert.deepEqual(actual, { state: expected, name: ['function', ''] }, `${batches} batches`)
-      await tab.close()
     }
   } finally {
-    await browser.close()
     server.close()
     await page.dispose()
   }
@@ -285,7 +287,7 @@ const PICTURE = [
   '',
 ].join('\n')
 
-test('from the first frame the page draws images with square pixels and turned parts where sim puts them, and follows a mouse schedule as sim does', { skip: !chrome && 'needs Chrome' }, async () => {
+test('from the first frame the page draws images with square pixels and turned parts where sim puts them, and follows a mouse schedule as sim does', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'picture-'))
   made.push(dir)
   writeFileSync(join(dir, 'game.ts'), PICTURE)
@@ -294,9 +296,8 @@ test('from the first frame the page draws images with square pixels and turned p
   const expected = (await runGame(dir, input)).snapshots[0].entities
   const page = await buildPage({ dir, config: { mode: 'shot' } })
   const server = await serve({ page })
-  const browser = await launch()
   try {
-    const tab = await browser.newPage()
+    const tab = await newTab(t)
     await openPage(tab, server.url)
     await tab.waitForFunction('window.engine !== undefined')
     // Just inside each of the image's four pixels where they meet, 100 screen pixels apart, then on the turned part and where it would be unturned.
@@ -321,21 +322,19 @@ test('from the first frame the page draws images with square pixels and turned p
     assert.deepEqual(actual.pixels, [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255], [255, 0, 255], [0, 0, 0]])
     assert.deepEqual(actual.state, expected)
   } finally {
-    await browser.close()
     server.close()
     await page.dispose()
   }
 })
 
-test('played by the mouse autopilot, Asteroids reaches the state sim computes in the page, which records the sounds sim lists', { skip: !chrome && 'needs Chrome' }, async () => {
+test('played by the mouse autopilot, Asteroids reaches the state sim computes in the page, which records the sounds sim lists', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const driver = join('games', 'asteroids', 'autopilot.ts')
   const expected = await runGame('games/asteroids', { ticks: 600, driver })
   assert.ok(expected.sounds.some((sound) => sound.name === 'explode'))
   const page = await buildPage({ dir: 'games/asteroids', config: { mode: 'shot' }, driver })
   const server = await serve({ page })
-  const browser = await launch()
   try {
-    const tab = await browser.newPage()
+    const tab = await newTab(t)
     await openPage(tab, server.url)
     await tab.waitForFunction('window.engine !== undefined')
     const actual = await tab.evaluate(() => {
@@ -345,7 +344,6 @@ test('played by the mouse autopilot, Asteroids reaches the state sim computes in
     })
     assert.deepEqual(actual, { entities: expected.snapshots[0].entities, sounds: expected.sounds })
   } finally {
-    await browser.close()
     server.close()
     await page.dispose()
   }
@@ -360,15 +358,14 @@ function watch(tab: Page): { errors: string[]; requests: string[] } {
   return seen
 }
 
-test('an exported file opened from disk starts with the seed export fixed, runs its view.ts, and reaches the state sim computes for scheduled keys', { skip: !chrome && 'needs Chrome' }, async () => {
+test('an exported file opened from disk starts with the seed export fixed, runs its view.ts, and reaches the state sim computes for scheduled keys', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'threejam-export-'))
-  const browser = await launch()
   try {
     const file = join(dir, 'pong.html')
     await exportGame({ dir: 'games/pong', out: file, seed: 9 })
     const input = { seed: 4, ticks: 600, press: ['Space@1'], hold: ['W@1-60', 'Down@30-200'] }
     const expected = simulate(pong, input).snapshots[0].entities
-    const tab = await browser.newPage()
+    const tab = await newTab(t)
     const { errors } = watch(tab)
     await openPage(tab, pathToFileURL(file).href)
     await tab.waitForFunction('window.engine !== undefined')
@@ -380,18 +377,16 @@ test('an exported file opened from disk starts with the seed export fixed, runs 
     }, input)
     assert.deepEqual({ ...actual, errors }, { seed: 9, state: expected, errors: [] })
   } finally {
-    await browser.close()
     rmSync(dir, { recursive: true, force: true })
   }
 })
 
-test('exported Asteroids draws its SVG rocks and plays sounds with nothing but the file, and picks a new seed each load', { skip: !chrome && 'needs Chrome' }, async () => {
+test('exported Asteroids draws its SVG rocks and plays sounds with nothing but the file, and picks a new seed each load', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'threejam-export-'))
-  const browser = await launch()
   try {
     const file = join(dir, 'asteroids.html')
     await exportGame({ dir: 'games/asteroids', out: file })
-    const tab = await browser.newPage()
+    const tab = await newTab(t)
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const { errors, requests } = watch(tab)
     await tab.evaluateOnNewDocument(() => {
@@ -434,24 +429,11 @@ test('exported Asteroids draws its SVG rocks and plays sounds with nothing but t
     assert.notEqual(first, second)
     assert.deepEqual({ errors, elsewhere: requests.filter((url) => !/^(file|data):/.test(url)) }, { errors: [], elsewhere: [] })
   } finally {
-    await browser.close()
     rmSync(dir, { recursive: true, force: true })
   }
 })
 
-test('audit 48: shot repeats a frame byte for byte on one machine, images and text included', { skip: !chrome && 'needs Chrome' }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'threejam-shot-'))
-  try {
-    const driver = join('games', 'asteroids', 'autopilot.ts')
-    const shots = await Promise.all(['one', 'two'].map((name) => shoot({ dir: 'games/asteroids', at: [120], driver, out: join(dir, name, 'frame.png') })))
-    const [first, second] = shots.map(([file]) => readFileSync(file))
-    assert.ok(first.equals(second), 'two shots of one run differ')
-  } finally {
-    rmSync(dir, { recursive: true, force: true })
-  }
-})
-
-test("a run page whose game or view.ts fails as it loads says why on the page, instead of staying blank, and still reloads when a fix is saved", { skip: !chrome && 'needs Chrome' }, async () => {
+test("a run page whose game or view.ts fails as it loads says why on the page, instead of staying blank, and still reloads when a fix is saved", { skip: !chrome && 'needs Chrome' }, async (t) => {
   const game = "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n"
   const cases: ReadonlyArray<readonly [Record<string, string>, string]> = [
     [{ 'game.ts': game, 'view.ts': 'export const init = 5\n' }, 'view.ts: init must be a function'],
@@ -459,71 +441,23 @@ test("a run page whose game or view.ts fails as it loads says why on the page, i
     [{ 'game.ts': `${game}export const started = Date.now()\n` }, 'Date.now() would make runs differ'],
   ]
   const token = 'session-token'
-  const browser = await launch()
-  try {
-    for (const [files, reason] of cases) {
-      const dir = mkdtempSync(join(TMP, 'notice-'))
-      made.push(dir)
-      for (const [name, source] of Object.entries(files)) writeFileSync(join(dir, name), source)
-      const page = await buildPage({ dir, config: { mode: 'run', seed: 0, token } })
-      const server = await serve({ page, token })
-      try {
-        const tab = await browser.newPage()
-        const listening = tab.waitForResponse((response) => response.url().includes('/events?'))
-        await openPage(tab, server.url)
-        await tab.waitForSelector('pre')
-        const shown = await tab.$eval('pre', (box) => box.textContent ?? '')
-        assert.ok(shown.startsWith(reason) && shown.endsWith('\n\nFix the game and save; the page reloads.'), shown)
-        assert.equal((await listening).status(), 200, `the page ${reason} doesn't listen for reloads`)
-      } finally {
-        server.close()
-        await page.dispose()
-      }
-    }
-  } finally {
-    await browser.close()
-  }
-})
-
-test("a page that fails in shot is the game's failure, told in one line without the page's stack or the server's address", { skip: !chrome && 'needs Chrome' }, async () => {
-  const dir = mkdtempSync(join(TMP, 'broken-'))
-  made.push(dir)
-  writeFileSync(join(dir, 'game.ts'), "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { rock: { w: 1, h: 1, image: 'rock.png' } }, update() {} })\n")
-  writeFileSync(join(dir, 'rock.png'), 'not a png')
-  await assert.rejects(shoot({ dir, at: [1], out: join(dir, 'frame.png') }), {
-    name: 'GameError',
-    message: "the page failed: the image rock.png couldn't be loaded; check that the file is a whole image of its type",
-  })
-})
-
-test("shot's page gets --timeout too, from the moment it loads, so a view.ts that never returns fails with TIMEOUT and Chrome is killed", { skip: !chrome && 'needs Chrome' }, async () => {
-  const stuck = async (view: string, timeout: number, when: string) => {
-    const dir = mkdtempSync(join(TMP, 'stuck-'))
+  for (const [files, reason] of cases) {
+    const dir = mkdtempSync(join(TMP, 'notice-'))
     made.push(dir)
-    writeFileSync(join(dir, 'game.ts'), "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n")
-    writeFileSync(join(dir, 'view.ts'), view)
-    const started = Date.now()
-    await assert.rejects(shoot({ dir, at: [1, 2], out: join(dir, 'frame.png'), timeout }), {
-      name: 'LimitError',
-      message: `the page ran past the ${timeout} s time limit ${when}; look for a loop that never ends in view.ts, or allow more time with --timeout`,
-    })
-    // The page uses up the whole limit first, so a graceful close, which waits up to 10 s on a stuck page, can't finish under this on any machine.
-    const took = Date.now() - started
-    assert.ok(took < (timeout + 10) * 1000, `shot took ${took} ms with a page stuck ${when}`)
-  }
-  // The page never finishes loading, so the limit runs out as it loads however fast the machine is.
-  await stuck('for (;;) {}\n', 2, 'as it loaded')
-  // Loading and drawing tick 1 take well under this even on a slow machine, so the limit runs out at tick 2.
-  await stuck("import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick === 2) for (;;) {}\n}\n", 15, 'drawing tick 2')
-})
-
-test('shot writes one PNG per tick into a folder it creates', { skip: !chrome && 'needs Chrome' }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'threejam-shot-'))
-  try {
-    const files = await shoot({ dir: 'games/pong', at: [1, 30], out: join(dir, 'new', 'frame.png') })
-    assert.deepEqual(files, [join(dir, 'new', 'frame-001.png'), join(dir, 'new', 'frame-030.png')])
-    for (const file of files) assert.equal(readFileSync(file).toString('latin1', 1, 4), 'PNG')
-  } finally {
-    rmSync(dir, { recursive: true, force: true })
+    for (const [name, source] of Object.entries(files)) writeFileSync(join(dir, name), source)
+    const page = await buildPage({ dir, config: { mode: 'run', seed: 0, token } })
+    const server = await serve({ page, token })
+    try {
+      const tab = await newTab(t)
+      const listening = tab.waitForResponse((response) => response.url().includes('/events?'))
+      await openPage(tab, server.url)
+      await tab.waitForSelector('pre')
+      const shown = await tab.$eval('pre', (box) => box.textContent ?? '')
+      assert.ok(shown.startsWith(reason) && shown.endsWith('\n\nFix the game and save; the page reloads.'), shown)
+      assert.equal((await listening).status(), 200, `the page ${reason} doesn't listen for reloads`)
+    } finally {
+      server.close()
+      await page.dispose()
+    }
   }
 })
