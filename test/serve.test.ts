@@ -383,11 +383,12 @@ test("a Chrome that doesn't close in the time it's given is killed, with every p
     // A stopped Chrome neither answers nor exits, like one that hangs as it closes.
     process.kill(stopped.pid, 'SIGSTOP')
     const started = Date.now()
+    let killed = Number.POSITIVE_INFINITY
+    stopped.once('exit', () => (killed = Date.now() - started))
     await closeChrome(browser, killer, { wait: 100 })
-    const took = Date.now() - started
     assert.deepEqual({ signal: stopped.signalCode, ended: [stopped.stdout?.readableEnded, stopped.stderr?.readableEnded] }, { signal: 'SIGKILL', ended: [true, true] })
-    // Well short of the 10 s that closing waits for unless told otherwise.
-    assert.ok(took < 5000, `closing took ${took} ms`)
+    // Killed once its 100 ms are up, well short of the 10 s that closing waits for unless told otherwise; the end of Chrome's output, which comes after, can take longer on a slow machine.
+    assert.ok(killed < 5000, `Chrome was killed ${killed} ms after closing began`)
   } finally {
     killer.abort()
     removeProfile(profile)

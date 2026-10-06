@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { ChildProcess } from 'node:child_process'
+import { subscribe, unsubscribe } from 'node:diagnostics_channel'
+import { once } from 'node:events'
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
@@ -823,22 +826,38 @@ test("a run page whose game or view.ts fails as it loads says why on the page, i
   }
 })
 
-// How long shot took with each stuck page.
+// How long shot took with each stuck page, and how it ended the page's Chrome.
 async function stuckPages(): Promise<string[]> {
   const stuckAt = async (view: string, timeout: number, when: string) => {
     const dir = mkdtempSync(join(TMP, 'stuck-'))
     made.push(dir)
     writeFileSync(join(dir, 'game.ts'), "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n")
     writeFileSync(join(dir, 'view.ts'), view)
+    // The Chrome that shot starts, as Node's child_process channel shows it.
+    const spawned: ChildProcess[] = []
+    const spot = (message: unknown) => {
+      if (typeof message === 'object' && message !== null && 'process' in message && message.process instanceof ChildProcess) spawned.push(message.process)
+    }
+    subscribe('child_process', spot)
     const started = Date.now()
-    await assert.rejects(shoot({ dir, at: [1, 2], out: join(dir, 'frame.png'), timeout }), {
-      name: 'LimitError',
-      message: `the page ran past the ${timeout} s time limit ${when}; look for a loop that never ends in view.ts, or allow more time with --timeout`,
-    })
-    // The page uses up the whole limit first, so a graceful close, which waits up to 10 s on a stuck page, can't finish under this on any machine.
+    try {
+      await assert.rejects(shoot({ dir, at: [1, 2], out: join(dir, 'frame.png'), timeout }), {
+        name: 'LimitError',
+        message: `the page ran past the ${timeout} s time limit ${when}; look for a loop that never ends in view.ts, or allow more time with --timeout`,
+      })
+    } finally {
+      unsubscribe('child_process', spot)
+    }
     const took = Date.now() - started
-    assert.ok(took < (timeout + 10) * 1000, `shot took ${took} ms with a page stuck ${when}`)
-    return `shot took ${took} ms with a page stuck ${when}, against a time limit of ${timeout} s`
+    const shotChrome = spawned.find((child) => child.spawnargs.includes('--remote-debugging-pipe'))
+    assert.ok(shotChrome, `shot started no Chrome with a page stuck ${when}`)
+    if (shotChrome.exitCode === null && shotChrome.signalCode === null) await once(shotChrome, 'exit')
+    // Closing Chrome ends it with 0, and killing it ends it by SIGKILL, or on Windows, where taskkill sends no signal, with another code.
+    const ended = shotChrome.signalCode ?? shotChrome.exitCode
+    assert.ok(process.platform === 'win32' ? ended !== 0 : ended === 'SIGKILL', `shot ended its Chrome with ${ended} with a page stuck ${when}, rather than killing it`)
+    // The limit runs from the moment the page loads, so shot can't stop before it has passed, however fast or slow the machine.
+    assert.ok(took >= timeout * 1000, `shot stopped ${took} ms into a time limit of ${timeout} s with a page stuck ${when}`)
+    return `shot took ${took} ms with a page stuck ${when}, against a time limit of ${timeout} s, and killed its Chrome, which ended with ${ended}`
   }
   // The page never finishes loading, so the limit runs out as it loads however fast the machine is.
   const loading = await stuckAt('for (;;) {}\n', 2, 'as it loaded')
