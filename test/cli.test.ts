@@ -249,6 +249,25 @@ test('the MCP instructions say the tools run game code and that a game\'s output
   }
 })
 
+test("a failed MCP call's text starts with its code, which an MCP client has no other way to read", async (t) => {
+  const typo = folder({ 'game.ts': game({ update: 'world.ball.vxx = 2' }) })
+  const syntax = folder({ 'game.ts': game({ update: 'world.ball.x += ;' }) })
+  const server = mcp(t.signal)
+  try {
+    await server.ready
+    const failure = async (name: string, args: object) => {
+      const reply = await server.request('tools/call', { name, arguments: args })
+      assert.equal(reply.result?.isError, true)
+      return reply.result?.content?.[0]?.text ?? ''
+    }
+    assert.match(await failure('check', { dir: typo }), /^TYPE_ERROR: test\/\.tmp\/game-\w+\/game\.ts:6: Property 'vxx' does not exist/)
+    assert.match(await failure('sim', { dir: syntax, ticks: 1 }), /^BUILD_ERROR: test\/\.tmp\/game-\w+\/game\.ts:6: Unexpected ";"$/)
+    assert.match(await failure('sim', { dir: 'games/pong', ticks: 1, press: ['Nope@1'] }), /^USAGE: --press "Nope@1": unknown key/)
+  } finally {
+    server.close()
+  }
+})
+
 test('audit 1 and 2: a looping game does not block other MCP calls, even after a cancel, and an oversized reply is refused with a hint', async (t) => {
   const loop = folder({ 'game.ts': game({ update: 'if (ctx.tick === 2) for (;;) {}' }) })
   const server = mcp(t.signal)
