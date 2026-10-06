@@ -343,6 +343,28 @@ test('closing a Chrome that crashed waits for the processes it started, which ou
   }
 })
 
+test("a Chrome that doesn't close in the time it's given is killed, with every process it started", { skip: (!chrome && 'needs Chrome') || (process.platform === 'win32' && 'stopping a process is for macOS and Linux'), timeout: 60_000 }, async () => {
+  const profile = folder({})
+  const killer = new AbortController()
+  const browser = await launchChrome(chrome ?? 'no Chrome', { profile, signal: killer.signal })
+  const stopped = browser.process()
+  try {
+    if (!stopped?.pid) throw new Error('Chrome has no process')
+    await browser.newPage()
+    // A stopped Chrome neither answers nor exits, like one that hangs as it closes.
+    process.kill(stopped.pid, 'SIGSTOP')
+    const started = Date.now()
+    await closeChrome(browser, killer, { wait: 100 })
+    const took = Date.now() - started
+    assert.deepEqual({ signal: stopped.signalCode, ended: [stopped.stdout?.readableEnded, stopped.stderr?.readableEnded] }, { signal: 'SIGKILL', ended: [true, true] })
+    // Well short of the 10 s that closing waits for unless told otherwise.
+    assert.ok(took < 5000, `closing took ${took} ms`)
+  } finally {
+    killer.abort()
+    removeProfile(profile)
+  }
+})
+
 // The system's temporary folder can hold a 50-byte TMPDIR, of threejam- and mkdtemp's 6 characters at the least.
 const roomFor50 = join(tmpdir(), 'threejam-XXXXXX').length <= 50
 

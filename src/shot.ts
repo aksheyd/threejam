@@ -161,15 +161,15 @@ export function callLimit(seconds: number): number {
   return Math.max(180_000, (seconds + 30) * 1000)
 }
 
-// A page stuck in the game's loop isn't waited on: Chrome is killed then, as when closing takes too long.
-export async function closeChrome(browser: Browser | undefined, killer: AbortController, { stuck = false }: { stuck?: boolean } = {}): Promise<void> {
+// A page stuck in the game's loop isn't waited on: Chrome is killed then, as when closing takes longer than wait milliseconds.
+export async function closeChrome(browser: Browser | undefined, killer: AbortController, { stuck = false, wait = 10_000 }: { stuck?: boolean; wait?: number } = {}): Promise<void> {
   const chrome = browser?.process()
   if (browser === undefined || !chrome) return
   const running = chrome.exitCode === null && chrome.signalCode === null
   // On macOS and Linux every process Chrome starts shares its output, which ends once none is left to write to the profile, even after Chrome itself has crashed; on Windows its sandboxed helpers don't inherit it.
   const gone = Promise.allSettled([running && once(chrome, 'exit'), ...[chrome.stdout, chrome.stderr].map((output) => output && finished(output))])
   // Aborting has Puppeteer kill Chrome's process group, or its process tree on Windows; on Linux that leaves only Chrome's crash handlers, which exit once Chrome is gone.
-  if (running && (stuck || !(await within(10_000, browser.close().catch(() => {}))))) killer.abort()
+  if (running && (stuck || !(await within(wait, browser.close().catch(() => {}))))) killer.abort()
   await within(10_000, gone)
 }
 
