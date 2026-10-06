@@ -545,6 +545,88 @@ test("a played page takes keys by where they sit, holds a tap shorter than a tic
   ])
 })
 
+// A silent mono WAV of 16-bit samples at 8000 a second.
+function wav(seconds: number): Buffer {
+  const rate = 8000
+  const data = Buffer.alloc(Math.round(seconds * rate) * 2)
+  const header = Buffer.alloc(44)
+  header.write('RIFFxxxxWAVEfmt ', 0)
+  header.writeUInt32LE(36 + data.length, 4)
+  header.writeUInt32LE(16, 16)
+  header.writeUInt16LE(1, 20)
+  header.writeUInt16LE(1, 22)
+  header.writeUInt32LE(rate, 24)
+  header.writeUInt32LE(rate * 2, 28)
+  header.writeUInt16LE(2, 32)
+  header.writeUInt16LE(16, 34)
+  header.write('data', 36)
+  header.writeUInt32LE(data.length, 40)
+  return Buffer.concat([header, data])
+}
+
+const SOUND_FILES = [
+  "import { defineGame } from 'threejam'",
+  '',
+  'export default defineGame({',
+  '  entities: { dot: { w: 0.1, h: 0.1 } },',
+  '  update(world, ctx) {',
+  "    if (ctx.input.pressed('Space')) ctx.play('beep.wav', { pitch: 2 })",
+  '  },',
+  '})',
+  '',
+].join('\n')
+
+test("a played page decodes the game's sound files and plays one at its pitch once a key wakes its audio, and tells the console of a file it can't decode", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const page = async (sound: string, contents: Buffer) => {
+    const dir = mkdtempSync(join(TMP, 'sound-'))
+    made.push(dir)
+    writeFileSync(join(dir, 'game.ts'), SOUND_FILES)
+    writeFileSync(join(dir, sound), contents)
+    await exportGame({ dir, out: join(dir, 'sound.html') })
+    const tab = await newTab(t)
+    // What the page's audio does: how many files it decodes, its context, and each buffer it plays, by length and rate.
+    await tab.evaluateOnNewDocument(() => {
+      const audio = { decoded: 0, contexts: new Array<AudioContext>(), played: new Array<[number, number]>() }
+      const decode = BaseAudioContext.prototype.decodeAudioData
+      BaseAudioContext.prototype.decodeAudioData = function (...args: Parameters<typeof decode>) {
+        return decode.apply(this, args).then((buffer) => {
+          audio.decoded += 1
+          return buffer
+        })
+      }
+      window.AudioContext = class extends AudioContext {
+        constructor(...args: ConstructorParameters<typeof AudioContext>) {
+          super(...args)
+          audio.contexts.push(this)
+        }
+      }
+      const start = AudioBufferSourceNode.prototype.start
+      AudioBufferSourceNode.prototype.start = function (...args: Parameters<typeof start>) {
+        audio.played.push([this.buffer?.duration ?? 0, this.playbackRate.value])
+        return start.apply(this, args)
+      }
+      Reflect.set(window, 'audio', audio)
+    })
+    const seen = watch(tab)
+    await openPage(tab, pathToFileURL(join(dir, 'sound.html')).href)
+    await tab.waitForFunction('window.engine !== undefined')
+    return { tab, errors: seen.errors }
+  }
+
+  const { tab, errors } = await page('beep.wav', wav(0.25))
+  await tab.waitForFunction(() => Reflect.get(window, 'audio').decoded === 1)
+  await tab.keyboard.press('Enter')
+  await tab.waitForFunction(() => Reflect.get(window, 'audio').contexts[0].state === 'running')
+  await tab.keyboard.press('Space')
+  await tab.waitForFunction(() => Reflect.get(window, 'audio').played.length > 0)
+  assert.deepEqual({ played: await tab.evaluate(() => Reflect.get(window, 'audio').played), errors }, { played: [[0.25, 2]], errors: [] })
+
+  const broken = await page('beep.ogg', Buffer.from('not a sound'))
+  await until("the page to report the file it can't decode", () => broken.errors.length > 0)
+  assert.deepEqual(broken.errors, ["Error: the sound beep.ogg couldn't be decoded; check that the file is a whole sound of its type"])
+  await broken.tab.waitForFunction(() => window.engine.tick > 30)
+})
+
 async function until(what: string, check: () => boolean): Promise<void> {
   for (const deadline = Date.now() + 10_000; !check(); await new Promise((wait) => setTimeout(wait, 20))) {
     if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}`)
