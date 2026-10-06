@@ -7,9 +7,9 @@ import { barePage } from './bare.ts'
 import { Speaker } from './sound.ts'
 import { View, parseView, type ViewModule } from './view.ts'
 
-// run is served by threejam run, whose server takes the token with /events and /quit, shot by threejam shot, and export is one file opened from disk, with no server behind it.
+// run is served by threejam run, whose server takes the token with /events and /quit and gives the failure when the latest save didn't build, shot by threejam shot, and export is one file opened from disk, with no server behind it.
 export type Config =
-  | { readonly mode: 'run'; readonly seed: number; readonly token: string }
+  | { readonly mode: 'run'; readonly seed: number; readonly token: string; readonly failure?: string }
   | { readonly mode: 'shot' }
   | { readonly mode: 'export'; readonly seed?: number }
 
@@ -92,6 +92,8 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
       throw reported(error, fix)
     }
   }
+  // After a save that doesn't build, the page comes with the last script that did, so it says why instead of playing that game.
+  if (config.mode === 'run' && config.failure !== undefined) throw reported(new Error(config.failure), FIX_GAME)
   const { game, drive, assets } = settingUp(() => partsOf(page, bare), FIX_GAME)
   const canvas = document.querySelector('canvas')
   if (!canvas) throw new Error('the page needs a <canvas>')
@@ -325,7 +327,8 @@ function parseConfig(value: unknown): Config {
     case 'run': {
       const token = 'token' in value && typeof value.token === 'string' ? value.token : undefined
       if (seed === undefined || token === undefined) throw new Error('the run page has no seed or token')
-      return { mode: 'run', seed, token }
+      const failure = 'failure' in value && typeof value.failure === 'string' ? value.failure : undefined
+      return { mode: 'run', seed, token, failure }
     }
     case 'shot':
       return { mode: 'shot' }

@@ -17,7 +17,7 @@ import type { Config } from './browser/client.ts'
 export interface Page {
   // The game's folder, which the page's images and sounds come from.
   readonly folder: string
-  // The page, and the script of the last build that didn't fail.
+  // The page as the latest build left it, which says why when that build failed, and the script of the last build that didn't.
   readonly index: string
   readonly bundle: Uint8Array
   dispose(): Promise<void>
@@ -34,6 +34,7 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
   const files = gameFiles(dir)
   const page = pageBuild({ files, driver, address: (name) => `assets/${encodeURIComponent(name)}` })
   let bundle: Uint8Array = new Uint8Array()
+  let failure: string | undefined
   let firstEnded: ((errors: esbuild.Message[]) => void) | undefined
   const first = new Promise<esbuild.Message[]>((ended) => (firstEnded = ended))
   const context = await esbuild.context({
@@ -47,8 +48,10 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
         name: 'threejam-rebuild',
         setup: (build) =>
           void build.onEnd((result) => {
-            if (result.errors.length === 0 && result.outputFiles) bundle = result.outputFiles[0].contents
-            if (firstEnded === undefined) onRebuild?.(result.errors.map(formatMessage))
+            const errors = result.errors.map(formatMessage)
+            if (errors.length === 0 && result.outputFiles) bundle = result.outputFiles[0].contents
+            failure = errors.length === 0 ? undefined : errors.join('\n')
+            if (firstEnded === undefined) onRebuild?.(errors)
             else firstEnded(result.errors)
             firstEnded = undefined
           }),
@@ -56,14 +59,16 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
     ],
   })
   // A page that follows saves takes its first build from watch mode, since a build before it would leave watch mode a first build of its own, whose end would read as a save.
-  const errors = onRebuild ? await context.watch().then(() => first) : (await context.rebuild().catch((failure: esbuild.BuildFailure) => failure)).errors
+  const errors = onRebuild ? await context.watch().then(() => first) : (await context.rebuild().catch((failed: esbuild.BuildFailure) => failed)).errors
   if (errors.length > 0) {
     await context.dispose()
     throw new BuildError(errors.map(formatMessage).join('; '))
   }
   return {
     folder: files.folder,
-    index: html({ title: basename(files.folder), config, script: { kind: 'file', src: '/bundle.js' } }),
+    get index() {
+      return html({ title: basename(files.folder), config: failure !== undefined && config.mode === 'run' ? { ...config, failure } : config, script: { kind: 'file', src: '/bundle.js' } })
+    },
     get bundle() {
       return bundle
     },
@@ -150,11 +155,16 @@ export function html({ title, config, script }: { title: string; config: Config;
 </head>
 <body>
 <canvas></canvas>
-<script>window.THREEJAM = ${JSON.stringify(config)}</script>
+<script>window.THREEJAM = ${configJson(config)}</script>
 ${scriptTag(script)}
 </body>
 </html>
 `
+}
+
+// A failure can quote the game's files, and a script element ends at the first </script, even one inside a string, so < goes in as \u003c, which means the same to JavaScript.
+function configJson(config: Config): string {
+  return JSON.stringify(config).replaceAll('<', '\\u003c')
 }
 
 function scriptTag(script: Script): string {
@@ -412,7 +422,11 @@ export async function* play({ dir, seed = randomInt(2 ** 31), window }: { dir: s
   const page = await buildPage({
     dir,
     config: { mode: 'run', seed, token },
-    onRebuild: (errors) => (errors.length > 0 ? void process.stderr.write(`${errors.join('\n')}\n`) : server?.reload()),
+    // Every save reloads the page, which says why when the save doesn't build.
+    onRebuild: (errors) => {
+      if (errors.length > 0) process.stderr.write(`${errors.join('\n')}\n`)
+      server?.reload()
+    },
   })
   server = await serve({ page, token, onQuit: () => quit() })
   const app = window ? openWindow(server.url) : undefined

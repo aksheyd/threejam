@@ -703,7 +703,7 @@ async function until(what: string, check: () => boolean): Promise<void> {
   }
 }
 
-test("run serves the game at its seed, reloads the page at that seed when a save builds, prints a save that doesn't and plays on, and stops once Esc ends the session", { skip: !chrome && 'needs Chrome' }, async (t) => {
+test("run serves the game at its seed, says on the page why a save doesn't build, in place of the game and even after a refresh, until one that does reloads it at that seed, and stops once Esc on such a page ends the session", { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'run-'))
   made.push(dir)
   const version = (n: number) => `import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1, version: ${n} } }, update() {} })\n`
@@ -722,24 +722,32 @@ test("run serves the game at its seed, reloads the page at that seed when a save
   await openPage(tab, url)
   await tab.waitForFunction('window.engine !== undefined')
   await listening
-  // The seed, the game's version, and whether this is still the page marked before the saves.
-  const playing = () => tab.evaluate(() => [window.engine.seed, window.engine.state('dot')[0].version, Reflect.has(window, 'marked')])
-  await tab.evaluate(() => Reflect.set(window, 'marked', true))
+  const playing = () => tab.evaluate(() => [window.engine.seed, window.engine.state('dot')[0].version])
+  assert.deepEqual(await playing(), [5, 1])
 
-  writeFileSync(join(dir, 'game.ts'), version(1).replace('update() {}', 'update() {'))
+  // The message quotes the save, markup and all, which the page shows as it is.
+  writeFileSync(join(dir, 'game.ts'), version(1).replace('update() {}', "update() { '' '</script><b>' }"))
   await until("run to print the save that doesn't build", () => errors.includes('\n'))
-  assert.ok(errors.startsWith(`${shown}/game.ts:3: `) && errors.indexOf('\n') === errors.length - 1, errors)
-  assert.deepEqual(await playing(), [5, 1, true])
+  assert.ok(errors.startsWith(`${shown}/game.ts:3: `) && errors.includes('</script><b>') && errors.indexOf('\n') === errors.length - 1, errors)
+  const why = `${errors.trim()}\n\nFix the game and save; the page reloads.`
+  const notice = async () => (await tab.waitForSelector('pre'))?.evaluate((box) => box.textContent)
+  assert.equal(await notice(), why)
+  await tab.reload()
+  assert.deepEqual([await notice(), await tab.evaluate(() => typeof window.engine)], [why, 'undefined'])
 
   const reloaded = tab.waitForNavigation()
   writeFileSync(join(dir, 'game.ts'), version(2))
   await reloaded
   await tab.waitForFunction('window.engine !== undefined')
-  assert.deepEqual(await playing(), [5, 2, false])
+  assert.deepEqual(await playing(), [5, 2])
 
+  writeFileSync(join(dir, 'game.ts'), version(2).replace('update() {}', 'update() {'))
+  await tab.waitForSelector('pre')
   await tab.keyboard.press('Escape')
-  assert.equal(await exited, 0)
-  assert.deepEqual({ out, notice: await tab.$eval('pre', (box) => box.textContent) }, { out: `Playing ${shown} with seed 5 at ${url}\nStopped.\n`, notice: 'Session ended.' })
+  await until('Esc on the page that says why to end the session', () => run.exitCode !== null)
+  // The page's notice of why comes first, then the one Esc adds.
+  const ended = await tab.$$eval('pre', (boxes) => boxes.at(-1)?.textContent)
+  assert.deepEqual({ code: await exited, out, ended }, { code: 0, out: `Playing ${shown} with seed 5 at ${url}\nStopped.\n`, ended: 'Session ended.' })
 })
 
 test("a played page that fails as it runs, or whose image won't load, stops and says why on the page, and in run what to fix", { skip: !chrome && 'needs Chrome' }, async (t) => {

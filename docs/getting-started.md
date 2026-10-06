@@ -15,7 +15,7 @@ npm install
 npx threejam run .
 ```
 
-`new` writes a small game of catch and its test, plus a `package.json` and a `tsconfig.json`, and `npm install` adds ThreeJam to the folder. `run` opens the game in a window: Left and Right move the paddle, Space starts, and the third miss ends the game. Esc quits, and saving a game file replays it with the same seed.
+`new` writes a small game of catch and its test, plus a `package.json` and a `tsconfig.json`, and `npm install` adds ThreeJam to the folder. `run` opens the game in a window: Left and Right move the paddle, Space starts, and the third miss ends the game. Esc quits, and saving a game file replays it with the same seed, or says on the page why the save doesn't build.
 
 ## A game in a project you have
 
