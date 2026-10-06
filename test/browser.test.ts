@@ -328,6 +328,61 @@ test('from the first frame the page draws images with square pixels and turned p
   }
 })
 
+// The 2x2 image above as a GIF with a second frame, all black, after it; as a lossless WebP; and as a 16x16 JPEG whose colors each fill whole 8x8 blocks, which it keeps to within a shade or two.
+const QUAD_GIF = 'R0lGODlhAgACAJIAAP8AAAD/AAAA/////wAAAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQECgAAACwAAAAAAgACAAADAwghkwAh+QQECgAAACwAAAAAAgACAAADA0hKCQA7'
+const QUAD_WEBP = 'UklGRiwAAABXRUJQVlA4TB8AAAAvAUAAAB8gEEjeHzqN+RcQFPwf3fxHZA/gBgwR/Q8BAA=='
+const QUAD_JPEG =
+  '/9j/2wBDAAgEBAQEBAUFBQUFBQYGBgYGBgYGBgYGBgYHBwcICAgHBwcGBgcHCAgICAkJCQgICAgJCQoKCgwMCwsODg4RERT/xABNAAEBAAAAAAAAAAAAAAAAAAAGBwEBAQEAAAAAAAAAAAAAAAAABwgGEAEAAAAAAAAAAAAAAAAAAAAAEQEAAAAAAAAAAAAAAAAAAAAA/8AAEQgAEAAQAwESAAISAAMSAP/aAAwDAQACEQMRAD8AFiDKKqP6a15WlFhUFJrf/9k='
+
+const FORMATS = [
+  "import { defineGame } from 'threejam'",
+  '',
+  'export default defineGame({',
+  "  background: '#000000',",
+  '  entities: {',
+  "    gif: { x: -1.35, w: 1.2, h: 1.2, image: 'quad.gif' },",
+  "    webp: { x: 0, w: 1.2, h: 1.2, image: 'quad.webp' },",
+  "    jpeg: { x: 1.35, w: 1.2, h: 1.2, image: 'quad.jpg' },",
+  '  },',
+  '  update() {},',
+  '})',
+  '',
+].join('\n')
+
+test('the page draws GIF, WebP, and JPEG images as it does PNGs, and a GIF as its first frame', { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'formats-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), FORMATS)
+  for (const [name, data] of [['quad.gif', QUAD_GIF], ['quad.webp', QUAD_WEBP], ['quad.jpg', QUAD_JPEG]]) writeFileSync(join(dir, name), Buffer.from(data, 'base64'))
+  const page = await buildPage({ dir, config: { mode: 'shot' } })
+  const server = await serve({ page })
+  try {
+    const tab = await newTab(t)
+    await openPage(tab, server.url)
+    await tab.waitForFunction('window.engine !== undefined')
+    // The middle of each quarter of each image: the GIF's centered at x 130 on the screen, the WebP's at 400, and the JPEG's at 670.
+    const spots = [130, 400, 670].flatMap((x) => [[x - 60, 240], [x + 60, 240], [x - 60, 360], [x + 60, 360]])
+    const pixels = await tab.evaluate((points) => {
+      window.engine.reset({ seed: 0 })
+      const copy = document.createElement('canvas')
+      copy.width = 800
+      copy.height = 600
+      const context = copy.getContext('2d')
+      const canvas = document.querySelector('canvas')
+      if (!context || !canvas) throw new Error('the page has no canvas to read')
+      context.drawImage(canvas, 0, 0)
+      return points.map(([x, y]) => [...context.getImageData(x, y, 1, 1).data.slice(0, 3)])
+    }, spots)
+    const quad = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255]]
+    assert.deepEqual(pixels.slice(0, 8), [...quad, ...quad])
+    const off = pixels.slice(8).flatMap((rgb, i) => rgb.map((channel, j) => Math.abs(channel - quad[i][j])))
+    assert.ok(Math.max(...off) <= 4, JSON.stringify(pixels.slice(8)))
+  } finally {
+    server.close()
+    await page.dispose()
+  }
+})
+
 test('played by the mouse autopilot, Asteroids reaches the state sim computes in the page, which records the sounds sim lists', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const driver = join('games', 'asteroids', 'autopilot.ts')
   const expected = await runGame('games/asteroids', { ticks: 600, driver })
