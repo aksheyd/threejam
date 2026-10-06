@@ -69,7 +69,7 @@ export default defineGame({
       attempt(() => frame().crypto.getRandomValues(new Uint8Array(4)).join()),
       attempt(() => new (frame().Date)(instant).getHours()),
       attempt(() => host.chrome.loadTimes().requestTime),
-      [host.navigator, host.localStorage, host.XMLHttpRequest, host.process].map((value) => typeof value).join(' '),
+      [host.navigator, host.localStorage, host.XMLHttpRequest, host.process, host.chrome].map((value) => typeof value).join(' '),
     ]
   },
 })
@@ -86,5 +86,5 @@ export function checkProbe(out: unknown, { bare }: { bare: boolean }): void {
   assert.equal(out[12], 'Intl.DateTimeFormat format() with no date would make runs differ')
   for (const index of [4, 9, 10, ...Array.from({ length: 13 }, (_, i) => 13 + i)]) assert.equal(out[index], 'en-US', `line ${index}`)
   assert.ok(out.slice(26, 30).every(refused), JSON.stringify(out.slice(26, 30)))
-  if (bare) assert.equal(out[30], 'undefined undefined undefined undefined')
+  if (bare) assert.equal(out[30], 'undefined undefined undefined undefined undefined')
 }
