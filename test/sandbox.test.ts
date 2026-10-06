@@ -254,7 +254,7 @@ test('finding 2: a game cannot import a file outside its folder, as TypeScript o
   const outside = folder({ 'keep.txt': 'x' }).abs
   writeFileSync(join(outside, 'secret.ts'), `export const secret = '${canary}'\n`)
   writeFileSync(join(outside, 'secret.json'), `{ "token": "${canary}" }\n`)
-  const ts = folder({ 'game.ts': `import { secret } from '${join(outside, 'secret.ts')}'\n${game('', 'x: 0, w: 0.1, tag: secret')}` })
+  const ts = folder({ 'game.ts': `import { secret } from '${join(outside, 'secret.ts').replaceAll('\\', '/')}'\n${game('', 'x: 0, w: 0.1, tag: secret')}` })
   const tsRun = threejam(['check', ts.dir])
   assert.equal(tsRun.code, 1)
   assert.match(String(tsRun.json.message), /is outside the folder/)
