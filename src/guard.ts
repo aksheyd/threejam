@@ -23,6 +23,8 @@ const LOCAL_TIME: ReadonlyArray<readonly [string, string]> = [
 ]
 // The date strings every engine reads alike: ISO 8601, with a Z or an offset when there's a time.
 const ISO_DATE = /^(?:[+-]\d{6}|\d{4})(?:-\d{2}(?:-\d{2})?)?(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{3})?)?(?:Z|[+-]\d{2}:\d{2}))?$/
+// The platform's own, kept before game code can reach it.
+const INTL_AT_LOAD: unknown = Reflect.get(globalThis, 'Intl')
 
 function refuse(name: string, instead: string): never {
   throw new GameError(`${name} would make runs differ; ${instead}`)
@@ -46,17 +48,13 @@ export function withStandIns(): void {
   for (const [key, value] of Object.entries(missing)) if (Reflect.get(globalThis, key) === undefined) Reflect.set(globalThis, key, value)
 }
 
-// A property the guard replaces, and what game code finds there while the guard is up.
-interface Change {
-  readonly owner: object
-  readonly key: string
-  readonly value: unknown
-}
+// A property the guard replaces while it's up: with a value, or with a getter for an accessor like Intl.DateTimeFormat.prototype.format.
+type Change = { readonly owner: object; readonly key: string; readonly value: unknown } | { readonly owner: object; readonly key: string; readonly get: () => unknown }
 
-// plain is for a writable data property, which gets and sets swap several times faster than descriptors do.
-interface Swap extends Change {
-  readonly plain: boolean
-}
+// set swaps a writable data property's value, several times faster than define, which replaces the property, as an accessor or a missing one needs.
+type Swap =
+  | { readonly how: 'set'; readonly owner: object; readonly key: string; readonly value: unknown }
+  | { readonly how: 'define'; readonly owner: object; readonly key: string; readonly descriptor: PropertyDescriptor }
 
 // load is while a game's or driver's modules load, and run while start, update, or a driver runs.
 type Window = 'load' | 'run'
@@ -65,7 +63,7 @@ let running = 0
 let raised = 0
 let plans: Readonly<Record<Window, readonly Swap[]>> | undefined
 
-// Swaps the clock, unseeded randomness, timers, garbage collection, the locale, and the time zone for errors or fixed values, and Math's functions for portable ones, while fn runs; it keeps runs repeatable, not code contained.
+// Swaps the clock, unseeded randomness, timers, garbage collection, the locale, and the time zone for errors or fixed values, and Math's functions for portable ones, while fn runs. It changes the platform's own objects, not only the globals that name them, so no prototype or constructor game code can walk to leads back to the originals; it keeps runs repeatable, not code contained.
 export function guarded<T>(fn: () => T): T {
   return up('run', () => {
     running += 1
@@ -108,34 +106,41 @@ function raise(window: Window): () => void {
   const values = new Array<unknown>(swaps.length)
   const descriptors = new Array<PropertyDescriptor | undefined>(swaps.length)
   for (let i = 0; i < swaps.length; i++) {
-    const { owner, key, value, plain } = swaps[i]
-    if (plain) {
-      values[i] = Reflect.get(owner, key)
-      Reflect.set(owner, key, value)
+    const swap = swaps[i]
+    if (swap.how === 'set') {
+      values[i] = Reflect.get(swap.owner, swap.key)
+      Reflect.set(swap.owner, swap.key, swap.value)
     } else {
-      descriptors[i] = Object.getOwnPropertyDescriptor(owner, key)
-      Object.defineProperty(owner, key, { value, writable: true, configurable: true })
+      descriptors[i] = Object.getOwnPropertyDescriptor(swap.owner, swap.key)
+      Object.defineProperty(swap.owner, swap.key, swap.descriptor)
     }
   }
   return () => {
     for (let i = swaps.length - 1; i >= 0; i--) {
-      const { owner, key, plain } = swaps[i]
+      const swap = swaps[i]
       const before = descriptors[i]
-      if (plain) Reflect.set(owner, key, values[i])
-      else if (before === undefined) Reflect.deleteProperty(owner, key)
-      else Object.defineProperty(owner, key, before)
+      if (swap.how === 'set') Reflect.set(swap.owner, swap.key, values[i])
+      else if (before === undefined) Reflect.deleteProperty(swap.owner, swap.key)
+      else Object.defineProperty(swap.owner, swap.key, before)
     }
   }
 }
 
 // Made once, from the platform's own objects, so every window puts the same stand-ins in place.
 function plan(): Record<Window, Swap[]> {
-  const swap = (change: Change): Swap => ({ ...change, plain: Object.getOwnPropertyDescriptor(change.owner, change.key)?.writable === true })
-  const shared = [{ owner: Math, key: 'random', value: blocked('Math.random()', SEEDED) }, ...globals(), ...localeMethods()].map(swap)
+  const shared: Change[] = [{ owner: Math, key: 'random', value: blocked('Math.random()', SEEDED) }, ...host(), ...dates(), ...intl(), ...temporal(), ...localeMethods()]
+  const math = (pick: (key: string, portable: Function) => unknown) => MATH.map(([key, portable]): Change => ({ owner: Math, key, value: pick(key, portable) }))
   return {
-    run: [...MATH.map(([key, portable]) => swap({ owner: Math, key, value: portable })), ...shared],
-    load: [...MATH.map(([key, portable]) => swap({ owner: Math, key, value: deferred(Reflect.get(Math, key), portable) })), ...shared],
+    run: [...math((_, portable) => portable), ...shared].map(swap),
+    load: [...math((key, portable) => deferred(Reflect.get(Math, key), portable)), ...shared].map(swap),
   }
+}
+
+function swap(change: Change): Swap {
+  const { owner, key } = change
+  if ('get' in change) return { how: 'define', owner, key, descriptor: { get: change.get, configurable: true } }
+  if (Object.getOwnPropertyDescriptor(owner, key)?.writable === true) return { how: 'set', owner, key, value: change.value }
+  return { how: 'define', owner, key, descriptor: { value: change.value, writable: true, configurable: true } }
 }
 
 function deferred(native: unknown, portable: Function): Function {
@@ -143,75 +148,43 @@ function deferred(native: unknown, portable: Function): Function {
   return (...args: unknown[]) => Reflect.apply(running > 0 ? portable : native, undefined, args)
 }
 
-function globals(): Change[] {
-  const swaps: Change[] = [
+function host(): Change[] {
+  return [
     { owner: globalThis, key: 'performance', value: PERFORMANCE },
     { owner: globalThis, key: 'crypto', value: CRYPTO },
     ...TIMERS.map((key) => ({ owner: globalThis, key, value: blocked(`${key}()`, CLOCK) })),
     ...['WeakRef', 'FinalizationRegistry'].map((key) => ({ owner: globalThis, key, value: blocked(`new ${key}()`, COLLECTED) })),
   ]
-  if (typeof Date === 'function') swaps.push({ owner: globalThis, key: 'Date', value: guardedDate(Date) })
-  const intl: unknown = Reflect.get(globalThis, 'Intl')
-  if (isObject(intl)) swaps.push({ owner: globalThis, key: 'Intl', value: guardedIntl(intl) })
-  const temporal: unknown = Reflect.get(globalThis, 'Temporal')
-  if (isObject(temporal)) swaps.push({ owner: globalThis, key: 'Temporal', value: guardedTemporal(temporal) })
-  return swaps
 }
 
-// The locale methods of primitives, which game code can't reach through a guarded global, and Temporal's.
-function localeMethods(): Change[] {
-  const swaps: Change[] = []
-  const pin = (owner: unknown, key: string, make: (native: Function) => Function) => {
-    const native: unknown = isObject(owner) ? Reflect.get(owner, key) : undefined
-    if (isObject(owner) && typeof native === 'function') swaps.push({ owner, key, value: make(native) })
-  }
-  pin(Number.prototype, 'toLocaleString', (native) => inLocale(native, false))
-  pin(BigInt.prototype, 'toLocaleString', (native) => inLocale(native, false))
-  pin(String.prototype, 'localeCompare', compared)
-  pin(String.prototype, 'toLocaleLowerCase', (native) => inLocale(native, false))
-  pin(String.prototype, 'toLocaleUpperCase', (native) => inLocale(native, false))
-  const temporal: unknown = Reflect.get(globalThis, 'Temporal')
-  if (!isObject(temporal)) return swaps
-  for (const name of Object.getOwnPropertyNames(temporal)) {
-    const type: unknown = Reflect.get(temporal, name)
-    // An Instant is formatted in a time zone, while a ZonedDateTime has its own and the plain types have none.
-    if (typeof type === 'function') pin(Reflect.get(type, 'prototype'), 'toLocaleString', (native) => inLocale(native, name === 'Instant'))
-  }
-  return swaps
-}
-
-// Date in game code: no clock, and no time zone. Dates it makes have their own prototype, so their local-time methods fail without the guard swapping Date.prototype's.
-function guardedDate(native: DateConstructor): DateConstructor {
-  const methods: PropertyDescriptorMap = {}
-  for (const [key, instead] of LOCAL_TIME) {
-    if (typeof Reflect.get(native.prototype, key) === 'function') methods[key] = { value: blocked(`date.${key}()`, `${ZONE}, so use ${instead}`), writable: true, configurable: true }
-  }
-  for (const key of ['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString']) {
-    const method: unknown = Reflect.get(native.prototype, key)
-    if (typeof method === 'function') methods[key] = { value: inLocale(method, true), writable: true, configurable: true }
-  }
-  const prototype: object = Object.create(native.prototype, methods)
-  function Made() {}
-  Made.prototype = prototype
-  const now = blocked('Date.now()', CLOCK)
-  const parse = (text: unknown) => {
-    checkDate(text, 'Date.parse')
-    return Reflect.apply(native.parse, native, [text])
-  }
+// Date at its own objects: the constructor that both the global and Date.prototype.constructor name has no clock, and the static and prototype methods, which every date and every subclass reaches, read no clock or time zone.
+function dates(): Change[] {
+  const native = Date
+  const prototype: object = native.prototype
   const date: DateConstructor = new Proxy(native, {
     apply: blocked('Date()', CLOCK),
     construct(target, args, newTarget) {
       if (args.length === 0) refuse('new Date()', CLOCK)
       if (args.length > 1) refuse('new Date(year, month, ...)', `${ZONE}, so use new Date(Date.UTC(year, month, ...))`)
       checkDate(args[0], 'new Date')
-      return Reflect.construct(target, args, newTarget === date ? Made : newTarget)
-    },
-    get(target, key) {
-      return key === 'now' ? now : key === 'parse' ? parse : Reflect.get(target, key)
+      return Reflect.construct(target, args, newTarget)
     },
   })
-  Object.defineProperty(prototype, 'constructor', { value: date, writable: true, configurable: true })
-  return date
+  const parse = native.parse
+  const changes: Change[] = [
+    { owner: globalThis, key: 'Date', value: date },
+    { owner: prototype, key: 'constructor', value: date },
+    { owner: native, key: 'now', value: blocked('Date.now()', CLOCK) },
+    { owner: native, key: 'parse', value: (text: unknown) => (checkDate(text, 'Date.parse'), Reflect.apply(parse, native, [text])) },
+  ]
+  for (const [key, instead] of LOCAL_TIME) {
+    if (typeof Reflect.get(prototype, key) === 'function') changes.push({ owner: prototype, key, value: blocked(`date.${key}()`, `${ZONE}, so use ${instead}`) })
+  }
+  for (const key of ['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString']) {
+    const method: unknown = Reflect.get(prototype, key)
+    if (typeof method === 'function') changes.push({ owner: prototype, key, value: inLocale(method, true) })
+  }
+  return changes
 }
 
 function checkDate(value: unknown, call: string): void {
@@ -220,45 +193,88 @@ function checkDate(value: unknown, call: string): void {
   }
 }
 
-function guardedIntl(intl: object): object {
-  const pinned: PropertyDescriptorMap = {}
+// Intl at its own object: each constructor, which both the namespace and the constructor's prototype name, defaults to en-US, and every DateTimeFormat's format and formatToParts read no clock.
+function intl(): Change[] {
+  if (!isObject(INTL_AT_LOAD)) return []
+  const changes: Change[] = []
   for (const name of INTL) {
-    const native: unknown = Reflect.get(intl, name)
-    if (typeof native === 'function') pinned[name] = { value: inLocaleFormat(native, name === 'DateTimeFormat'), writable: true, configurable: true }
+    const native: unknown = Reflect.get(INTL_AT_LOAD, name)
+    if (typeof native !== 'function') continue
+    const pinned = inLocaleFormat(native, name === 'DateTimeFormat')
+    const prototype: unknown = Reflect.get(native, 'prototype')
+    changes.push({ owner: INTL_AT_LOAD, key: name, value: pinned })
+    if (isObject(prototype)) changes.push({ owner: prototype, key: 'constructor', value: pinned })
+    if (name === 'DateTimeFormat' && isObject(prototype)) changes.push(...clockless(prototype))
   }
-  return Object.create(intl, pinned)
+  return changes
 }
 
 function inLocaleFormat(native: Function, dates: boolean): Function {
   const args = (given: unknown[]) => [given[0] === undefined ? LOCALE : given[0], dates ? zoned(given[1]) : given[1], ...given.slice(2)]
-  const made = <T>(value: T): T => (dates ? clocked(value) : value)
   const format: Function = new Proxy(native, {
-    construct: (target, given, newTarget) => made(Reflect.construct(target, args(given), newTarget === format ? target : newTarget)),
-    apply: (target, self, given) => made(Reflect.apply(target, self, args(given))),
+    construct: (target, given, newTarget) => Reflect.construct(target, args(given), newTarget === format ? target : newTarget),
+    apply: (target, self, given) => Reflect.apply(target, self, args(given)),
   })
   return format
 }
 
-// A DateTimeFormat reads the clock when it formats no date, so the ones game code makes refuse to.
-function clocked<T>(made: T): T {
-  if (!isObject(made)) return made
-  for (const key of ['format', 'formatToParts']) {
-    const method: unknown = Reflect.get(made, key)
-    if (typeof method !== 'function') continue
-    const value = (date?: unknown) => (date === undefined ? refuse(`Intl.DateTimeFormat ${key}() with no date`, CLOCK) : Reflect.apply(method, made, [date]))
-    Object.defineProperty(made, key, { value, writable: true, configurable: true })
+// A DateTimeFormat reads the clock when it formats no date.
+function clockless(prototype: object): Change[] {
+  const changes: Change[] = []
+  const getter = Object.getOwnPropertyDescriptor(prototype, 'format')?.get
+  if (getter !== undefined) {
+    const formats = new WeakMap<object, Function>()
+    const get = function (this: unknown): unknown {
+      const bound: unknown = Reflect.apply(getter, this, [])
+      if (typeof bound !== 'function' || !isObject(this)) return bound
+      const known = formats.get(this)
+      if (known !== undefined) return known
+      const format = (date?: unknown) => (date === undefined ? refuse('Intl.DateTimeFormat format() with no date', CLOCK) : Reflect.apply(bound, undefined, [date]))
+      formats.set(this, format)
+      return format
+    }
+    changes.push({ owner: prototype, key: 'format', get })
   }
-  return made
+  const parts: unknown = Reflect.get(prototype, 'formatToParts')
+  if (typeof parts === 'function') {
+    const value = function (this: unknown, date?: unknown): unknown {
+      return date === undefined ? refuse('Intl.DateTimeFormat formatToParts() with no date', CLOCK) : Reflect.apply(parts, this, [date])
+    }
+    changes.push({ owner: prototype, key: 'formatToParts', value })
+  }
+  return changes
 }
 
-function guardedTemporal(temporal: object): object {
-  const now: unknown = Reflect.get(temporal, 'Now')
-  if (!isObject(now)) return temporal
-  const stopped: PropertyDescriptorMap = {}
-  for (const key of Object.getOwnPropertyNames(now)) {
-    if (typeof Reflect.get(now, key) === 'function') stopped[key] = { value: blocked(`Temporal.Now.${key}()`, CLOCK), writable: true, configurable: true }
+// Temporal at its own object: Temporal.Now's methods read no clock.
+function temporal(): Change[] {
+  const temporal: unknown = Reflect.get(globalThis, 'Temporal')
+  const now: unknown = isObject(temporal) ? Reflect.get(temporal, 'Now') : undefined
+  if (!isObject(now)) return []
+  return Object.getOwnPropertyNames(now)
+    .filter((key) => typeof Reflect.get(now, key) === 'function')
+    .map((key) => ({ owner: now, key, value: blocked(`Temporal.Now.${key}()`, CLOCK) }))
+}
+
+// The locale methods of primitives, which game code can't reach through a guarded global, and Temporal's.
+function localeMethods(): Change[] {
+  const changes: Change[] = []
+  const pin = (owner: unknown, key: string, make: (native: Function) => Function) => {
+    const native: unknown = isObject(owner) ? Reflect.get(owner, key) : undefined
+    if (isObject(owner) && typeof native === 'function') changes.push({ owner, key, value: make(native) })
   }
-  return Object.create(temporal, { Now: { value: Object.create(now, stopped), writable: true, configurable: true } })
+  pin(Number.prototype, 'toLocaleString', (native) => inLocale(native, false))
+  pin(BigInt.prototype, 'toLocaleString', (native) => inLocale(native, false))
+  pin(String.prototype, 'localeCompare', compared)
+  pin(String.prototype, 'toLocaleLowerCase', (native) => inLocale(native, false))
+  pin(String.prototype, 'toLocaleUpperCase', (native) => inLocale(native, false))
+  const temporal: unknown = Reflect.get(globalThis, 'Temporal')
+  if (!isObject(temporal)) return changes
+  for (const name of Object.getOwnPropertyNames(temporal)) {
+    const type: unknown = Reflect.get(temporal, name)
+    // An Instant is formatted in a time zone, while a ZonedDateTime has its own and the plain types have none.
+    if (typeof type === 'function') pin(Reflect.get(type, 'prototype'), 'toLocaleString', (native) => inLocale(native, name === 'Instant'))
+  }
+  return changes
 }
 
 function inLocale(native: Function, zone: boolean): Function {

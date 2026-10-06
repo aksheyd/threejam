@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict'
+
+// A game that tries each way around the guard the determinism review found, run by the tests in sim and in a Node process set to another language and time zone. An error the guard raises keeps its text; any other reads "refused", since engines word those differently.
+export const PROBE = `import { defineGame, listOf } from 'threejam'
+
+const host: Record<string, any> = globalThis
+const DateType = Date.prototype.constructor as DateConstructor
+const NowType = host.Temporal === undefined ? undefined : Object.getPrototypeOf(host.Temporal.Now)
+const instant = Date.UTC(2024, 0, 31, 23, 30)
+const full = { dateStyle: 'full', timeStyle: 'long' } as const
+
+function attempt(run: () => unknown): string {
+  try {
+    return String(run())
+  } catch (error: any) {
+    const text = String(error?.message)
+    return text.includes('would make runs differ') ? text.split(';')[0] : 'refused'
+  }
+}
+
+// A call that names no locale or zone, beside the same call in en-US and UTC.
+function english(given: () => unknown, named: () => unknown): string {
+  const [a, b] = [attempt(given), attempt(named)]
+  return a === b ? 'en-US' : a + ' (en-US: ' + b + ')'
+}
+
+export default defineGame({
+  entities: { probe: { out: listOf('') } },
+  update({ probe }) {
+    const day = new Date(instant)
+    probe.out = [
+      attempt(() => DateType.now()),
+      attempt(() => Date.prototype.getHours.call(day)),
+      attempt(() => Date.prototype.getTimezoneOffset.call(day)),
+      attempt(() => Date.prototype.toString.call(day)),
+      english(() => Date.prototype.toLocaleString.call(day), () => day.toLocaleString('en-US', { timeZone: 'UTC' })),
+      attempt(() => Object.setPrototypeOf(new Date(instant), Date.prototype).getHours()),
+      attempt(() => {
+        class Later extends Date {}
+        return new Later(instant).getHours()
+      }),
+      attempt(() => (NowType === undefined ? 'refused' : NowType.instant())),
+      attempt(() => (host.Temporal === undefined ? 'refused' : Object.getPrototypeOf(host.Temporal).Now.instant())),
+      english(() => new (Intl.DateTimeFormat.prototype.constructor as any)(undefined, full).format(instant), () => new Intl.DateTimeFormat('en-US', { ...full, timeZone: 'UTC' }).format(instant)),
+      english(() => new (Intl.NumberFormat.prototype.constructor as any)().format(1234567.5), () => new Intl.NumberFormat('en-US').format(1234567.5)),
+      attempt(() => typeof Object.getPrototypeOf(Intl).DateTimeFormat),
+      attempt(() => (Object.getOwnPropertyDescriptor(Intl.DateTimeFormat.prototype, 'format') as any).get.call(new Intl.DateTimeFormat('en-US'))()),
+    ]
+  },
+})
+`
+
+// What the probe must show wherever it runs: every path to the clock or the machine's zone refused, and every unnamed locale in en-US and UTC.
+export function checkProbe(out: unknown): void {
+  assert.ok(Array.isArray(out) && out.every((line) => typeof line === 'string'), `the probe gave ${JSON.stringify(out)}`)
+  assert.deepEqual(out.slice(0, 4), ['Date.now() would make runs differ', 'date.getHours() would make runs differ', 'date.getTimezoneOffset() would make runs differ', 'date.toString() would make runs differ'])
+  assert.deepEqual(out.slice(5, 7), ['date.getHours() would make runs differ', 'date.getHours() would make runs differ'])
+  assert.deepEqual(out.slice(7, 9), ['refused', 'refused'])
+  assert.equal(out[11], 'undefined')
+  assert.equal(out[12], 'Intl.DateTimeFormat format() with no date would make runs differ')
+  for (const index of [4, 9, 10]) assert.equal(out[index], 'en-US', `line ${index}`)
+}

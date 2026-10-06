@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { after, test } from 'node:test'
 import pong from '../games/pong/game.ts'
 import { parseGame, untilCondition } from '../src/engine.ts'
 import { RunError, UsageError } from '../src/errors.ts'
@@ -21,6 +24,13 @@ import {
   type World,
 } from '../src/index.ts'
 import { PORTABLE } from '../src/math.ts'
+import { ROOT } from '../src/package.ts'
+import { PROBE, checkProbe } from './probe.ts'
+
+const TMP = join(ROOT, 'test', '.tmp')
+mkdirSync(TMP, { recursive: true })
+const made: string[] = []
+after(() => made.forEach((dir) => rmSync(dir, { recursive: true, force: true })))
 
 const ball = { x: 0, y: 0, w: 0.1, h: 0.1, vx: 1, label: 'b', list: [1, 2] }
 
@@ -166,6 +176,28 @@ test('audit 12: ctx and its input are read-only, so game code can change neither
   const seen: number[] = []
   simulate(defineGame({ entities: { ball }, update: (_, ctx) => void seen.push(ctx.dt, ctx.input.held('Space') ? 1 : 0) }), { ticks: 2, hold: ['Space@2'] })
   assert.deepEqual(seen, [1 / 60, 0, 1 / 60, 1])
+})
+
+// A process reads its language when it starts, so each setting gets one of its own.
+test("review blockers 1 and 2: in a process set to another language and time zone, the guard leaves no path to the platform's clock, zone, or locale through Date's and Intl's own prototypes and constructors, or a subclass", () => {
+  const dir = mkdtempSync(join(TMP, 'probe-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), PROBE)
+  writeFileSync(join(dir, 'run.ts'), "import { simulate } from 'threejam'\nimport game from './game.ts'\n\nprocess.stdout.write(JSON.stringify(simulate(game, { ticks: 1 }).world.probe.out))\n")
+  const settings = [
+    { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', TZ: 'UTC' },
+    { LANG: 'tr_TR.UTF-8', LC_ALL: 'tr_TR.UTF-8', TZ: 'Europe/Istanbul' },
+    { LANG: 'fr_FR.UTF-8', LC_ALL: 'fr_FR.UTF-8', TZ: 'Europe/Paris' },
+  ]
+  const outs = settings.map((env) => {
+    const run = spawnSync(process.execPath, [join(dir, 'run.ts')], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, ...env } })
+    assert.equal(run.status, 0, run.stderr)
+    const out: unknown = JSON.parse(run.stdout)
+    checkProbe(out)
+    return out
+  })
+  assert.deepEqual(outs[1], outs[0])
+  assert.deepEqual(outs[2], outs[0])
 })
 
 test('audit 3: game code formats and compares as en-US does and dates in UTC, whatever the time zone, and Date forms that read the local time fail with their UTC form', () => {

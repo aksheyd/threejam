@@ -7,6 +7,7 @@ import { after, test } from 'node:test'
 import { real, within } from '../src/confine.ts'
 import { PORTABLE } from '../src/math.ts'
 import { ROOT } from '../src/package.ts'
+import { PROBE, checkProbe } from './probe.ts'
 
 const CLI = join(ROOT, 'src', 'cli.ts')
 const TMP = join(ROOT, 'test', '.tmp')
@@ -427,6 +428,35 @@ test("security follow-up: a path that still holds a .. is never inside a folder,
   assert.equal(real(climbing), climbing)
   assert.equal(within(root, climbing), false)
   assert.equal(within(root, [root, 'a..b', 'c.ts'].join(sep)), true)
+})
+
+test("review blockers 1 and 2 in sim: on three machines' settings, and once more on the first, the probe gives one output, with every path to the clock, zone, and locale guarded", () => {
+  const { dir } = folder({ 'game.ts': PROBE })
+  const settings = [
+    { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', TZ: 'UTC' },
+    { LANG: 'tr_TR.UTF-8', LC_ALL: 'tr_TR.UTF-8', TZ: 'Europe/Istanbul' },
+    { LANG: 'fr_FR.UTF-8', LC_ALL: 'fr_FR.UTF-8', TZ: 'Europe/Paris' },
+    { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', TZ: 'UTC' },
+  ]
+  const outs = settings.map((env) => {
+    const run = threejam(['sim', dir, '--ticks', '2', '--fields', 'out'], env)
+    assert.equal(run.code, 0, run.out)
+    const [probe] = run.json.entities as Array<{ out: unknown }>
+    checkProbe(probe.out)
+    return probe.out
+  })
+  for (const out of outs.slice(1)) assert.deepEqual(out, outs[0])
+})
+
+test("review blocker 1: a defineDriver factory that keeps Date's own constructor reads no clock through it", () => {
+  const { dir, abs } = folder({ 'game.ts': game('') })
+  writeFileSync(
+    join(abs, 'driver.ts'),
+    "import { defineDriver } from 'threejam'\n\nexport default defineDriver(() => {\n  const start = (Date.prototype.constructor as DateConstructor).now()\n  return ({ tick }) => (tick > start ? [] : ['Space'])\n})\n",
+  )
+  const driven = threejam(['sim', dir, '--ticks', '2', '--driver', join(dir, 'driver.ts')])
+  assert.equal(driven.code, 1, driven.out)
+  assert.match(String(driven.json.message), /driver\.ts:4: Date\.now\(\) would make runs differ/)
 })
 
 // The sandbox fixes the realm's globals before a game's module loads, and still keeps runs deterministic.
