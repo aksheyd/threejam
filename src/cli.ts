@@ -8,7 +8,7 @@ import { DEFAULT_TIMEOUT, LimitError, describe, gameFiles, isSystemError, runGam
 import { createGame } from './new.ts'
 import { VERSION, mcpCommand } from './package.ts'
 import { bundlePage, play } from './serve.ts'
-import { parseTicks, shoot } from './shot.ts'
+import { framePaths, parseTicks, shoot } from './shot.ts'
 import type { EntityState, Value } from './types.ts'
 
 process.stdout.on('error', (error) => {
@@ -318,6 +318,7 @@ const cli = Cli.create('threejam', {
       try {
         const at = parseTicks(c.options.at ?? '1')
         const { press, hold, pointer, driver, set, seed, timeout, out } = c.options
+        framePaths(out, at)
         await runGame(c.args.dir, { ticks: Math.max(...at), press, hold, pointer, driver, set, seed, clip: true, timeout })
         return { files: await shoot({ dir: c.args.dir, at, out, press, hold, pointer, driver, set, seed }) }
       } catch (error) {

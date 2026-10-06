@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, extname, sep } from 'node:path'
 import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
-import { LimitError, gameFailure } from './load.ts'
+import { LimitError, gameFailure, isSystemError } from './load.ts'
 import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, serve, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
@@ -26,12 +26,14 @@ export function parseTicks(text: string): number[] {
   return [...new Set(parts.map(Number))].sort((a, b) => a - b)
 }
 
+// One rule for one tick or many, checked before Chrome starts.
 export function framePaths(out: string, at: readonly number[]): string[] {
+  if (!/\.png$/i.test(out)) throw new UsageError(`-o ${quote(out)} should be a .png file, like frame.png`)
   if (at.length === 1) return [out]
   const width = Math.max(3, String(Math.max(...at)).length)
   const extension = extname(out)
   const stem = out.slice(0, out.length - extension.length)
-  return at.map((tick) => `${stem}-${String(tick).padStart(width, '0')}${extension || '.png'}`)
+  return at.map((tick) => `${stem}-${String(tick).padStart(width, '0')}${extension}`)
 }
 
 // Chrome on Windows sometimes aborts a new tab's first navigation, so an aborted one gets one more try.
@@ -74,6 +76,7 @@ export async function launchChrome(chrome: string, { protocolTimeout }: { protoc
 }
 
 export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, set }: ShotOptions): Promise<string[]> {
+  const paths = framePaths(out, at)
   const chrome = findChrome()
   if (!chrome) throw new BrowserError('shot needs Chrome or Chromium, or Edge on Windows; set CHROME_PATH to its executable')
   const page = await buildPage({ dir, config: { mode: 'shot' }, driver })
@@ -98,15 +101,15 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     await until(tab.waitForFunction('window.engine !== undefined', { timeout: 15000 }))
     const reset: ResetOptions = { seed: seed ?? 0, ticks: Math.max(...at), press, hold, pointer, set, drive: driver !== undefined }
     await inPage(tab.evaluate((options) => window.engine.reset(options), reset))
-    const paths = framePaths(out, at)
     for (const path of paths) mkdirSync(dirname(path), { recursive: true })
     for (const [i, tick] of at.entries()) {
       await inPage(tab.evaluate((t) => window.engine.advanceTo(t), tick))
-      await tab.screenshot({ path: pngPath(paths[i]), clip: { x: 0, y: 0, width: 800, height: 600 } })
+      writeFileSync(paths[i], await tab.screenshot({ type: 'png', clip: { x: 0, y: 0, width: 800, height: 600 } }))
     }
     return paths
   } catch (error) {
-    if (error instanceof UsageError || error instanceof GameError || error instanceof BrowserError || error instanceof IoError || error instanceof LimitError) throw error
+    const known = [UsageError, GameError, BrowserError, IoError, LimitError].some((kind) => error instanceof kind)
+    if (known || isSystemError(error)) throw error
     throw new BrowserError(`Chrome failed while drawing the game: ${firstLine(error)}`)
   } finally {
     await browser?.close()
@@ -126,9 +129,4 @@ function pageFailure(tab: Page): Promise<never> {
   })
   failed.catch(() => {})
   return failed
-}
-
-function pngPath(path: string): `${string}.png` {
-  if (!path.endsWith('.png')) throw new UsageError(`${path} must end in .png`)
-  return `${path.slice(0, -4)}.png`
 }

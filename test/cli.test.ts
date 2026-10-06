@@ -171,6 +171,14 @@ test('a number on the command line is digits, so hex, exponents, and an empty st
   assert.deepEqual([ticks.type, ticks.minimum, every.minimum, seed.type, options.required], ['integer', 0, 1, 'integer', ['ticks']])
 })
 
+test('shot checks -o before it runs the game or starts Chrome, with one rule for one tick or many', () => {
+  const broken = folder({ 'game.ts': game({ update: 'world.ball.x += ;' }) })
+  for (const [out, at] of [['frame.jpg', '1'], ['frame.jpg', '1,2'], ['frame', '1'], ['frame', '1,2']]) {
+    const shot = threejamWith({ CHROME_PATH: join(TMP, 'no-chrome') }, 'shot', broken, '--at', at, '-o', out, '--format', 'json')
+    assert.deepEqual({ code: shot.code, failure: JSON.parse(shot.out) }, { code: 1, failure: { code: 'USAGE', message: `-o ${JSON.stringify(out)} should be a .png file, like frame.png` } })
+  }
+})
+
 test("run checks the game before it serves a page, so one that can't start fails in the terminal instead of showing a blank page", () => {
   const { code, out } = threejam('run', folder({ 'game.ts': 'export default {}\n' }), '--serve-only')
   assert.equal(code, 1, out)
