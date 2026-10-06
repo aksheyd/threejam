@@ -249,6 +249,10 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     const key = BUTTONS.get(event.button)
     if (key) down.delete(key)
   })
+  // A pointer the browser takes over, like a finger that starts to pan the page, ends with pointercancel instead of pointerup, and a cancel needn't say which button it held.
+  addEventListener('pointercancel', () => {
+    for (const key of BUTTONS.values()) down.delete(key)
+  })
   addEventListener('contextmenu', (event) => event.preventDefault())
   addEventListener('blur', () => {
     down.clear()

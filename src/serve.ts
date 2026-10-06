@@ -166,13 +166,14 @@ export function formatMessage(message: esbuild.Message): string {
 
 type Script = { readonly kind: 'file'; readonly src: string } | { readonly kind: 'inline'; readonly code: string }
 
+// With touch-action none, a finger dragged on the canvas stays the game's instead of the browser taking it over to pan or zoom the page.
 export function html({ title, config, script }: { title: string; config: Config; script: Script }): string {
   return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <title>${title.replace(/[<&]/g, '')}</title>
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{position:absolute;inset:0;margin:auto;display:block}</style>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{position:absolute;inset:0;margin:auto;display:block;touch-action:none}</style>
 </head>
 <body>
 <canvas></canvas>

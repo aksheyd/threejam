@@ -618,6 +618,49 @@ test("a played page takes keys by where they sit, holds a tap shorter than a tic
   ])
 })
 
+test('on a touch screen, a played page follows a finger dragged on the game until it lifts, and lets go of Mouse when the browser takes a touch over, as it does one dragged beside the game', { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'touch-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), INPUT)
+  const file = join(dir, 'input.html')
+  await exportGame({ dir, out: file })
+  const tab = await newTab(t)
+  // The 800 by 600 canvas sits in the middle, from x 100 to 900, with the page itself on either side.
+  await tab.setViewport({ width: 1000, height: 600, deviceScaleFactor: 1, hasTouch: true })
+  await tab.evaluateOnNewDocument(() => {
+    const seen: string[] = []
+    Reflect.set(window, 'seen', seen)
+    for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend']) addEventListener(type, () => seen.push(type), { passive: true })
+    addEventListener('pointermove', (event) => seen.push(`pointermove ${event.clientX},${event.clientY}`))
+  })
+  await openPage(tab, pathToFileURL(file).href)
+  await tab.waitForFunction('window.engine !== undefined')
+  await tab.evaluate(() => {
+    window.engine.pause()
+    window.engine.reset({ seed: 0 })
+  })
+  const step = () => tab.evaluate(() => window.engine.step())
+  // Chrome answers for a touch before the page has had its events, so each tick waits until the page has seen one of the events the touch should end with.
+  const saw = (events: string[], times = 1) => tab.waitForFunction((wanted, count) => (Reflect.get(window, 'seen') as string[]).filter((each) => wanted.includes(each)).length >= count, { timeout: 10_000 }, events, times)
+  const drag = async ([fromX, fromY]: [number, number], [toX, toY]: [number, number], { moved, times }: { moved: string[]; times: number }) => {
+    await tab.touchscreen.touchStart(fromX, fromY)
+    await saw(['touchstart'], times)
+    await step()
+    for (let i = 1; i <= 4; i++) await tab.touchscreen.touchMove(fromX + ((toX - fromX) * i) / 4, fromY + ((toY - fromY) * i) / 4)
+    await saw(moved)
+    await step()
+    await tab.touchscreen.touchEnd()
+    await saw(['touchend'], times)
+    await step()
+  }
+  // A cancel, which a finger on the game shouldn't get, also ends the wait, so the ticks show where the pointer stopped.
+  await drag([500, 300], [700, 450], { moved: ['pointermove 700,450', 'pointercancel'], times: 1 })
+  // The browser takes over a finger dragged on the page beside the game to pan the page, which ends the pointer with a pointercancel instead of a pointerup.
+  await drag([80, 300], [10, 300], { moved: ['pointercancel'], times: 2 })
+  assert.deepEqual(await tab.evaluate(() => window.engine.state('input')[0].ticks), ['Mouse @ 0 0', 'Mouse @ 1 -0.75', ' @ 1 -0.75', 'Mouse @ -2 0', ' @ -2 0', ' @ -2 0'])
+  assert.deepEqual(await tab.evaluate(() => (Reflect.get(window, 'seen') as string[]).filter((each) => each === 'pointerup' || each === 'pointercancel')), ['pointerup', 'pointercancel'])
+})
+
 // A silent mono WAV of 16-bit samples at 8000 a second.
 function wav(seconds: number): Buffer {
   const rate = 8000
