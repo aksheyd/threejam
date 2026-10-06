@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 import { pathToFileURL } from 'node:url'
-import type { HTTPRequest, Page } from 'puppeteer-core'
+import type { BoundingBox, HTTPRequest, KeyInput, Page } from 'puppeteer-core'
 import pong from '../games/pong/game.ts'
 import { parseGame, simulate } from '../src/engine.ts'
 import { exportGame } from '../src/export.ts'
@@ -15,7 +15,7 @@ import { runGame } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { buildPage, serve } from '../src/serve.ts'
 import { openPage, shoot } from '../src/shot.ts'
-import { isDrive, type Drive } from '../src/types.ts'
+import { isDrive, type Drive, type Snapshot } from '../src/types.ts'
 import { CHROME as chrome, testChrome, type TestChrome } from './chrome.ts'
 import { spawnCli } from './children.ts'
 import { PROBE, checkProbe } from './probe.ts'
@@ -659,6 +659,264 @@ test('on a touch screen, a played page follows a finger dragged on the game unti
   await drag([80, 300], [10, 300], { moved: ['pointercancel'], times: 2 })
   assert.deepEqual(await tab.evaluate(() => window.engine.state('input')[0].ticks), ['Mouse @ 0 0', 'Mouse @ 1 -0.75', ' @ 1 -0.75', 'Mouse @ -2 0', ' @ -2 0', ' @ -2 0'])
   assert.deepEqual(await tab.evaluate(() => (Reflect.get(window, 'seen') as string[]).filter((each) => each === 'pointerup' || each === 'pointercancel')), ['pointerup', 'pointercancel'])
+})
+
+// A snapshot as JSON carries it, which is how render_game_to_text gives one.
+function asText(snapshot: Snapshot | undefined): unknown {
+  return JSON.parse(JSON.stringify(snapshot))
+}
+
+test('advanceTime takes the clock from a page playing on its own, starts its run over as it was last reset, and steps the ticks its milliseconds cover, carrying part of one to the next call, so render_game_to_text gives the state sim gives at that tick until engine.resume() gives the clock back, while a page engine.pause() paused goes on from its tick', { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'threejam-export-'))
+  try {
+    const file = join(dir, 'flappy.html')
+    await exportGame({ dir: 'games/flappy', out: file, seed: 5 })
+    const expected = await runGame('games/flappy', { seed: 5, ticks: 121, press: ['Space@61'], every: 1 })
+    const reseeded = await runGame('games/flappy', { seed: 9, ticks: 1 })
+    const tab = await newTab(t)
+    const { errors } = watch(tab)
+    await openPage(tab, pathToFileURL(file).href)
+    await tab.waitForFunction(() => window.engine.tick > 30)
+    // The state once each call has run in turn.
+    const after = (...calls: number[]) =>
+      tab.evaluate(async (ms: number[]) => {
+        for (const each of ms) await window.advanceTime(each)
+        return JSON.parse(window.render_game_to_text())
+      }, calls)
+    const frames = (count: number, ms: number) => Array.from({ length: count }, () => ms)
+    // A tap just before the first call belongs to the run that call starts over, so it doesn't count.
+    const first = await tab.evaluate(async (ms: number[]) => {
+      for (const type of ['keydown', 'keyup']) window.dispatchEvent(new KeyboardEvent(type, { code: 'Space' }))
+      for (const each of ms) await window.advanceTime(each)
+      return JSON.parse(window.render_game_to_text())
+    }, frames(6, 1000 / 360))
+    const seen = [first, await after(...frames(59, 1000 / 60))]
+    // A tap between calls counts on the next tick.
+    await tab.keyboard.press('Space')
+    seen.push(await after(1000), await after(10), await after(10))
+    await new Promise((wait) => setTimeout(wait, 200))
+    seen.push(await after())
+    assert.deepEqual(seen, [1, 60, 120, 120, 121, 121].map((tick) => asText(expected.snapshots[tick])))
+    await tab.evaluate(() => {
+      window.engine.resume()
+      window.engine.reset({ seed: 9 })
+    })
+    await tab.waitForFunction(() => window.engine.tick > 20)
+    assert.deepEqual(await after(1000 / 60), asText(reseeded.snapshots[0]))
+    // The call's frame is drawn by the time it resolves, as the page draws it again a frame later.
+    const redrawn = await tab.evaluate(async () => {
+      const canvas = document.querySelector('canvas')
+      if (!canvas) throw new Error('the page has no canvas to read')
+      await window.advanceTime(1000)
+      const drawn = canvas.toDataURL()
+      await new Promise(requestAnimationFrame)
+      return drawn === canvas.toDataURL()
+    })
+    assert.ok(redrawn, "the frame the page drew after advanceTime resolved differs from the one it showed then")
+    // A page that engine.pause() paused goes on from its tick rather than starting over.
+    await tab.evaluate(() => window.engine.resume())
+    await tab.waitForFunction(() => window.engine.tick > 80)
+    const paused = await tab.evaluate(() => {
+      window.engine.pause()
+      return window.engine.tick
+    })
+    const goneOn = await after(1000 / 60)
+    assert.deepEqual(goneOn, asText((await runGame('games/flappy', { seed: 9, ticks: paused + 1 })).snapshots[0]))
+    assert.deepEqual(errors, [])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+// What OpenAI's develop-web-game client puts in a page before it loads: requestAnimationFrame, setTimeout, and setInterval of its own around the browser's, and an advanceTime that only waits that long, for a game that has none.
+function clientShim(): void {
+  const frame = window.requestAnimationFrame.bind(window)
+  const timeout = window.setTimeout.bind(window)
+  const interval = window.setInterval.bind(window)
+  Reflect.set(window, 'requestAnimationFrame', (callback: FrameRequestCallback) => frame((now) => callback(now)))
+  Reflect.set(window, 'setTimeout', (handler: (...args: unknown[]) => void, ms?: number, ...rest: unknown[]) => timeout(() => handler(...rest), ms))
+  Reflect.set(window, 'setInterval', (handler: (...args: unknown[]) => void, ms?: number, ...rest: unknown[]) => interval(() => handler(...rest), ms))
+  window.advanceTime = (ms) =>
+    new Promise((done) => {
+      const start = performance.now()
+      const wait = (now: number) => (now - start >= ms ? done() : frame(wait))
+      frame(wait)
+    })
+}
+
+// The keys OpenAI's client presses for its buttons.
+const CLIENT_KEYS = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', enter: 'Enter', space: 'Space', a: 'KeyA', b: 'KeyB' } as const satisfies Record<string, KeyInput>
+
+interface ClientStep {
+  readonly buttons: ReadonlyArray<keyof typeof CLIENT_KEYS | 'left_mouse_button'>
+  readonly frames: number
+  readonly mouse_x?: number
+  readonly mouse_y?: number
+}
+
+// A burst as OpenAI's client plays it: each step's buttons go down, the mouse at its point on the canvas, then advanceTime(1000 / 60) runs once a frame, each in a call of its own, and the buttons come up.
+async function burst(tab: Page, canvas: BoundingBox, steps: readonly ClientStep[]): Promise<void> {
+  for (const step of steps) {
+    for (const button of step.buttons) {
+      if (button !== 'left_mouse_button') {
+        await tab.keyboard.down(CLIENT_KEYS[button])
+        continue
+      }
+      await tab.mouse.move(canvas.x + (step.mouse_x ?? canvas.width / 2), canvas.y + (step.mouse_y ?? canvas.height / 2))
+      await tab.mouse.down({ button: 'left' })
+    }
+    for (let frame = 0; frame < step.frames; frame++) {
+      await tab.evaluate(async () => {
+        if (typeof window.advanceTime === 'function') await window.advanceTime(1000 / 60)
+      })
+    }
+    for (const button of step.buttons) {
+      if (button === 'left_mouse_button') await tab.mouse.up({ button: 'left' })
+      else await tab.keyboard.up(CLIENT_KEYS[button])
+    }
+  }
+}
+
+// The example the skill gives its client, with the mouse 90 pixels down the canvas rather than 80, which on a 960 by 720 canvas puts it at x -1.5 and y 1.125.
+const CLIENT_STEPS: readonly ClientStep[] = [
+  { buttons: ['left_mouse_button'], frames: 2, mouse_x: 120, mouse_y: 90 },
+  { buttons: [], frames: 6 },
+  { buttons: ['right'], frames: 8 },
+  { buttons: ['space'], frames: 4 },
+]
+
+test("driven as OpenAI's develop-web-game client drives a game, with its own advanceTime put in first, a run page gives sim's state from render_game_to_text after each burst, however long the client waits between them, and its canvas shows that state, with nothing in the console", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  // Each burst is 20 ticks: the mouse on its first 2, Right on 9 to 16, and Space on 17 to 20.
+  const expected = await runGame('games/asteroids', {
+    seed: 2,
+    ticks: 60,
+    hold: ['Mouse@1-2,21-22,41-42', 'Right@9-16,29-36,49-56', 'Space@17-20,37-40,57-60'],
+    pointer: ['-1.5,1.125@1'],
+    every: 20,
+  })
+  const token = 'session-token'
+  const page = await buildPage({ dir: 'games/asteroids', config: { mode: 'run', seed: 2, token } })
+  const server = await serve({ page, token })
+  try {
+    const tab = await newTab(t)
+    // Playwright's window, which the client keeps, fits the game to a 960 by 720 canvas.
+    await tab.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 })
+    const { errors } = watch(tab)
+    await tab.evaluateOnNewDocument(clientShim)
+    await openPage(tab, server.url, { waitUntil: 'domcontentloaded' })
+    await new Promise((wait) => setTimeout(wait, 500))
+    await tab.evaluate(() => window.dispatchEvent(new Event('resize')))
+    const canvas = await (await tab.$('canvas'))?.boundingBox()
+    assert.ok(canvas)
+    assert.deepEqual(canvas, { x: 160, y: 0, width: 960, height: 720 })
+    const seen: Array<{ state: unknown; size: number[]; bullets: number[][] }> = []
+    for (let iteration = 0; iteration < 3; iteration++) {
+      await burst(tab, canvas, CLIENT_STEPS)
+      await new Promise((wait) => setTimeout(wait, 250))
+      // The client saves the canvas as a PNG, read back here at the middle of each bullet in flight.
+      const shot = await tab.evaluate(async () => {
+        const drawn = document.querySelector('canvas')
+        const copy = document.createElement('canvas')
+        const context = copy.getContext('2d')
+        if (!drawn || !context) throw new Error('the page has no canvas to read')
+        const image = new Image()
+        image.src = drawn.toDataURL('image/png')
+        await image.decode()
+        copy.width = image.width
+        copy.height = image.height
+        context.drawImage(image, 0, 0)
+        const bullets = window.engine.state('bullets').filter((bullet) => bullet.visible !== false)
+        const at = (x: number, y: number) => [...context.getImageData(((x + 2) / 4) * image.width, ((1.5 - y) / 3) * image.height, 1, 1).data.slice(0, 3)]
+        return { size: [image.width, image.height], bullets: bullets.map((bullet) => at(Number(bullet.x), Number(bullet.y))) }
+      })
+      seen.push({ state: JSON.parse(await tab.evaluate(() => window.render_game_to_text())), ...shot })
+    }
+    assert.deepEqual(seen.map(({ state }) => state), [20, 40, 60].map((tick) => asText(expected.snapshots.find((snapshot) => snapshot.tick === tick))))
+    // A bullet is a white dot on black.
+    for (const { size, bullets } of seen) {
+      assert.deepEqual(size, [960, 720])
+      assert.ok(bullets.length > 0 && bullets.every((rgb) => rgb.every((channel) => channel > 200)), JSON.stringify(bullets))
+    }
+    assert.deepEqual(errors, [])
+  } finally {
+    server.close()
+    await page.dispose()
+  }
+})
+
+// A 2x2 image to load, and a game that fails on tick 3.
+const FAILS_AT_3 = [
+  "import { defineGame } from 'threejam'",
+  '',
+  'export default defineGame({',
+  "  entities: { tile: { w: 1, h: 1, image: 'quad.png' } },",
+  '  update(world, ctx) {',
+  "    if (ctx.tick === 3) throw new Error('no tick 3')",
+  '  },',
+  '})',
+  '',
+].join('\n')
+
+test("a run page's advanceTime holds a call that comes while the game's images load, in place of the one the client put there, and rejects it if the game fails to start, refuses what isn't milliseconds, and once the game fails rejects with the game's error, as the page says why", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'hooks-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), FAILS_AT_3)
+  writeFileSync(join(dir, 'quad.png'), Buffer.from(QUAD_PNG, 'base64'))
+  const expected = await runGame(dir, { ticks: 1 })
+  const token = 'session-token'
+  const page = await buildPage({ dir, config: { mode: 'run', seed: 0, token } })
+  const server = await serve({ page, token })
+  // The page opens with its image's request held here, so its game can't start until the request goes on, or fails if it's cut off.
+  const holding = async (tab: Page): Promise<HTTPRequest[]> => {
+    const held: HTTPRequest[] = []
+    await tab.setRequestInterception(true)
+    tab.on('request', (request) => {
+      if (request.url().includes('/assets/')) held.push(request)
+      else request.continue().catch(() => {})
+    })
+    await openPage(tab, server.url, { waitUntil: 'domcontentloaded' })
+    await until('the page to ask for its image', () => held.length > 0)
+    return held
+  }
+  try {
+    const tab = await newTab(t)
+    await tab.evaluateOnNewDocument(clientShim)
+    const held = await holding(tab)
+    const before = await tab.evaluate(() => {
+      Reflect.set(window, 'early', window.advanceTime(1000 / 60).then(() => JSON.parse(window.render_game_to_text())))
+      try {
+        return window.render_game_to_text()
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error)
+      }
+    })
+    for (const request of held) await request.continue()
+    const early = await tab.evaluate(() => Reflect.get(window, 'early'))
+    assert.deepEqual({ before, early }, { before: "the game hasn't started yet; await advanceTime(0), which waits for it", early: asText(expected.snapshots[0]) })
+    const outcomes = await tab.evaluate(async () => {
+      const outcome = (ms: number) => window.advanceTime(ms).then(() => JSON.parse(window.render_game_to_text()).tick, (error: unknown) => (error instanceof Error ? error.message : String(error)))
+      return [await outcome(-1), await outcome(Number.NaN), await outcome(1000 / 60), await outcome(1000 / 60), await outcome(0), JSON.parse(window.render_game_to_text()).tick, document.querySelector('pre')?.textContent]
+    })
+    assert.deepEqual(outcomes, [
+      'advanceTime takes the milliseconds to step, a number from 0 up like 1000 / 60 for one tick, not -1',
+      'advanceTime takes the milliseconds to step, a number from 0 up like 1000 / 60 for one tick, not NaN',
+      2,
+      'no tick 3',
+      'no tick 3',
+      3,
+      'no tick 3\n\nFix the game and save; the page reloads.',
+    ])
+    // A game that fails before it starts, here with its image cut off, rejects a call that waits for it, which would otherwise wait for good.
+    const cut = await newTab(t)
+    const cutOff = await holding(cut)
+    await cut.evaluate(() => Reflect.set(window, 'early', window.advanceTime(1000 / 60).then(() => 'stepped', (error: unknown) => (error instanceof Error ? error.message : String(error)))))
+    for (const request of cutOff) await request.abort()
+    const refused = await cut.evaluate(() => Promise.race([Reflect.get(window, 'early'), new Promise((done) => setTimeout(() => done('still waiting after 10 s'), 10_000))]))
+    assert.equal(refused, "the image quad.png couldn't be loaded; check that the file is a whole image of its type")
+  } finally {
+    server.close()
+    await page.dispose()
+  }
 })
 
 // A silent mono WAV of 16-bit samples at 8000 a second.

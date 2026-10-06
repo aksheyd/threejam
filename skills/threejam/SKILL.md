@@ -32,8 +32,9 @@ Run these from the project's root, with the game in `<dir>`.
    - `--only ball,bricks --fields x,y --every 10` prints those entities and fields every 10 ticks. `ctx.print(...)` lines appear in `log`, and `--filter-output log` prints only them.
    - Pin the rules in `<dir>/game.test.ts` with `simulate`, `pick`, and `drive`, like the test `new` writes, and run it with `node --test <dir>/game.test.ts`.
 4. Look at it: `npx threejam shot <dir> --at 1,120,600 --press Space@1 -o /tmp/<name>/frame.png` saves one PNG per tick from a single run, with the same input flags as `sim`. Open the PNGs.
-5. Ask a person to play it with `npx threejam run <dir>`. Numbers and frames can't show whether it feels right. Don't leave a `run` window open yourself.
-6. To hand the game to someone, `npx threejam export <dir> -o <name>.html` writes one HTML file that plays it offline, images and sounds included.
+5. To play it in a browser with a client that presses keys and steps frames, like the Playwright script of OpenAI's develop-web-game skill, give the client the address `npx threejam run <dir> --serve-only` prints, or a file exported with `--seed N`. The page already answers `window.advanceTime(ms)` and `window.render_game_to_text()`, so don't add them to the game. Start the game with a step of the client's actions, like `space` or `left_mouse_button`, not with `--click-selector`: the client's first `advanceTime` call starts the run over without that click. The text is the tick and the entities as `sim --exact --format json` prints them, so check it against `sim` with the same seed and keys, the seed `run` prints or the one the file was exported with. Stop `run` when you're done.
+6. Ask a person to play it with `npx threejam run <dir>`. Numbers and frames can't show whether it feels right. Don't leave a `run` window open yourself.
+7. To hand the game to someone, `npx threejam export <dir> -o <name>.html` writes one HTML file that plays it offline, images and sounds included.
 
 ## Facts to plan with
 

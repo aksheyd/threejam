@@ -45,12 +45,12 @@ export function framePaths(out: string, at: readonly number[]): string[] {
 }
 
 // Chrome on Windows sometimes aborts a new tab's first navigation, so an aborted one gets one more try.
-export async function openPage(tab: Page, url: string, { timeout }: { timeout?: number } = {}): Promise<void> {
+export async function openPage(tab: Page, url: string, { timeout, waitUntil = 'load' }: { timeout?: number; waitUntil?: 'load' | 'domcontentloaded' } = {}): Promise<void> {
   try {
-    await tab.goto(url, { waitUntil: 'load', timeout })
+    await tab.goto(url, { waitUntil, timeout })
   } catch (error) {
     if (!(error instanceof Error && error.message.startsWith('net::ERR_ABORTED'))) throw error
-    await tab.goto(url, { waitUntil: 'load', timeout })
+    await tab.goto(url, { waitUntil, timeout })
   }
 }
 

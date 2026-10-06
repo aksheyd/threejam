@@ -1,4 +1,5 @@
 import { Session, parseGame, pick } from '../engine.ts'
+import { show } from '../errors.ts'
 import { guarded, loading, throughout } from '../guard.ts'
 import { CENTER, keyFromCode, pointerMoves, schedule } from '../input.ts'
 import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Game, type Key, type Point, type SoundEntry } from '../types.ts'
@@ -40,6 +41,8 @@ declare global {
   interface Window {
     THREEJAM: unknown
     engine: PageEngine
+    advanceTime(ms: number): Promise<void>
+    render_game_to_text(): string
   }
 }
 
@@ -80,8 +83,10 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
       window.close()
     })
   }
+  const hooks = config.mode === 'shot' ? undefined : answerHooks()
   // Before the game runs, a failure shows on the page too, except in shot, which reads the page's error instead.
   const reported = (error: unknown, fix?: string): unknown => {
+    hooks?.fail(error)
     if (config.mode !== 'shot') notice(`${error instanceof Error ? error.message : String(error)}${reloads && fix ? `\n\n${fix}` : ''}`)
     return error
   }
@@ -113,6 +118,10 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   let session: Session | undefined
   let source: Source = { kind: 'keyboard' }
   let paused = false
+  // The part of a tick advanceTime has been given but hasn't stepped, while it has the page's clock: from its first call until engine.resume().
+  let spare: number | undefined
+  // What the run was last reset with, which advanceTime starts it over with.
+  let resetWith: ResetOptions = {}
   // How many of the session's sounds the speaker has had.
   let heard = 0
 
@@ -150,6 +159,8 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     const next = new Session(game, { seed: options.seed ?? seed, set: options.set, assets: Object.keys(assets) })
     session = next
     heard = 0
+    resetWith = options
+    if (spare !== undefined) spare = 0
     ticking(() => {
       source = inputSource(options, drive)
       next.start()
@@ -177,7 +188,10 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     state: (only) => pick(current().state(), only),
     sounds: () => [...current().sounds],
     pause: () => void (paused = true),
-    resume: () => void (paused = false),
+    resume() {
+      paused = false
+      spare = undefined
+    },
     get paused() {
       return paused
     },
@@ -203,6 +217,7 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
 
   const fail = (error: unknown) => {
     stopped = true
+    hooks?.fail(error)
     console.error(error)
     notice(`${error instanceof Error ? error.message : String(error)}${reloads ? '\n\nFix the game and save; the page reloads.' : ''}`)
   }
@@ -213,6 +228,35 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     fail(error)
     return
   }
+
+  hooks?.start({
+    advance(ms) {
+      if (stopped) throw new Error('the page has stopped')
+      try {
+        if (spare === undefined) {
+          // How far a page got playing on its own depends on how long it ran, so its run starts over, with the keys still held and none that were only tapped.
+          if (!paused) {
+            tapped.clear()
+            reset(resetWith)
+          }
+          paused = true
+          spare = 0
+        }
+        spare += (ms * 60) / 1000
+        // Parts of a tick can add up to a hair short of it, as six calls of 1000 / 360 do, and that much still makes the tick.
+        const ticks = Math.floor(spare + 1e-9)
+        spare -= ticks
+        ticking(() => {
+          for (let i = 0; i < ticks; i++) stepOnce()
+        })
+        draw()
+      } catch (error) {
+        fail(error)
+        throw error
+      }
+    },
+    text: () => JSON.stringify({ tick: current().tick, entities: current().state() }),
+  })
 
   addEventListener('keydown', (event) => {
     speaker?.unlock()
@@ -322,6 +366,51 @@ function inputSource(options: ResetOptions, drive: Drive | undefined): Source {
     keysAt: schedule({ press: options.press ?? [], hold: options.hold ?? [], ticks, clip: true }),
     pointerAt: pointerMoves({ pointer: options.pointer ?? [], ticks, clip: true }),
   }
+}
+
+// What advanceTime and render_game_to_text do once the game has started.
+interface Hooks {
+  advance(ms: number): void
+  text(): string
+}
+
+// The two hooks OpenAI's develop-web-game skill has a game add for its Playwright client, in place before the game loads, since that client puts a real-time advanceTime of its own there first; a call that comes before the game starts waits for it.
+function answerHooks(): { start(hooks: Hooks): void; fail(error: unknown): void } {
+  let started: Hooks | undefined
+  let failure: { readonly error: unknown } | undefined
+  let begin: (hooks: Hooks) => void = () => {}
+  let refuse: (error: unknown) => void = () => {}
+  const ready = new Promise<Hooks>((resolve, reject) => {
+    begin = resolve
+    refuse = reject
+  })
+  // A game that fails before any call has said why on the page already.
+  ready.catch(() => {})
+  window.advanceTime = async (ms: unknown) => {
+    const given = milliseconds(ms)
+    if (failure) throw failure.error
+    const game = started ?? (await ready)
+    game.advance(given)
+  }
+  window.render_game_to_text = () => {
+    if (started) return started.text()
+    throw failure?.error ?? new Error("the game hasn't started yet; await advanceTime(0), which waits for it")
+  }
+  return {
+    start(hooks) {
+      started = hooks
+      begin(hooks)
+    },
+    fail(error) {
+      failure ??= { error }
+      refuse(error)
+    },
+  }
+}
+
+function milliseconds(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value
+  throw new Error(`advanceTime takes the milliseconds to step, a number from 0 up like 1000 / 60 for one tick, not ${show(value)}`)
 }
 
 function parseConfig(value: unknown): Config {
