@@ -8,11 +8,17 @@ import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, describe, gameFiles, isSystem
 import { createGame } from './new.ts'
 import { NAME, VERSION, mcpCommand } from './package.ts'
 import { bundlePage, play } from './serve.ts'
-import { framePaths, parseTicks, shoot } from './shot.ts'
+import { endShots, framePaths, parseTicks, shoot } from './shot.ts'
 import type { EntityState, Value } from './types.ts'
 
+// Exiting ends the sandboxes and type checks of calls still running, once shots still running have had up to 2 s to close their Chrome and remove its folders.
+let exiting: Promise<void> | undefined
+function shutDown(): void {
+  exiting ??= endShots(2000).then(() => process.exit(0))
+}
+
 process.stdout.on('error', (error) => {
-  if ('code' in error && error.code === 'EPIPE') process.exit(0)
+  if ('code' in error && error.code === 'EPIPE') return shutDown()
   throw error
 })
 
@@ -80,6 +86,8 @@ const runsGame = { readOnlyHint: false, destructiveHint: true, idempotentHint: f
 // MCP clients put a whole reply into the model's context: this is about 25,000 tokens.
 const MCP_REPLY_LIMIT = 100_000
 const serving = process.argv.slice(2).includes('--mcp')
+// A stdio MCP client shuts its server down by closing the pipe that is the server's stdin, as a batch piped into the server does once it's written. The calls still running get 2 s to finish and reply: once they're done, nothing holds the process, which exits by itself, and the timer, which holds nothing either, ends any call still running after that.
+if (serving) process.stdin.once('close', () => setTimeout(shutDown, 2000).unref())
 
 function failure(error: unknown) {
   return failed(codeOf(error), describe(error))

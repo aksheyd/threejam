@@ -232,16 +232,25 @@ async function within(ms: number, work: Promise<unknown>): Promise<boolean> {
 // Ctrl-C, SIGTERM, and the SIGHUP of a closed terminal, which can come twice.
 const STOPS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
 
-// What stops each shot running in this process, and the first signal that stopped them, which also stops any shot that starts before the last of them is done.
+// What stops each shot running in this process, and why they were stopped, by the first signal or by this process exiting, which also stops any shot that starts before the last of them is done.
 const shots = new Set<() => void>()
-let caught: NodeJS.Signals | undefined
+let stopped: NodeJS.Signals | 'exiting' | undefined
+let drained = () => {}
 
-function stop(signal: NodeJS.Signals): void {
-  caught ??= signal
+function stop(reason: NodeJS.Signals | 'exiting'): void {
+  stopped ??= reason
   for (const halt of shots) halt()
 }
 
-// A signal kills each shot's Chrome through its killer, so the shot fails and cleans up as on any failure, for up to grace milliseconds; once the last of them is done, the process ends as the signal would have ended it, and none of them settles, so none can write a reply, which a closed terminal refuses anyway.
+// Stops the shots still running as a signal does, so that each kills its Chrome, removes what it made, and answers no call, and waits at most ms milliseconds for them, as an MCP server does before it exits.
+export async function endShots(ms: number): Promise<void> {
+  if (shots.size === 0) return
+  const empty = new Promise<void>((done) => (drained = done))
+  stop('exiting')
+  await within(ms, empty)
+}
+
+// A signal, or this process exiting, kills each shot's Chrome through its killer, so the shot fails and cleans up as on any failure, for up to grace milliseconds, and none of them settles, so none can write a reply, which a closed terminal or a client that has gone refuses anyway; once the last of them is done after a signal, the process ends as the signal would have ended it.
 export async function interruptible<T>(work: (killer: AbortController) => Promise<T>, grace = 15_000): Promise<T> {
   const killer = new AbortController()
   let halt = () => {}
@@ -253,20 +262,21 @@ export async function interruptible<T>(work: (killer: AbortController) => Promis
   })
   if (shots.size === 0) for (const signal of STOPS) process.on(signal, stop)
   shots.add(halt)
-  if (caught !== undefined) halt()
+  if (stopped !== undefined) halt()
   // A work that throws before it returns a promise fails as one that rejects does.
   const outcome = new Promise<T>((done) => done(work(killer)))
   const settled = outcome.then(() => {}, () => {})
   await Promise.race([settled, halted])
   // A shot stuck where the kill doesn't reach can't hold the process for longer than its grace.
-  if (caught !== undefined) await within(grace, settled)
+  if (stopped !== undefined) await within(grace, settled)
   shots.delete(halt)
   if (shots.size === 0) for (const signal of STOPS) process.off(signal, stop)
-  if (caught === undefined) return outcome
+  if (stopped === undefined) return outcome
   if (shots.size === 0) {
-    const signal = caught
-    caught = undefined
-    endBy(signal)
+    const reason = stopped
+    stopped = undefined
+    if (reason === 'exiting') drained()
+    else endBy(reason)
   }
   return new Promise<never>(() => {})
 }

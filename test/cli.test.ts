@@ -63,6 +63,7 @@ interface Reply {
 
 function mcp(signal: AbortSignal, cwd = ROOT, env?: NodeJS.ProcessEnv) {
   const server = spawnCli(['--mcp'], signal, cwd, env)
+  const exited = new Promise<[number | null, NodeJS.Signals | null]>((done) => server.once('exit', (code, by) => done([code, by])))
   const waiting = new Map<number, (reply: Reply) => void>()
   let buffered = ''
   let next = 1
@@ -86,7 +87,7 @@ function mcp(signal: AbortSignal, cwd = ROOT, env?: NodeJS.ProcessEnv) {
     send({ method: 'notifications/initialized' })
     return reply
   })
-  return { ready, request, notify: (method: string, params: object) => send({ method, params }), close: () => stopTree(server), kill: (signal: NodeJS.Signals) => server.kill(signal), pid: server.pid }
+  return { ready, request, notify: (method: string, params: object) => send({ method, params }), close: () => stopTree(server), kill: (signal: NodeJS.Signals) => server.kill(signal), end: () => server.stdin.end(), exited, pid: server.pid }
 }
 
 test('check passes Pong, and sim prints exact state as JSON with the chosen fields', () => {
@@ -537,6 +538,59 @@ test("an MCP server killed with SIGKILL takes the sandbox running a game, and ch
   } finally {
     for (const pid of children) if (!ended(pid)) process.kill(pid, 'SIGKILL')
   }
+})
+
+test("an MCP server fed its requests through a pipe that closes once they're written, as with echo or cat piped into threejam --mcp, answers each of them before it exits", () => {
+  const batch = [
+    { id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } } },
+    { method: 'notifications/initialized' },
+    { id: 2, method: 'tools/list', params: {} },
+    { id: 3, method: 'tools/call', params: { name: 'sim', arguments: { dir: 'games/pong', ticks: 1, only: 'ball', fields: 'x,y' } } },
+  ]
+  const input = batch.map((message) => `${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`).join('')
+  const piped = spawnSync(process.execPath, [CLI, '--mcp'], { cwd: ROOT, input, encoding: 'utf8', timeout: 60_000, killSignal: 'SIGKILL' })
+  const replies: Reply[] = piped.stdout.split('\n').filter(Boolean).map((line) => JSON.parse(line))
+  assert.deepEqual(
+    { status: piped.status, ids: replies.map((reply) => reply.id), sim: replies.at(-1)?.result?.content?.[0]?.text.split('\n')[0] },
+    { status: 0, ids: [1, 2, 3], sim: '{"tick":1,"entities":[{"name":"ball","x":0,"y":0}]}' },
+  )
+})
+
+test("an MCP server whose client closes stdin gives the calls still running 2 s to finish, then exits without answering them, ending a sim's sandbox, check's type check and the folder it reads, and a shot through shot's own cleanup, which kills its Chrome and removes Chrome's profile and socket folders", async (t) => {
+  const loop = folder({ 'game.ts': game({ update: 'for (;;) {}' }) })
+  const stuck = folder({ 'game.ts': game({ update: 'world.ball.x += 1' }), 'view.ts': 'for (;;) {}\n' })
+  // The system's temporary folder, since one deep in a checkout can be too long for Chrome on Linux to start in.
+  const tmp = mkdtempSync(join(tmpdir(), 'threejam-temp-'))
+  made.push(tmp)
+  const server = mcp(t.signal, ROOT, { ...process.env, TMPDIR: tmp, TMP: tmp, TEMP: tmp })
+  await server.ready
+  const answered: string[] = []
+  const call = (name: string, args: object) => void server.request('tools/call', { name, arguments: args }).then(() => answered.push(name))
+  call('sim', { dir: loop, ticks: 1, timeout: 60 })
+  // Only on macOS and Linux can ps find the server's children and a FIFO hold a type check open.
+  const children: number[] = []
+  if (process.platform !== 'win32') {
+    children.push(await started(server.pid, /--permission/))
+    call('check', { dir: stalledCheck(), timeout: 60 })
+    children.push(await started(server.pid, /--listFiles/))
+  }
+  if (findChrome()) {
+    call('shot', { dir: stuck, at: '1', out: join(stuck, 'frame.png'), timeout: 60 })
+    // Chrome fills its profile as it starts.
+    await until("the shot's Chrome to start", () => readdirSync(tmp).some((name) => name.startsWith('threejam-chrome-') && readdirSync(join(tmp, name)).length > 0))
+  }
+  const closed = Date.now()
+  server.end()
+  assert.deepEqual(await Promise.race([server.exited, new Promise((done) => setTimeout(done, 10_000, 'still running').unref())]), [0, null])
+  // The calls' 2 s, by a timer the server may start a moment before this clock reads it, then at most 2 s for the shot's cleanup.
+  const took = Date.now() - closed
+  t.diagnostic(`the server exited ${took} ms after its client closed stdin`)
+  assert.ok(took >= 1900 && took < 5000, `the server took ${took} ms to exit`)
+  await until('the sandbox and the type check to end with their server', () => children.every(ended))
+  // On Windows, Chrome's helpers can hold a file in shot's profile a moment after Chrome is killed, and shot leaves those for the OS.
+  const left = readdirSync(tmp).filter((name) => process.platform !== 'win32' || !name.startsWith('threejam-chrome-'))
+  const chrome = process.platform === 'win32' ? [] : spawnSync('ps', ['-A', '-o', 'args='], { encoding: 'utf8' }).stdout.split('\n').filter((line) => line.includes(`--user-data-dir=${tmp}`))
+  assert.deepEqual({ left, chrome, answered }, { left: [], chrome: [], answered: [] })
 })
 
 test('mcp add registers node with this CLI from a clone or an install, and npx for a copy in npx\'s cache or an install on a path with a space', () => {

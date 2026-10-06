@@ -75,6 +75,10 @@ try {
   if (inCache === undefined) throw new Error(`npx left no copy of ${name} in ${npxCache}`)
   same(await mcpCommand(inCache), `npx -y ${name}@${version} --mcp`)
   done('new, check, sim, export, and the MCP command through npx without installing')
+  if (process.platform !== 'win32') {
+    await mcpThroughNpx(work, ['--yes', `--package=${tarball}`, '--'])
+    done('the MCP server through npx, whose client kills npm exec, then exits with its sandbox')
+  }
 
   // The project new wrote, once it has the package; --no-save keeps its dependency on the version to be published.
   const solo = join(work, 'solo')
@@ -137,6 +141,48 @@ async function serveOnly(project: string): Promise<void> {
     const exited = new Promise((stopped) => server.once('exit', stopped))
     server.kill()
     await exited
+  }
+}
+
+// Through npx, the MCP server is npm exec's grandchild. A client that kills npm exec, as a client may when it shuts the server down, leaves the server to notice its stdin closing, which Node does for a child that has exited; the server then ends with its sandbox.
+async function mcpThroughNpx(cwd: string, npx: string[]): Promise<void> {
+  mkdirSync(join(cwd, 'loop'))
+  writeFileSync(join(cwd, 'loop', 'game.ts'), ["import { defineGame } from 'threejam'", '', 'export default defineGame({', '  entities: { ball: { w: 0.1 } },', '  update() {', '    for (;;) {}', '  },', '})', ''].join('\n'))
+  const client = spawn(process.execPath, [NPX, ...npx, 'threejam', '--mcp'], { cwd, stdio: ['pipe', 'ignore', 'inherit'] })
+  const send = (message: object) => client.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
+  send({ id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'verify-package', version: '0' } } })
+  send({ method: 'notifications/initialized' })
+  send({ id: 2, method: 'tools/call', params: { name: 'sim', arguments: { dir: 'loop', ticks: 1, timeout: 60 } } })
+  let started: number[] = []
+  try {
+    await waitFor('the server to start a sandbox', () => (started = below(client.pid)).some((pid) => runs(pid).includes(' --permission ')))
+    client.kill('SIGKILL')
+    await waitFor('the server and its sandbox to end once npm exec is killed', () => started.every((pid) => runs(pid) === ''))
+  } finally {
+    for (const pid of started) if (runs(pid) !== '') process.kill(pid, 'SIGKILL')
+  }
+}
+
+// The processes below pid, which ps lists by parent.
+function below(pid: number | undefined): number[] {
+  const rows = spawnSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' }).stdout.trim().split('\n').map((row) => row.trim().split(/\s+/).map(Number))
+  const found: number[] = []
+  for (let parents = pid === undefined ? [] : [pid]; parents.length > 0; ) {
+    parents = rows.filter(([, ppid]) => parents.includes(ppid)).map(([child]) => child)
+    found.push(...parents)
+  }
+  return found
+}
+
+// What a process runs, or nothing once it has ended, even if it waits to be reaped.
+function runs(pid: number): string {
+  const [stat = '', ...args] = spawnSync('ps', ['-o', 'stat=,args=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim().split(/\s+/)
+  return stat === '' || stat.startsWith('Z') ? '' : ` ${args.join(' ')} `
+}
+
+async function waitFor(what: string, check: () => boolean): Promise<void> {
+  for (const deadline = Date.now() + 30_000; !check(); await new Promise((wait) => setTimeout(wait, 100))) {
+    if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}`)
   }
 }
 

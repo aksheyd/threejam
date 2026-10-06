@@ -485,9 +485,22 @@ interface Tsc {
 // spawnSync's bound. tsc lists the files it read after its errors, so output cut short couldn't be checked for an import from outside the folder, and none of it is shown.
 const MAX_TSC_BYTES = 1024 * 1024
 
+// The folders of the type checks still running, which this process removes if it exits first, as an MCP server does when its client closes stdin; a signal that kills it leaves them.
+const checking = new Set<string>()
+process.on('exit', () => {
+  for (const config of checking) {
+    try {
+      rmSync(config, { recursive: true, force: true })
+    } catch {
+      // An exit can't wait for a file Windows still holds a moment; the system's temporary folder keeps it.
+    }
+  }
+})
+
 // paths is only a tsconfig.json setting, so each check writes one for its file, where only this user can read it; a type that never terminates is stopped at the time limit.
 async function runTsc({ compilerOptions, file, timeout }: { compilerOptions: object; file: string; timeout: number }): Promise<Tsc> {
   const config = mkdtempSync(join(tmpdir(), 'threejam-check-'))
+  checking.add(config)
   try {
     const project = join(config, 'tsconfig.json')
     writeFileSync(project, JSON.stringify({ compilerOptions, files: [file] }), { mode: 0o600, flag: 'wx' })
@@ -529,6 +542,7 @@ async function runTsc({ compilerOptions, file, timeout }: { compilerOptions: obj
       tsc.stdin.end()
     })
   } finally {
+    checking.delete(config)
     rmSync(config, { recursive: true, force: true })
   }
 }
