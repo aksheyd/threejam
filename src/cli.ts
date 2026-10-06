@@ -3,7 +3,7 @@ import { randomInt } from 'node:crypto'
 import { basename } from 'node:path'
 import { Cli, Errors, z } from 'incur'
 import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, show, type Code } from './errors.ts'
-import { exportGame } from './export.ts'
+import { exportGame, exportPath } from './export.ts'
 import { DEFAULT_TIMEOUT, LimitError, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
 import { createGame } from './new.ts'
 import { VERSION, mcpCommand } from './package.ts'
@@ -359,9 +359,9 @@ const cli = Cli.create('threejam', {
     mcp: { annotations: runsGame },
     async run(c) {
       try {
-        const { folder } = gameFiles(c.args.dir)
+        const out = exportPath(c.options.out ?? `${basename(gameFiles(c.args.dir).folder)}.html`)
         await runGame(c.args.dir, { ticks: 1, seed: c.options.seed, timeout: c.options.timeout })
-        return await exportGame({ dir: c.args.dir, out: c.options.out ?? `${basename(folder)}.html`, seed: c.options.seed })
+        return await exportGame({ dir: c.args.dir, out, seed: c.options.seed })
       } catch (error) {
         return c.error(failure(error))
       }
