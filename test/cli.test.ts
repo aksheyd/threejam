@@ -112,6 +112,18 @@ test('type errors in game.ts and view.ts and runtime errors name the file and li
   assert.match(clock.out, /message: "?test\/\.tmp\/game-\w+\/game\.ts:6: Math\.random\(\) would make runs differ; .* \(in update at tick 1\)/)
 })
 
+test("check's type error for console, document, or setTimeout in game logic says what game logic uses instead", () => {
+  const dir = folder({ 'game.ts': game({ update: "console.log(ctx.tick)\n    document.title = 'x'\n    setTimeout(() => {}, 10)" }) })
+  const at = `${dir.replaceAll(sep, '/')}/game.ts`
+  const { code, out } = threejam('check', dir, '--format', 'json')
+  const message = [
+    `${at}:6: Cannot find name 'console'. Here, use ctx.print(...), which sim shows with the tick.`,
+    `${at}:7: Cannot find name 'document'. Here, game logic has no page; draw in view.ts.`,
+    `${at}:8: Cannot find name 'setTimeout'. Here, count ticks with ctx.tick instead.`,
+  ].join('; ')
+  assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'TYPE_ERROR', message } })
+})
+
 test("a failure's code says what went wrong: BUILD_ERROR for a syntax error from sim and check alike, IO_ERROR for a folder new can't make, and BROWSER_ERROR without Chrome", () => {
   const broken = folder({ 'game.ts': game({ update: 'world.ball.x += ;' }) })
   const sim = threejam('sim', broken, '--ticks', '1')
