@@ -8,9 +8,9 @@ import { real, within } from '../src/confine.ts'
 import { sandboxEnv } from '../src/load.ts'
 import { PORTABLE } from '../src/math.ts'
 import { ROOT } from '../src/package.ts'
+import { CLI } from './children.ts'
 import { PROBE, checkProbe } from './probe.ts'
 
-const CLI = join(ROOT, 'src', 'cli.ts')
 const TMP = join(ROOT, 'test', '.tmp')
 mkdirSync(TMP, { recursive: true })
 const made: string[] = []

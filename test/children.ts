@@ -4,6 +4,9 @@ import { ROOT } from '../src/package.ts'
 
 export const CLI = join(ROOT, 'src', 'cli.ts')
 
+// The processes the tests start share one compile cache, so each CLI they start loads its modules faster.
+process.env.NODE_COMPILE_CACHE ??= join(ROOT, 'test', '.tmp', 'compile-cache')
+
 // The groups still running: Ctrl-C reaches only the terminal's own group, and a test file it stops never aborts its tests' signals, so an interrupt passes SIGTERM on to each.
 const running = new Set<number>()
 if (process.platform !== 'win32') {
