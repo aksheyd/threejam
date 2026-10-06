@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { accessSync, constants, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
 import type { Browser, Page } from 'puppeteer-core'
@@ -53,7 +53,10 @@ export async function openPage(tab: Page, url: string, { timeout }: { timeout?: 
 // Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs, and with tmp, a temporary folder of its own.
 export async function launchChrome(chrome: string, { protocolTimeout, tmp }: { protocolTimeout?: number; tmp?: string } = {}): Promise<Browser> {
   const where = chrome.replaceAll(sep, '/')
-  if (!existsSync(chrome)) throw new BrowserError(`there's no Chrome at ${where}; set CHROME_PATH to the executable of Chrome or Chromium, or Edge on Windows`)
+  const found = statSync(chrome, { throwIfNoEntry: false })
+  if (found === undefined) throw new BrowserError(`there's no Chrome at ${where}; set CHROME_PATH to the executable of Chrome or Chromium, or Edge on Windows`)
+  if (found.isDirectory()) throw new BrowserError(`${where} is a folder; set CHROME_PATH to the executable file of Chrome or Chromium, or Edge on Windows`)
+  if (!executable(chrome)) throw new BrowserError(`${where} isn't executable; set CHROME_PATH to the executable file of Chrome or Chromium`)
   // Only shot loads Puppeteer, so the other commands start without it.
   const { default: puppeteer } = await import('puppeteer-core')
   // Puppeteer's defaults turn off IsolateSandboxedIframes so it can reach sandboxed frames, which these pages don't have.
@@ -158,6 +161,16 @@ async function closeChrome(browser: Browser | undefined, stuck: boolean): Promis
     if (closed) return
   }
   browser.process()?.kill('SIGKILL')
+}
+
+// Windows has no execute permission to check, so there any file passes.
+function executable(file: string): boolean {
+  try {
+    accessSync(file, constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
 }
 
 // Puppeteer puts the page's stack, with the page server's address, in an error's message after its first line.

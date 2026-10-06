@@ -253,7 +253,7 @@ test("a Chrome that shot kills for a page that never returns leaves nothing in t
   assert.deepEqual({ status: result.status, printed: result.stdout.trim(), left: readdirSync(temp) }, { status: 0, printed: 'TIMEOUT', left: [] }, result.stderr)
 })
 
-test('a Chrome that exits as it starts fails with one line naming it, though over a pipe its own output is lost', { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {
+test('a Chrome that exits as it starts fails with one line naming it, though over a pipe its own output is lost, and a folder or a file that runs nothing says so', { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {
   const dir = mkdtempSync(join(TMP, 'exits-'))
   made.push(dir)
   const fake = join(dir, 'chrome')
@@ -262,6 +262,9 @@ test('a Chrome that exits as it starts fails with one line naming it, though ove
     name: 'BrowserError',
     message: `Chrome at ${fake} didn't start: it exited as soon as it started; set CHROME_PATH to a working Chrome or Chromium`,
   })
+  await assert.rejects(launchChrome(dir), { name: 'BrowserError', message: `${dir} is a folder; set CHROME_PATH to the executable file of Chrome or Chromium, or Edge on Windows` })
+  writeFileSync(join(dir, 'notes.txt'), 'not a program', { mode: 0o644 })
+  await assert.rejects(launchChrome(join(dir, 'notes.txt')), { name: 'BrowserError', message: `${join(dir, 'notes.txt')} isn't executable; set CHROME_PATH to the executable file of Chrome or Chromium` })
 })
 
 test('commands other than shot start without loading Puppeteer', () => {
