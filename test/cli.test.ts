@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
@@ -11,8 +11,8 @@ import { crashed, describe } from '../src/load.ts'
 import { ENGINE, ROOT, VERSION, mcpCommand } from '../src/package.ts'
 import { findChrome } from '../src/serve.ts'
 import { callLimit, framePaths } from '../src/shot.ts'
+import { CLI, spawnCli, stopTree } from './children.ts'
 
-const CLI = join(ROOT, 'src', 'cli.ts')
 const TMP = join(ROOT, 'test', '.tmp')
 mkdirSync(TMP, { recursive: true })
 const made: string[] = []
@@ -61,15 +61,6 @@ interface Reply {
   }
 }
 
-// A test that times out aborts its signal, which kills the child, so it can't hold the run open; the abort's error is expected then.
-function spawnCli(args: string[], signal: AbortSignal, cwd = ROOT) {
-  const child = spawn(process.execPath, [CLI, ...args], { cwd, signal })
-  child.on('error', (error) => {
-    if (!signal.aborted) throw error
-  })
-  return child
-}
-
 function mcp(signal: AbortSignal, cwd = ROOT) {
   const server = spawnCli(['--mcp'], signal, cwd)
   const waiting = new Map<number, (reply: Reply) => void>()
@@ -95,7 +86,7 @@ function mcp(signal: AbortSignal, cwd = ROOT) {
     send({ method: 'notifications/initialized' })
     return reply
   })
-  return { ready, request, notify: (method: string, params: object) => send({ method, params }), close: () => server.kill() }
+  return { ready, request, notify: (method: string, params: object) => send({ method, params }), close: () => stopTree(server), pid: server.pid }
 }
 
 test('check passes Pong, and sim prints exact state as JSON with the chosen fields', () => {
@@ -411,6 +402,31 @@ test('audit 1 and 2: a looping game does not block other MCP calls, even after a
   } finally {
     server.close()
   }
+})
+
+// The processes in a process group, as ps lists them on macOS and Linux.
+function inGroup(group: number | undefined): number[] {
+  const { stdout } = spawnSync('ps', ['-A', '-o', 'pid=,pgid='], { encoding: 'utf8' })
+  return stdout.split('\n').flatMap((line) => {
+    const [pid, pgid] = line.trim().split(/\s+/).map(Number)
+    return pgid === group ? [pid] : []
+  })
+}
+
+async function until(what: string, check: () => boolean): Promise<void> {
+  for (const deadline = Date.now() + 10_000; !check(); await new Promise((wait) => setTimeout(wait, 50))) {
+    if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}`)
+  }
+}
+
+test('ending a test stops the sandbox running a game for its MCP server, which would otherwise run on to its own time limit', { skip: process.platform === 'win32' && 'process groups are for macOS and Linux' }, async (t) => {
+  const loop = folder({ 'game.ts': game({ update: 'for (;;) {}' }) })
+  const server = mcp(t.signal)
+  await server.ready
+  void server.request('tools/call', { name: 'sim', arguments: { dir: loop, ticks: 1, timeout: 60 } })
+  await until('the server to start a sandbox', () => inGroup(server.pid).length > 1)
+  server.close()
+  await until('the server and its sandbox to stop', () => inGroup(server.pid).length === 0)
 })
 
 test('mcp add registers node with this CLI from a clone or an install, and npx for a copy in npx\'s cache or an install on a path with a space', () => {
