@@ -221,6 +221,35 @@ test('review blocker 4: a promise that game code starts can change the world nei
   assert.deepEqual(refused, ['entity "ball" is read-only here; only start and update change the game', 'entity "pool[0]" is read-only here; only start and update change the game'])
 })
 
+test("what game code puts in place of a guarded property stays until its run ends, whether the guard stays up for the whole run, as in sim, or comes down after every tick, as it can between a page's batches, and the next run starts with the guard's own", () => {
+  const attempt = (read: () => unknown) => {
+    try {
+      return String(read())
+    } catch {
+      return 'refused'
+    }
+  }
+  const game = defineGame({
+    entities: { probe: { seen: listOf('') } },
+    update({ probe }, ctx) {
+      probe.seen.push([attempt(() => Math.random()), attempt(() => new Date(0).getHours()), typeof Reflect.get(Intl, 'DisplayNames')].join(' '))
+      if (ctx.tick !== 1) return
+      Math.random = () => 0.25
+      Object.defineProperty(Date.prototype, 'getHours', { get: () => () => 5, configurable: true })
+      Reflect.deleteProperty(Intl, 'DisplayNames')
+    },
+  })
+  const run = ['refused refused function', '0.25 5 undefined', '0.25 5 undefined']
+  assert.deepEqual([...simulate(game, { ticks: 3 }).world.probe.seen], run)
+  const stepped = new Session(game)
+  stepped.start()
+  for (let tick = 1; tick <= 3; tick++) stepped.step([])
+  assert.deepEqual([...stepped.world.probe.seen], run)
+  assert.deepEqual([...simulate(game, { ticks: 1 }).world.probe.seen], run.slice(0, 1))
+  const platform = [typeof Math.random(), new Date(Date.UTC(2024, 0, 1, 12)).getUTCHours(), typeof Intl.DisplayNames, Object.getOwnPropertyDescriptor(Date.prototype, 'getHours')?.get]
+  assert.deepEqual(platform, ['number', 12, 'function', undefined])
+})
+
 test('audit 3: game code formats and compares as en-US does and dates in UTC, whatever the time zone, and Date forms that read the local time fail with their UTC form', () => {
   const zone = process.env.TZ
   process.env.TZ = 'Asia/Kolkata'

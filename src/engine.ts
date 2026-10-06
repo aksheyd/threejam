@@ -2,7 +2,7 @@ import { soundEntry } from './assets.ts'
 import { isColor } from './colors.ts'
 import { createStore, drawableOf, settle, stateOf, type Store } from './entities.ts'
 import { GameError, RunError, UsageError, quote, show } from './errors.ts'
-import { guarded, throughout } from './guard.ts'
+import { guarded, newRun, throughout } from './guard.ts'
 import { InputState, controlsOf, pointerMoves, schedule } from './input.ts'
 import { checkSeed, createRandom } from './random.ts'
 import {
@@ -45,6 +45,7 @@ export class Session<E extends Entities = Entities> {
   #driverRandom: () => number
 
   constructor(game: Game<E>, options: SessionOptions = {}) {
+    newRun()
     this.game = game
     this.seed = checkSeed(options.seed ?? 0)
     const files = options.assets === undefined ? undefined : Object.freeze([...options.assets])

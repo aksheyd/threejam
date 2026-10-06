@@ -70,9 +70,9 @@ export function clonePlain(value: unknown): unknown {
 // A property the guard replaces while it's up: with a value, or with a getter for an accessor like Intl.DateTimeFormat.prototype.format.
 type Change = { readonly owner: object; readonly key: string; readonly value: unknown } | { readonly owner: object; readonly key: string; readonly get: () => unknown }
 
-// set swaps a writable data property's value, several times faster than define, which replaces the property, as an accessor or a missing one needs.
+// set swaps a writable data property's value, several times faster than define, which replaces the property, as an accessor or a missing one needs; set keeps the property's attributes to put it back whole after game code changes it.
 type Swap =
-  | { readonly how: 'set'; readonly owner: object; readonly key: string; readonly value: unknown }
+  | { readonly how: 'set'; readonly owner: object; readonly key: string; readonly value: unknown; readonly enumerable: boolean; readonly configurable: boolean }
   | { readonly how: 'define'; readonly owner: object; readonly key: string; readonly descriptor: PropertyDescriptor }
 
 // load is while a game's or driver's modules load, and run while start, update, or a driver runs.
@@ -81,6 +81,13 @@ type Window = 'load' | 'run'
 let running = 0
 let raised = 0
 let plans: Readonly<Record<Window, readonly Swap[]>> | undefined
+// What game code put in place of a swapped property, or null where it deleted one. sim keeps the guard up for a whole run and a page lowers it between batches of ticks, so each raise puts these back, and game code sees one run whatever the batches.
+const theirs = new Map<Swap, PropertyDescriptor | null>()
+
+// Each run starts with the guard's own stand-ins, whatever game code put in their place in the run before.
+export function newRun(): void {
+  theirs.clear()
+}
 
 // Swaps the clock, unseeded randomness, timers, garbage collection, the locale, and the time zone for errors or fixed values, and Math's functions for portable ones, while fn runs. It changes the platform's own objects, not only the globals that name them, so no prototype or constructor game code can walk to leads back to the originals; it keeps runs repeatable, not code contained.
 export function guarded<T>(fn: () => T): T {
@@ -124,25 +131,47 @@ function raise(window: Window): () => void {
   const swaps = plans[window]
   const values = new Array<unknown>(swaps.length)
   const descriptors = new Array<PropertyDescriptor | undefined>(swaps.length)
+  // What went in whole, game code's own or a define swap's; a set swap that finds nothing of game code's sets the plan's value.
+  const placed = new Array<PropertyDescriptor | null | undefined>(swaps.length)
   for (let i = 0; i < swaps.length; i++) {
     const swap = swaps[i]
+    const kept = theirs.get(swap)
     if (swap.how === 'set') {
       values[i] = Reflect.get(swap.owner, swap.key)
-      Reflect.set(swap.owner, swap.key, swap.value)
+      if (kept === undefined) Reflect.set(swap.owner, swap.key, swap.value)
+      else place(swap.owner, swap.key, (placed[i] = kept))
     } else {
       descriptors[i] = Object.getOwnPropertyDescriptor(swap.owner, swap.key)
-      Object.defineProperty(swap.owner, swap.key, swap.descriptor)
+      place(swap.owner, swap.key, (placed[i] = kept === undefined ? swap.descriptor : kept))
     }
   }
   return () => {
     for (let i = swaps.length - 1; i >= 0; i--) {
       const swap = swaps[i]
-      const before = descriptors[i]
-      if (swap.how === 'set') Reflect.set(swap.owner, swap.key, values[i])
-      else if (before === undefined) Reflect.deleteProperty(swap.owner, swap.key)
-      else Object.defineProperty(swap.owner, swap.key, before)
+      const put = placed[i]
+      // A descriptor, not a read, so no getter game code put there runs.
+      const now = Object.getOwnPropertyDescriptor(swap.owner, swap.key)
+      if (swap.how === 'set') {
+        const untouched = put === undefined ? now?.writable === true && now.value === swap.value : alike(now, put)
+        if (!untouched) theirs.set(swap, now ?? null)
+        if (untouched && put === undefined) Reflect.set(swap.owner, swap.key, values[i])
+        else Object.defineProperty(swap.owner, swap.key, { value: values[i], writable: true, enumerable: swap.enumerable, configurable: swap.configurable })
+      } else {
+        if (put !== undefined && !alike(now, put)) theirs.set(swap, now ?? null)
+        place(swap.owner, swap.key, descriptors[i] ?? null)
+      }
     }
   }
+}
+
+function place(owner: object, key: string, descriptor: PropertyDescriptor | null): void {
+  if (descriptor === null) Reflect.deleteProperty(owner, key)
+  else Object.defineProperty(owner, key, descriptor)
+}
+
+function alike(now: PropertyDescriptor | undefined, put: PropertyDescriptor | null): boolean {
+  if (now === undefined || put === null) return now === undefined && put === null
+  return now.value === put.value && now.writable === put.writable && now.get === put.get && now.set === put.set
 }
 
 // Made once, from the platform's own objects, so every window puts the same stand-ins in place.
@@ -158,7 +187,8 @@ function plan(): Record<Window, Swap[]> {
 function swap(change: Change): Swap {
   const { owner, key } = change
   if ('get' in change) return { how: 'define', owner, key, descriptor: { get: change.get, configurable: true } }
-  if (Object.getOwnPropertyDescriptor(owner, key)?.writable === true) return { how: 'set', owner, key, value: change.value }
+  const native = Object.getOwnPropertyDescriptor(owner, key)
+  if (native?.writable === true) return { how: 'set', owner, key, value: change.value, enumerable: native.enumerable === true, configurable: native.configurable === true }
   return { how: 'define', owner, key, descriptor: { value: change.value, writable: true, configurable: true } }
 }
 
