@@ -258,7 +258,10 @@ test("a Chrome that shot kills for a page that never returns leaves nothing in t
   assert.deepEqual({ status: result.status, printed: result.stdout.trim(), left }, { status: 0, printed, left: [] }, result.stderr)
 })
 
-test("shot's Chrome starts in a TMPDIR with no room for a folder of shot's, since its socket goes there and Linux caps a socket's path at 107 bytes", { skip: (!chrome && 'needs Chrome') || (process.platform !== 'linux' && "the cap is Linux's"), timeout: 60_000 }, () => {
+// The system's temporary folder can hold a 50-byte TMPDIR, of threejam- and mkdtemp's 6 characters at the least.
+const roomFor50 = join(tmpdir(), 'threejam-XXXXXX').length <= 50
+
+test("shot's Chrome starts in a TMPDIR with no room for a folder of shot's, since its socket goes there and Linux caps a socket's path at 107 bytes", { skip: (!chrome && 'needs Chrome') || (process.platform !== 'linux' && "the cap is Linux's") || (!roomFor50 && "the system's temporary folder is too long to hold a 50-byte TMPDIR"), timeout: 60_000 }, () => {
   // Chrome's socket lands 41 to 45 bytes past TMPDIR, depending on its build, so at 50 it fits with too little room for a folder like threejam-chrome-XXXXXX in between.
   const temp = mkdtempSync(join(tmpdir(), 'threejam-'.padEnd(50 - tmpdir().length - 7, 'x')))
   made.push(temp)
