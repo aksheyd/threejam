@@ -206,6 +206,62 @@ test("review blockers 1 to 4 in a page set to de-DE and Asia/Kolkata: game code 
   }
 })
 
+const KEEPER = [
+  "import { defineGame, listOf } from 'threejam'",
+  '',
+  'const host: Record<string, any> = globalThis',
+  '',
+  'function attempt(read: () => unknown): string {',
+  '  try {',
+  '    return String(read())',
+  '  } catch {',
+  "    return 'refused'",
+  '  }',
+  '}',
+  '',
+  'export default defineGame({',
+  "  entities: { probe: { seen: listOf('') } },",
+  '  update({ probe }, ctx) {',
+  "    probe.seen.push([String(host.counter), String(host.name), attempt(() => Math.random())].join(' '))",
+  '    host.counter = (host.counter ?? 0) + 1',
+  '    if (ctx.tick !== 1) return',
+  "    host.name = 'player'",
+  '    Math.random = () => 0.25',
+  '  },',
+  '})',
+  '',
+].join('\n')
+
+test("a page that runs ticks in one batch or in several gives sim's run of a game that makes a global, sets one the page has, and puts its own Math.random in place, and the page keeps its own", { skip: !chrome && 'needs Chrome' }, async () => {
+  const dir = mkdtempSync(join(TMP, 'keeper-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), KEEPER)
+  const expected = (await runGame(dir, { ticks: 3 })).snapshots[0].entities
+  assert.deepEqual(expected, [{ name: 'probe', seen: ['undefined undefined refused', '1 player 0.25', '2 player 0.25'] }])
+  const page = await buildPage({ dir, config: { mode: 'shot' } })
+  const server = await serve({ page })
+  const browser = await launch()
+  try {
+    for (const batches of [1, 3]) {
+      const tab = await browser.newPage()
+      await openPage(tab, server.url)
+      await tab.waitForFunction('window.engine !== undefined')
+      const actual = await tab.evaluate((batches: number) => {
+        window.engine.reset({ seed: 0 })
+        if (batches === 1) window.engine.advanceTo(3)
+        else for (let tick = 1; tick <= batches; tick++) window.engine.step()
+        return { state: window.engine.state(), name: [typeof Object.getOwnPropertyDescriptor(window, 'name')?.get, window.name] }
+      }, batches)
+      assert.deepEqual(actual, { state: expected, name: ['function', ''] }, `${batches} batches`)
+      await tab.close()
+    }
+  } finally {
+    await browser.close()
+    server.close()
+    await page.dispose()
+  }
+})
+
 // A 2x2 image: red and green on top, blue and white below.
 const QUAD_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwHwyBNBgAAEnICff5q7YNAAAAAElFTkSuQmCC'
 
