@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { after, test } from 'node:test'
 import { real, within } from '../src/confine.ts'
@@ -407,6 +408,16 @@ test("security follow-up: check reads only declaration files from ThreeJam's typ
   } finally {
     for (const file of planted) rmSync(file, { force: true })
   }
+})
+
+test("security follow-up: outside any project, where three doesn't resolve, a runtime import of three still points to the THREE a view receives", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'threejam-three-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), game(''))
+  writeFileSync(join(dir, 'view.ts'), "import { Mesh } from 'three'\nimport type { ViewSetup } from 'threejam'\n\nexport function init({ scene }: ViewSetup): void {\n  scene.add(new Mesh())\n}\n")
+  const checked = threejam(['check', dir])
+  assert.equal(checked.code, 1, checked.out)
+  assert.match(String(checked.json.message), /view\.ts:1: Could not resolve "three"; use the THREE that init and draw receive in view\.ts, and import type from 'three' for its types$/)
 })
 
 // The sandbox fixes the realm's globals before a game's module loads, and still keeps runs deterministic.

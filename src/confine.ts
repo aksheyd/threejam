@@ -86,8 +86,12 @@ function reason(path: string, target: string, role: Role): string {
         ? "a driver may import only its folder, the game's folder, and ThreeJam's files"
         : "ThreeJam's files import only each other and their dependencies"
   const where = target === path ? '' : `, which is ${target.replaceAll(sep, '/')}`
-  const three = role === 'game' && /^three(\/|$)/.test(path) ? "; use the THREE that init and draw receive in view.ts, and import type from 'three' for its types" : ''
-  return `can't bundle ${quote(path)}${where}: ${may}${three}`
+  return `can't bundle ${quote(path)}${where}: ${may}${threeHint(path, role)}`
+}
+
+// Said whether or not three resolves from the game's folder, since outside a project it usually doesn't.
+function threeHint(path: string, role: Role): string {
+  return role === 'game' && /^three(\/|$)/.test(path) ? "; use the THREE that init and draw receive in view.ts, and import type from 'three' for its types" : ''
 }
 
 // The esbuild plugin that enforces the rule on every import. Register it last, after any plugin that serves a virtual module (like the page's assets), and handle the entry point in the caller; this plugin maps the threejam package to the engine and confines everything else.
@@ -109,9 +113,9 @@ export function confinePlugin({ roots, seeds }: ConfineOptions): esbuild.Plugin 
         if (args.kind === 'entry-point') return undefined
         if (args.path === NAME) return { path: engineFile('index') }
         const found = await build.resolve(args.path, { kind: args.kind, importer: args.importer, namespace: args.namespace, resolveDir: args.resolveDir, pluginData: RESOLVING })
-        if (found.errors.length > 0) return { errors: found.errors }
-        const target = real(found.path)
         const role = importerRole(args.importer, roots)
+        if (found.errors.length > 0) return { errors: found.errors.map((error) => ({ ...error, text: `${error.text}${threeHint(args.path, role)}` })) }
+        const target = real(found.path)
         // Only the generated entry, which belongs to no folder, pulls in the game, view, and driver files directly.
         if (role === 'engine' && seedFiles.has(target)) return { path: found.path }
         if (found.namespace !== 'file' || found.external || !allows(role, target, roots)) return { errors: [{ text: reason(args.path, target, role) }] }
