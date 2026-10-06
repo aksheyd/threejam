@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, request, type IncomingHttpHeaders } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { exportGame } from '../src/export.ts'
@@ -350,7 +350,7 @@ test("shot's Chrome talks over a pipe, opens no DevTools port even when a wrappe
   }
 })
 
-test("run's window opens no DevTools port even when a wrapper script asks for one, and sees none of our environment but what it needs", wrapped, async () => {
+test("run's window opens no DevTools port even when a wrapper script asks for one, sees none of our environment but what it needs, and leaves nothing behind when it's stopped", wrapped, async () => {
   const dir = mkdtempSync(join(TMP, 'wrapper-'))
   made.push(dir)
   const port = await freePort()
@@ -381,10 +381,14 @@ test("run's window opens no DevTools port even when a wrapper script asks for on
         activePort: profile !== undefined && existsSync(join(profile, 'DevToolsActivePort')),
         wrapperProfile: existsSync(join(dir, 'profile')),
         canary: env.some((line) => line.startsWith('THREEJAM_CANARY=')),
-        temporaryInProfile: env.includes(`TMPDIR=${profile}`),
       },
-      { port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, canary: false, temporaryInProfile: true },
+      { port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, canary: false },
     )
+    assert.ok(profile)
+    // Esc stops the window with a signal, which leaves Chrome's socket and its folder for run to remove.
+    const socket = dirname(readlinkSync(join(profile, 'SingletonSocket')))
+    app.close()
+    await until("run to remove the window's profile and its socket's folder", () => !existsSync(profile) && !existsSync(socket))
   } finally {
     app?.close()
     await app?.exited

@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process'
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
-import { rm } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
@@ -341,15 +340,13 @@ export function openWindow(url: string): AppWindow | undefined {
   }
   const profile = mkdtempSync(join(tmpdir(), 'threejam-profile-'))
   const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628', NO_DEVTOOLS_PORT]
-  // A Chrome that's stopped, as Esc stops this one, leaves its sockets in its temporary folder, so that's in the profile, which goes when Chrome does.
-  const child = spawn(chrome, args, { stdio: 'ignore', env: { ...chromeEnv(), TMPDIR: profile, TMP: profile, TEMP: profile } })
+  const child = spawn(chrome, args, { stdio: 'ignore', env: chromeEnv() })
   const exited = new Promise<void>((done) => child.once('exit', () => done()))
   child.once('error', (error) => {
     process.stderr.write(`Couldn't start ${chrome} (${error.message}), so the default browser opens the game.\n`)
     openBrowser(url)
   })
-  // Chrome's helper processes can hold files in the profile for a moment after it exits, as on Windows.
-  child.once('close', () => void rm(profile, { recursive: true, force: true, maxRetries: 5 }).catch(() => {}))
+  child.once('close', () => removeProfile(profile))
   return { exited, close: () => void child.kill() }
 }
 
