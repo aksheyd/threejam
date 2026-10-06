@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, request, type IncomingHttpHeaders } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -241,6 +241,34 @@ test('when Chrome fails to start, shot closes its server and esbuild and removes
   const env = { ...process.env, CHROME_PATH: join(temp, 'no-chrome'), TMPDIR: temp, TEMP: temp, TMP: temp }
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: ROOT, env, encoding: 'utf8', timeout: 30_000 })
   assert.deepEqual({ status: result.status, named: result.stdout.includes('no-chrome'), left: readdirSync(temp) }, { status: 0, named: true, left: [] }, result.stderr)
+})
+
+const unreadable = { skip: (process.platform === 'win32' && "a file's mode doesn't stop Windows reading it") || (process.getuid?.() === 0 && 'root reads any file') }
+
+test("run answers an image it can't read with an error and goes on serving", unreadable, async (t) => {
+  const dir = folder({ 'game.ts': GAME, 'tile.png': PNG })
+  chmodSync(join(dir, 'tile.png'), 0)
+  const run = spawnCli(['run', dir, '--serve-only'], t.signal)
+  let out = ''
+  run.stdout.on('data', (chunk) => (out += chunk))
+  await until('run to serve the page', () => out.includes('\n'))
+  const url = out.slice(out.lastIndexOf(' ') + 1, -1)
+  const status = async (path: string) => (await call(new URL(path, url).href)).status
+  assert.deepEqual({ image: await status('/assets/tile.png'), page: await status('/') }, { image: 500, page: 200 })
+})
+
+test("a page that follows saves rebuilds once when an image stops being readable, not on each of esbuild's polls of it", unreadable, async () => {
+  const dir = folder({ 'game.ts': GAME, 'tile.png': PNG })
+  let rebuilds = 0
+  const page = await buildPage({ dir, config: { mode: 'run', seed: 0, token: 'session-token' }, onRebuild: () => (rebuilds += 1) })
+  try {
+    chmodSync(join(dir, 'tile.png'), 0)
+    await until('the page to rebuild', () => rebuilds > 0)
+    await new Promise((wait) => setTimeout(wait, 1000))
+    assert.equal(rebuilds, 1)
+  } finally {
+    await page.dispose()
+  }
 })
 
 test('run keeps its page in memory, so even killed while it serves, it leaves nothing in the temporary folder', async (t) => {

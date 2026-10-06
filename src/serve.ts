@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, rmdirSync } from 'node:fs'
+import { accessSync, constants, existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, rmdirSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
@@ -109,7 +109,8 @@ export function pageBuild({ files, driver, address }: { files: GameFiles; driver
           contents: `export default ${JSON.stringify(Object.fromEntries(names.map((name) => [name, address(name)])))}`,
           loader: 'js',
           watchDirs: [files.folder],
-          watchFiles: names.map((name) => join(files.folder, name)),
+          // esbuild rebuilds over and over while a file it watches can't be read, so one that can't be isn't watched.
+          watchFiles: names.map((name) => join(files.folder, name)).filter(readable),
         }
       })
     },
@@ -125,6 +126,15 @@ export function pageBuild({ files, driver, address }: { files: GameFiles; driver
     // The shared import rule claims every import the other plugins leave, so it comes last.
     plugins: [page, assets, confinePlugin({ roots, seeds })],
   } satisfies esbuild.BuildOptions
+}
+
+function readable(file: string): boolean {
+  try {
+    accessSync(file, constants.R_OK)
+    return true
+  } catch {
+    return false
+  }
 }
 
 // The globals game code finds in sim's realm, which a page keeps while it bares the rest: the language's, as this Node gives them to a realm of its own, and the guard's stand-ins.
@@ -219,14 +229,22 @@ export function serve({ page, token, onQuit = () => {} }: { page: Page; token?: 
     if (path.startsWith('/assets/')) {
       const name = decodedName(path.slice('/assets/'.length))
       const type = name === undefined ? undefined : mediaType(name)
-      if (name === undefined || type === undefined || !assetsIn(page.folder).includes(name)) {
+      let data: Buffer | undefined
+      try {
+        data = name !== undefined && type !== undefined && assetsIn(page.folder).includes(name) ? readFileSync(join(page.folder, name)) : undefined
+      } catch {
+        // A folder or file that can't be read, like an image without read permission, fails its own request rather than stopping run.
+        response.writeHead(500).end()
+        return
+      }
+      if (type === undefined || data === undefined) {
         response.writeHead(404).end()
         return
       }
       // An SVG can hold script, so opening one downloads it instead.
       const download = type === 'image/svg+xml' ? { 'content-disposition': 'attachment' } : {}
       response.writeHead(200, { ...HEADERS, 'content-type': type, 'content-security-policy': ASSET_POLICY, ...download })
-      response.end(readFileSync(join(page.folder, name)))
+      response.end(data)
       return
     }
     if (path === '/events') {
