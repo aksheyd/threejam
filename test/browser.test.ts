@@ -727,6 +727,47 @@ test("run serves the game at its seed, reloads the page at that seed when a save
   assert.deepEqual({ out, notice: await tab.$eval('pre', (box) => box.textContent) }, { out: `Playing ${shown} with seed 5 at ${url}\nStopped.\n`, notice: 'Session ended.' })
 })
 
+test("a played page that fails as it runs, or whose image won't load, stops and says why on the page, and in run what to fix", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const game = (update: string, rock = 'w: 1, h: 1') => `import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { rock: { ${rock} } }, update(world, ctx) { ${update} } })\n`
+  const stops = game("if (ctx.tick === 3) throw new Error('no tick 3')")
+  const draw = "import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick > 1) throw new Error('no frame today')\n}\n"
+  // The notice, and the tick 5 frames after it shows, by when a page that played on would be past the tick that failed.
+  const shown = async (tab: Page, url: string) => {
+    await openPage(tab, url)
+    await tab.waitForSelector('pre')
+    return tab.evaluate(async () => {
+      for (let frame = 0; frame < 5; frame++) await new Promise(requestAnimationFrame)
+      return [document.querySelector('pre')?.textContent, window.engine?.tick]
+    })
+  }
+  const token = 'session-token'
+  const cases: ReadonlyArray<readonly [Record<string, string | Buffer>, RegExp, number | null]> = [
+    [{ 'game.ts': stops }, /^no tick 3\n\nFix the game and save; the page reloads\.$/, 3],
+    [{ 'game.ts': game(''), 'view.ts': draw }, /^view\.ts: no frame today \(in draw at tick \d+\)\n\nFix the game and save; the page reloads\.$/, null],
+    [{ 'game.ts': game('', "w: 1, h: 1, image: 'rock.png'"), 'rock.png': 'not a png' }, /^the image rock\.png couldn't be loaded; check that the file is a whole image of its type\n\nFix the file and save; the page reloads\.$/, null],
+  ]
+  for (const [files, notice, tick] of cases) {
+    const dir = mkdtempSync(join(TMP, 'stops-'))
+    made.push(dir)
+    for (const [name, contents] of Object.entries(files)) writeFileSync(join(dir, name), contents)
+    const page = await buildPage({ dir, config: { mode: 'run', seed: 0, token } })
+    const server = await serve({ page, token })
+    try {
+      const [text, at] = await shown(await newTab(t), server.url)
+      assert.match(String(text), notice)
+      if (tick !== null) assert.equal(at, tick)
+    } finally {
+      server.close()
+      await page.dispose()
+    }
+  }
+  const dir = mkdtempSync(join(TMP, 'stops-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), stops)
+  await exportGame({ dir, out: join(dir, 'stops.html') })
+  assert.deepEqual(await shown(await newTab(t), pathToFileURL(join(dir, 'stops.html')).href), ['no tick 3', 3])
+})
+
 test("a run page whose game or view.ts fails as it loads says why on the page, instead of staying blank, and still reloads when a fix is saved", { skip: !chrome && 'needs Chrome' }, async (t) => {
   const game = "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n"
   const cases: ReadonlyArray<readonly [Record<string, string>, string]> = [
