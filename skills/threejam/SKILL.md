@@ -1,6 +1,6 @@
 ---
 name: threejam
-description: Builds, tests, and screenshots 2D games with ThreeJam, a TypeScript game engine on Three.js, through its `threejam` CLI or MCP tools. Use when the user asks to make, change, test, or debug a ThreeJam game, or when a folder has a game.ts that calls defineGame from 'threejam'.
+description: Builds 2D games with ThreeJam and proves what they do, with exact runs, state, and frames from its `threejam` CLI or MCP tools. Use when the user asks to make, change, test, or debug a ThreeJam game, or when a folder has a game.ts that calls defineGame from 'threejam'.
 license: MIT
 compatibility: Needs Node 22.18+ and ThreeJam from npm, installed in the project with npm install -D threejam, or run once without installing as npx threejam. shot needs Chrome or Chromium; check and sim run anywhere.
 ---

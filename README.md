@@ -2,7 +2,7 @@
 
 # ThreeJam
 
-*A game engine on Three.js for coding agents*
+*A 2D game engine on Three.js where your coding agent proves what its game does*
 
 [![npm](https://img.shields.io/npm/v/threejam?style=flat-square)](https://www.npmjs.com/package/threejam)
 [![Node.js 22.18 or later](https://img.shields.io/badge/Node.js-%3E%3D22.18-3c873a?style=flat-square)](https://nodejs.org)
@@ -19,7 +19,27 @@
 
 </div>
 
-ThreeJam is a 2D game engine on [Three.js](https://threejs.org) made for coding agents. A game is a folder with a `game.ts`: plain data for the entities and an `update` function. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run, and an agent can prove what a game does from exact numbers and frames instead of watching it. One set of command definitions gives you a CLI, MCP tools, agent skills, and an LLM manifest.
+ThreeJam is a 2D game engine on [Three.js](https://threejs.org) made for coding agents, built around one promise: the agent can prove what its game does. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run, in `sim` and in the browser. An agent checks its game from exact numbers and frames instead of watching a window:
+
+```console
+$ npx threejam sim games/catch --ticks 120 --press Space@1 --hold Right@2-40 --filter-output log
+log[1]{tick,text}:
+  98,"caught, score 1"
+cta:
+  description: "Suggested command:"
+  commands[1]{command,description}:
+    threejam shot games/catch --at 120 --press Space@1 --hold Right@2-40,See this tick as a PNG
+```
+
+The mistakes agents make most in games are stopped where they happen:
+
+- A made-up API, an undeclared field, or a wrong type fails `check` with its file and line.
+- An image or sound the folder lacks fails as soon as the game uses it, naming the file.
+- The engine owns the game loop, so there's none to wire up wrong.
+- In `check`, `sim`, and `shot`, code that never returns stops with `TIMEOUT`, saying where it was stuck.
+- Reading the clock or `Math.random` fails, and the machine's locale and time zone never reach game code, so they can't change a run.
+
+One set of command definitions gives you a CLI, MCP tools, agent skills, and an LLM manifest.
 
 > [!NOTE]
 > ThreeJam is a prototype. Entities can't be added during a run, though a group works as a pool of them; see the [full list](AGENTS.md#not-in-threejam-yet) of what's missing.

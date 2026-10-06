@@ -2,7 +2,7 @@
   "name": "threejam",
   "version": "0.0.4",
   "private": true,
-  "description": "A game engine on Three.js for coding agents: games in TypeScript, one API as code, a CLI, and MCP tools",
+  "description": "A 2D game engine on Three.js where coding agents prove what their games do: exact, repeatable runs, state from sim, frames from shot, as a CLI and MCP tools",
   "license": "MIT",
   "repository": {
     "type": "git",
