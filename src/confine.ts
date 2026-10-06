@@ -36,8 +36,9 @@ export function real(path: string): string {
   }
 }
 
-// Whether path is root or inside it. Both are real paths, so they compare exactly: folding case by hand could call two folders one, since lowercasing 'İ' adds a character, and path.relative folds case on Windows.
+// Whether path is root or inside it. Both are real paths, so they compare exactly: folding case by hand could call two folders one, since lowercasing 'İ' adds a character, and path.relative folds case on Windows. A path real() couldn't resolve may still hold a .., which can climb out of root, so it's never inside.
 export function within(root: string, path: string): boolean {
+  if (path.split(/[\\/]/).includes('..')) return false
   return path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`)
 }
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
 import { real, within } from '../src/confine.ts'
 import { PORTABLE } from '../src/math.ts'
@@ -418,6 +418,15 @@ test("security follow-up: outside any project, where three doesn't resolve, a ru
   const checked = threejam(['check', dir])
   assert.equal(checked.code, 1, checked.out)
   assert.match(String(checked.json.message), /view\.ts:1: Could not resolve "three"; use the THREE that init and draw receive in view\.ts, and import type from 'three' for its types$/)
+})
+
+test("security follow-up: a path that still holds a .. is never inside a folder, as when real() can't resolve it and hands it back", () => {
+  const root = real(mkdtempSync(join(TMP, 'dots-')))
+  made.push(root)
+  const climbing = [root, 'missing', '..', '..', 'outside', 'secret.ts'].join(sep)
+  assert.equal(real(climbing), climbing)
+  assert.equal(within(root, climbing), false)
+  assert.equal(within(root, [root, 'a..b', 'c.ts'].join(sep)), true)
 })
 
 // The sandbox fixes the realm's globals before a game's module loads, and still keeps runs deterministic.
