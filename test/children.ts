@@ -49,7 +49,7 @@ export function stopTree(child: ChildProcess): void {
 }
 
 // Whether the signal reached a process in the group, which none is left in once all have exited.
-function reached(group: number, signal: NodeJS.Signals | 0): boolean {
+export function reached(group: number, signal: NodeJS.Signals | 0): boolean {
   try {
     process.kill(group, signal)
     return true

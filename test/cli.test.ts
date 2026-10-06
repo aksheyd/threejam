@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
@@ -11,7 +11,7 @@ import { crashed, describe } from '../src/load.ts'
 import { ENGINE, ROOT, VERSION, mcpCommand } from '../src/package.ts'
 import { findChrome } from '../src/serve.ts'
 import { callLimit, framePaths } from '../src/shot.ts'
-import { CLI, spawnCli, stopTree } from './children.ts'
+import { CLI, reached, spawnCli, stopTree } from './children.ts'
 
 const TMP = join(ROOT, 'test', '.tmp')
 mkdirSync(TMP, { recursive: true })
@@ -432,8 +432,8 @@ function inGroup(group: number | undefined): number[] {
   })
 }
 
-async function until(what: string, check: () => boolean): Promise<void> {
-  for (const deadline = Date.now() + 10_000; !check(); await new Promise((wait) => setTimeout(wait, 50))) {
+async function until(what: string, check: () => boolean, ms = 10_000): Promise<void> {
+  for (const deadline = Date.now() + ms; !check(); await new Promise((wait) => setTimeout(wait, 50))) {
     if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}`)
   }
 }
@@ -539,6 +539,114 @@ test('a game in a folder outside the repo with no package.json, which TypeScript
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test("shot stopped by Ctrl-C, SIGTERM, or a closed terminal's two SIGHUPs removes what it and Chrome made, then ends by the signal, writing nothing", { skip: (!findChrome() && 'needs Chrome') || (process.platform === 'win32' && 'signals are for macOS and Linux'), timeout: 60_000 }, async (t) => {
+  // Drawing tick 2 never returns, so a shot that has saved tick 1 is still running, with Chrome long started.
+  const dir = folder({ 'game.ts': game({ update: '' }), 'view.ts': "import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick === 2) for (;;) {}\n}\n" })
+  const ends = await Promise.all((['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map(async (signal) => {
+    // The system's temporary folder, since one deep in a checkout can be too long for Chrome on Linux to start in.
+    const temp = mkdtempSync(join(tmpdir(), 'threejam-temp-'))
+    made.push(temp)
+    const shot = spawnCli(['shot', dir, '--at', '1,2', '--timeout', '30', '-o', join(dir, `${signal}.png`)], t.signal, ROOT, { ...process.env, TMPDIR: temp, TEMP: temp, TMP: temp })
+    let printed = ''
+    for (const output of [shot.stdout, shot.stderr]) output.on('data', (chunk) => (printed += chunk))
+    const ended = new Promise((done) => shot.once('exit', (code, name) => done(name ?? code)))
+    // Three shots start Chrome at once, which a slow machine can take a while over.
+    await until(`shot to save tick 1 before its ${signal}`, () => existsSync(join(ROOT, dir, `${signal}-001.png`)), 30_000)
+    if (shot.pid === undefined) throw new Error('shot has no process')
+    // kill sends SIGTERM to the process alone; a terminal sends Ctrl-C to its whole group, and as it closes, SIGHUP, after which writes fail.
+    if (signal === 'SIGTERM') shot.kill(signal)
+    else if (signal === 'SIGINT') process.kill(-shot.pid, signal)
+    else {
+      shot.stdout.destroy()
+      shot.stderr.destroy()
+      process.kill(-shot.pid, signal)
+      // The shell passes the terminal's SIGHUP on a moment later, as the shot cleans up, or once it has ended.
+      await new Promise((wait) => setTimeout(wait, 10))
+      reached(-shot.pid, signal)
+    }
+    return [signal, { ended: await ended, printed, left: readdirSync(temp) }]
+  }))
+  assert.deepEqual(Object.fromEntries(ends), {
+    SIGINT: { ended: 'SIGINT', printed: '', left: [] },
+    SIGTERM: { ended: 'SIGTERM', printed: '', left: [] },
+    SIGHUP: { ended: 'SIGHUP', printed: '', left: [] },
+  })
+})
+
+test('a shot stopped just as Chrome answers the call that starts it or the one that opens its tab, where Puppeteer would wait on the killed Chrome for good or for 30 s, still cleans up and ends by the signal', { skip: !findChrome() && 'needs Chrome', timeout: 60_000 }, async (t) => {
+  const dir = folder({ 'game.ts': game({ update: '' }) })
+  const ends = await Promise.all(['Target.setAutoAttach', 'Target.createTarget'].map(async (method) => {
+    const temp = mkdtempSync(join(tmpdir(), 'threejam-temp-'))
+    made.push(temp)
+    const stopped = join(ROOT, dir, `${method}.stopped`)
+    // Loaded before the CLI, it stops the shot as a SIGTERM does, right after Chrome answers method.
+    const stopper = join(ROOT, dir, `${method}.mjs`)
+    writeFileSync(stopper, [
+      "import { writeFileSync } from 'node:fs'",
+      "import { Connection } from 'puppeteer-core/internal/cdp/Connection.js'",
+      'const send = Connection.prototype.send',
+      'Connection.prototype.send = function (method, ...rest) {',
+      '  const reply = send.call(this, method, ...rest)',
+      `  if (method === ${JSON.stringify(method)}) reply.then(() => (writeFileSync(${JSON.stringify(stopped)}, ''), process.emit('SIGTERM', 'SIGTERM')), () => {})`,
+      '  return reply',
+      '}',
+      '',
+    ].join('\n'))
+    const env = { ...process.env, TMPDIR: temp, TEMP: temp, TMP: temp, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${pathToFileURL(stopper).href}` }
+    const shot = spawnCli(['shot', dir, '-o', join(dir, `${method}.png`)], t.signal, ROOT, env)
+    let printed = ''
+    for (const output of [shot.stdout, shot.stderr]) output.on('data', (chunk) => (printed += chunk))
+    const exited = new Promise((done) => shot.once('exit', (code, name) => done(name ?? code)))
+    await until(`shot to be stopped after ${method}`, () => existsSync(stopped), 30_000)
+    // Well past the most cleaning up takes, and short of the 30 s Puppeteer would wait for the tab.
+    const ended = await Promise.race([exited, new Promise((done) => setTimeout(() => done('still running 20 s after its SIGTERM'), 20_000).unref())])
+    // A Chrome killed as it starts can leave one of the temporary files it makes then, which on macOS and Linux stay in TMPDIR; on Windows, its helpers can hold a file in shot's profile a moment after it's killed, and shot leaves those for the OS.
+    const left = readdirSync(temp).filter((name) => !/^\.(com\.google\.Chrome|org\.chromium\.Chromium)\.\w{6}$/.test(name) && (process.platform !== 'win32' || !name.startsWith('threejam-chrome-')))
+    return [method, { ended, printed, left }]
+  }))
+  // Windows can't end a process by a signal, so there shot exits with 128 and the signal's number.
+  const ended = process.platform === 'win32' ? 143 : 'SIGTERM'
+  assert.deepEqual(Object.fromEntries(ends), {
+    'Target.setAutoAttach': { ended, printed: '', left: [] },
+    'Target.createTarget': { ended, printed: '', left: [] },
+  })
+})
+
+// Lines that run shots in a process of their own, whose output shows what happened.
+function isolated(lines: readonly string[]): { ended: number | string | null; printed: string } {
+  const script = [`import { interruptible } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'shot.ts')).href)}`, ...lines].join('\n')
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: ROOT, encoding: 'utf8', timeout: 10_000, killSignal: 'SIGKILL' })
+  return { ended: result.signal ?? result.status, printed: result.stdout + result.stderr }
+}
+
+// What Node does when SIGTERM arrives.
+const TERM = "process.emit('SIGTERM', 'SIGTERM')"
+
+// Windows can't end a process by a signal, so there shot exits with 128 and the signal's number.
+const TERMINATED = process.platform === 'win32' ? 143 : 'SIGTERM'
+
+test('a signal stops the running shots and any that start before they are done, ends the process once each has cleaned up, and no shot settles, so none answers the call it ran for', () => {
+  // A shot that starts after the signal has its killer aborted before its work begins.
+  const cleaning = (name: string, ms: number) => `(killer) => new Promise((done) => { const clean = () => setTimeout(() => done(console.log('${name} cleaned up')), ${ms}); if (killer.signal.aborted) clean(); else killer.signal.addEventListener('abort', clean) })`
+  const shot = (name: string, ms: number) => `void interruptible(${cleaning(name, ms)}).finally(() => console.log('${name} settled'))`
+  assert.deepEqual(isolated([shot('first', 50), shot('second', 300), TERM, shot('late', 100)]), { ended: TERMINATED, printed: 'first cleaned up\nlate cleaned up\nsecond cleaned up\n' })
+})
+
+test("a shot that a signal stops while it's stuck where killing Chrome doesn't reach holds the process no longer than its grace", () => {
+  assert.deepEqual(isolated(['void interruptible(() => new Promise(() => setInterval(() => {}, 1000)), 200).finally(() => console.log("settled"))', TERM]), { ended: TERMINATED, printed: '' })
+})
+
+test('a shot whose work throws before returning a promise fails with that error and stops catching signals', () => {
+  const lines = ["await interruptible(() => { throw new Error('thrown') }).catch((error) => console.log(error.message))", "console.log(['SIGINT', 'SIGTERM', 'SIGHUP'].map((signal) => process.listenerCount(signal)).join(' '))"]
+  assert.deepEqual(isolated(lines), { ended: 0, printed: 'thrown\n0 0 0\n' })
+})
+
+test('when something else in the process takes the signal a shot ends it by, the shots that start once the stopped ones are done run as usual', { skip: process.platform === 'win32' && 'on Windows shot exits, which nothing can take' }, () => {
+  const stopped = "void interruptible((killer) => new Promise((done) => killer.signal.addEventListener('abort', done))).finally(() => console.log('stopped settled'))"
+  const lines = ["process.on('SIGTERM', () => {})", stopped, TERM, 'await new Promise((done) => setTimeout(done, 100))', "console.log(await interruptible(async () => 'later ran'))"]
+  assert.deepEqual(isolated(lines), { ended: 0, printed: 'later ran\n' })
 })
 
 test('sim ends quietly when its reader closes the pipe', async (t) => {

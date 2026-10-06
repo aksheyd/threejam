@@ -496,11 +496,14 @@ function given(dir: string): { env: string[]; args: string[]; profile: string | 
 
 const wrapped = { skip: (!chrome && 'needs Chrome') || (process.platform === 'win32' && 'wrapper scripts are for macOS and Linux'), timeout: 60_000 }
 
-test("shot's Chrome talks over a pipe, opens no DevTools port even when a wrapper script asks for one, and sees none of our environment but what it needs", wrapped, async () => {
+test("shot's Chrome talks over a pipe, opens no DevTools port even when a wrapper script asks for one, sees none of our environment but what it needs, and leaves Ctrl-C, SIGTERM, and SIGHUP to shot", wrapped, async () => {
   const dir = mkdtempSync(join(TMP, 'wrapper-'))
   made.push(dir)
   const port = await freePort()
   process.env.THREEJAM_CANARY = 'secret'
+  // Puppeteer's own listeners would end the process on Ctrl-C before shot has cleaned up.
+  const listening = () => (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map((signal) => process.listenerCount(signal))
+  const before = listening()
   try {
     const { browser, close } = await testChrome(wrapper(dir, [`--remote-debugging-port=${port}`, `--user-data-dir=${join(dir, 'profile')}`]))
     try {
@@ -517,8 +520,9 @@ test("shot's Chrome talks over a pipe, opens no DevTools port even when a wrappe
           unsafeSwiftShader: args.includes('--enable-unsafe-swiftshader'),
           isolationOff: args.some((arg) => arg.startsWith('--disable-features=') && arg.split(/[=,]/).includes('IsolateSandboxedIframes')),
           canary: env.some((line) => line.startsWith('THREEJAM_CANARY=')),
+          listening: listening(),
         },
-        { endpoint: '', pipe: true, port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, unsafeSwiftShader: false, isolationOff: false, canary: false },
+        { endpoint: '', pipe: true, port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, unsafeSwiftShader: false, isolationOff: false, canary: false, listening: before },
       )
     } finally {
       await close()

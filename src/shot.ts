@@ -1,6 +1,8 @@
+import { ChildProcess } from 'node:child_process'
+import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 import { once } from 'node:events'
 import { accessSync, constants, mkdtempSync, statSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { constants as osConstants, tmpdir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
 import { finished } from 'node:stream/promises'
 import type { Browser, Page } from 'puppeteer-core'
@@ -70,24 +72,53 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
   const env = temp === undefined ? chromeEnv() : { ...chromeEnv(), TMPDIR: temp, TMP: temp, TEMP: temp }
   if (temp !== undefined) makeFolder(temp)
   const before = socketFolders(env.TMPDIR)
+  // Puppeteer hands back Chrome's process only once Chrome has answered it, so a launch cut short finds the process here, to wait for it.
+  const started: ChildProcess[] = []
+  const spot = (message: unknown) => {
+    if (typeof message === 'object' && message !== null && 'process' in message && message.process instanceof ChildProcess) started.push(message.process)
+  }
+  subscribe('child_process', spot)
   try {
-    return await puppeteer.launch({
+    return await unlessKilled(signal, puppeteer.launch({
       executablePath: chrome,
       pipe: true,
       env,
       protocolTimeout,
       signal,
+      // Puppeteer would answer Ctrl-C by killing Chrome and ending the process before shot removes what it made; a Chrome whose pipe closes quits by itself.
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
       ignoreDefaultArgs: true,
       // Software rendering repeats a frame byte for byte on one machine; on another it looks the same, though some pixels can be one shade off.
       args: [...defaults, ...switches, '--use-gl=angle', '--use-angle=swiftshader', '--remote-debugging-pipe', NO_DEVTOOLS_PORT],
-    })
+    }))
   } catch (error) {
+    if (signal?.aborted) {
+      const killed = started.find((child) => child.spawnargs.includes(`--user-data-dir=${profile}`))
+      if (killed !== undefined) await within(10_000, gone(killed))
+      throw new BrowserError(`Chrome at ${where} was stopped as it started`)
+    }
     // Over a pipe, a Chrome that exits as it starts only closes the connection, which Puppeteer reports with a TargetCloseError its types don't export.
     if (!(error instanceof Error && error.name === 'TargetCloseError')) throw new BrowserError(`Chrome at ${where} didn't start: ${firstLine(error)}; set CHROME_PATH to a working Chrome or Chromium`)
     const hint = tmpdirHint(env.TMPDIR)
     if (hint !== undefined) removeSocketFolders(env.TMPDIR, before)
     throw new BrowserError(`Chrome at ${where} didn't start: it exited as soon as it started${hint === undefined ? '; set CHROME_PATH to a working Chrome or Chromium' : `, ${hint}`}`)
+  } finally {
+    unsubscribe('child_process', spot)
   }
+}
+
+// Puppeteer can wait for good on a Chrome that's been killed, as it does when Chrome dies just after answering the call that starts it or the one that opens a tab, so work gives way once signal aborts.
+function unlessKilled<T>(signal: AbortSignal | undefined, work: Promise<T>): Promise<T> {
+  if (signal === undefined) return work
+  work.catch(() => {})
+  const killed = new Promise<never>((_, reject) => {
+    const fail = () => reject(new BrowserError('Chrome was killed'))
+    if (signal.aborted) fail()
+    else signal.addEventListener('abort', fail, { once: true })
+  })
+  return Promise.race([work, killed])
 }
 
 // On Windows, where Chrome keeps no socket in its temporary folder, one in its profile holds its temporary files, so those a killed Chrome leaves go with the profile.
@@ -95,7 +126,11 @@ function profileTemp(profile: string | undefined): string | undefined {
   return process.platform === 'win32' && profile !== undefined ? join(profile, 'temp') : undefined
 }
 
-export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, set, timeout: given }: ShotOptions): Promise<string[]> {
+export function shoot(options: ShotOptions): Promise<string[]> {
+  return interruptible((killer) => drawFrames(options, killer))
+}
+
+async function drawFrames({ dir, at, out, seed, press, hold, pointer, driver, set, timeout: given }: ShotOptions, killer: AbortController): Promise<string[]> {
   const timeout = timeLimit(given)
   const paths = framePaths(out, at)
   const chrome = findChrome()
@@ -104,7 +139,6 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
   let server: Server | undefined
   let browser: Browser | undefined
   let stuck = false
-  const killer = new AbortController()
   // A profile of shot's own, so that it and the socket it links to go after Chrome, however Chrome stopped.
   let profile: string | undefined
   try {
@@ -112,7 +146,7 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     server = await serve({ page })
     profile = mkdtempSync(join(tmpdir(), 'threejam-chrome-'))
     browser = await launchChrome(chrome, { profile, protocolTimeout: callLimit(timeout), signal: killer.signal })
-    const tab = await browser.newPage()
+    const tab = await unlessKilled(killer.signal, browser.newPage())
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const crashed = pageFailure(tab)
     // The game and its view.ts run as the page loads and in reset and advanceTo, which share one time limit; screenshots and saving them don't count.
@@ -157,7 +191,7 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     if (known || isSystemError(error)) throw error
     throw new BrowserError(`Chrome failed while drawing the game: ${firstLine(error)}`)
   } finally {
-    await closeChrome(browser, killer, { stuck })
+    await closeChrome(browser, killer, { stuck: stuck || killer.signal.aborted })
     server?.close()
     await page.dispose()
     if (profile !== undefined) removeProfile(profile)
@@ -174,11 +208,16 @@ export async function closeChrome(browser: Browser | undefined, killer: AbortCon
   const chrome = browser?.process()
   if (browser === undefined || !chrome) return
   const running = chrome.exitCode === null && chrome.signalCode === null
-  // On macOS and Linux every process Chrome starts shares its output, which ends once none is left to write to the profile, even after Chrome itself has crashed; on Windows its sandboxed helpers don't inherit it.
-  const gone = Promise.allSettled([running && once(chrome, 'exit'), ...[chrome.stdout, chrome.stderr].map((output) => output && finished(output))])
+  const ended = gone(chrome)
   // Aborting has Puppeteer kill Chrome's process group, or its process tree on Windows; on Linux that leaves only Chrome's crash handlers, which exit once Chrome is gone.
   if (running && (stuck || !(await within(wait, browser.close().catch(() => {}))))) killer.abort()
-  await within(10_000, gone)
+  await within(10_000, ended)
+}
+
+// Chrome's exit, and the end of its output: on macOS and Linux every process Chrome starts shares that output, which ends once none is left to write to the profile, even after Chrome itself has crashed; on Windows its sandboxed helpers don't inherit it.
+function gone(chrome: ChildProcess): Promise<unknown> {
+  const running = chrome.exitCode === null && chrome.signalCode === null
+  return Promise.allSettled([running && once(chrome, 'exit'), ...[chrome.stdout, chrome.stderr].map((output) => output && finished(output))])
 }
 
 // Whether work settled within ms milliseconds.
@@ -188,6 +227,54 @@ async function within(ms: number, work: Promise<unknown>): Promise<boolean> {
   const settled = await Promise.race([work.then(() => true), waited])
   clearTimeout(timer)
   return settled
+}
+
+// Ctrl-C, SIGTERM, and the SIGHUP of a closed terminal, which can come twice.
+const STOPS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
+
+// What stops each shot running in this process, and the first signal that stopped them, which also stops any shot that starts before the last of them is done.
+const shots = new Set<() => void>()
+let caught: NodeJS.Signals | undefined
+
+function stop(signal: NodeJS.Signals): void {
+  caught ??= signal
+  for (const halt of shots) halt()
+}
+
+// A signal kills each shot's Chrome through its killer, so the shot fails and cleans up as on any failure, for up to grace milliseconds; once the last of them is done, the process ends as the signal would have ended it, and none of them settles, so none can write a reply, which a closed terminal refuses anyway.
+export async function interruptible<T>(work: (killer: AbortController) => Promise<T>, grace = 15_000): Promise<T> {
+  const killer = new AbortController()
+  let halt = () => {}
+  const halted = new Promise<void>((done) => {
+    halt = () => {
+      killer.abort()
+      done()
+    }
+  })
+  if (shots.size === 0) for (const signal of STOPS) process.on(signal, stop)
+  shots.add(halt)
+  if (caught !== undefined) halt()
+  // A work that throws before it returns a promise fails as one that rejects does.
+  const outcome = new Promise<T>((done) => done(work(killer)))
+  const settled = outcome.then(() => {}, () => {})
+  await Promise.race([settled, halted])
+  // A shot stuck where the kill doesn't reach can't hold the process for longer than its grace.
+  if (caught !== undefined) await within(grace, settled)
+  shots.delete(halt)
+  if (shots.size === 0) for (const signal of STOPS) process.off(signal, stop)
+  if (caught === undefined) return outcome
+  if (shots.size === 0) {
+    const signal = caught
+    caught = undefined
+    endBy(signal)
+  }
+  return new Promise<never>(() => {})
+}
+
+// On Windows a process can't send itself SIGHUP, and SIGINT or SIGTERM end it with 1, so there it exits with the code a shell gives a process that the signal ended.
+function endBy(signal: NodeJS.Signals): void {
+  if (process.platform === 'win32') process.exit(128 + osConstants.signals[signal])
+  process.kill(process.pid, signal)
 }
 
 // Windows has no execute permission to check, so there any file passes.
