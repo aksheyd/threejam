@@ -12,13 +12,18 @@
   "homepage": "https://github.com/aksheyd/threejam",
   "bugs": "https://github.com/aksheyd/threejam/issues",
   "keywords": [
+    "2d-game-engine",
+    "agent-skills",
+    "ai-agents",
+    "cli",
+    "deterministic",
     "game-engine",
+    "game-testing",
+    "mcp",
     "threejs",
     "typescript",
-    "ai-agents",
-    "mcp",
-    "cli",
-    "deterministic"
+    "vibe-coding",
+    "webgl"
   ],
   "type": "module",
   "bin": {
