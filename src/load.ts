@@ -16,6 +16,13 @@ import type { LogEntry, Snapshot, SoundEntry } from './types.ts'
 // What a game's code may do in the child process that runs it: Node's permission model grants nothing, so it can't read or write files, start processes or workers, load addons, or, from Node 25, reach the network.
 export const SANDBOX_FLAGS = ['--permission', '--disallow-code-generation-from-strings', '--input-type=commonjs'] as const
 export const DEFAULT_TIMEOUT = 30
+// A day: Node's timers can't wait past about 24.8 days, and a longer one fires at once.
+export const MAX_TIMEOUT = 86_400
+
+export function timeLimit(seconds = DEFAULT_TIMEOUT): number {
+  if (!(seconds > 0 && seconds <= MAX_TIMEOUT)) throw new UsageError(`--timeout must be a number of seconds above 0, up to ${MAX_TIMEOUT}, got ${seconds}`)
+  return seconds
+}
 // The child stops a run at its time limit and reports where it was; this much later, the parent kills a child that didn't.
 const GRACE_MS = 10_000
 const MAX_REPLY_BYTES = 64 * 1024 * 1024
@@ -97,8 +104,7 @@ export interface Run {
 export async function runGame(dir: string, options: RunOptions): Promise<Run> {
   const files = gameFiles(dir)
   const driver = options.driver === undefined ? undefined : driverFile(options.driver)
-  const seconds = options.timeout ?? DEFAULT_TIMEOUT
-  if (!(seconds > 0 && Number.isFinite(seconds))) throw new UsageError(`--timeout must be a number of seconds above 0, got ${seconds}`)
+  const seconds = timeLimit(options.timeout)
   const { code, map } = await bundle(files, driver)
   const { ticks, press, hold, pointer, set, seed, every, until, only, clip } = options
   const request: Request = { ticks, press, hold, pointer, set, seed, every, until, only, clip, assets: files.assets, driver: options.driver }

@@ -153,12 +153,13 @@ test("incur's own refusals print one line with the code USAGE: a missing or frac
   }
 })
 
-test('a number on the command line is digits, so hex, exponents, and an empty string fail as USAGE, and the schema clients see has the real minimums', () => {
+test('a number on the command line is digits, so hex, exponents, and an empty string fail as USAGE, and the schema clients see has the real limits', () => {
   const refused = [
     [['sim', 'games/pong', '--ticks', '0x10'], '--ticks: expected a whole number from 0 up, got "0x10"'],
     [['sim', 'games/pong', '--ticks', ''], '--ticks: expected a whole number from 0 up, got ""'],
     [['sim', 'games/pong', '--ticks', '5', '--every', '0'], '--every: expected a whole number from 1 up, got 0'],
     [['sim', 'games/pong', '--ticks', '5', '--seed', '1e2'], '--seed: expected a whole number, got "1e2"'],
+    [['sim', 'games/pong', '--ticks', '5', '--timeout', '2500000'], '--timeout: expected a number of seconds above 0, up to 86400, got 2500000'],
     [['sim', 'games/pong', '--ticks', '5', '--press', 'Space@0x5'], '--press "Space@0x5": "0x5" should be a tick from 1 up'],
     [['shot', 'games/pong', '--at', ''], '--at "" should be whole ticks from 0 up, like 1,120,600'],
     [['sim', '', '--ticks', '5'], "<dir>: can't be empty"],
@@ -168,8 +169,8 @@ test('a number on the command line is digits, so hex, exponents, and an empty st
     assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'USAGE', message } })
   }
   const { options } = JSON.parse(threejam('sim', '--schema', '--format', 'json').out)
-  const { ticks, every, seed } = options.properties
-  assert.deepEqual([ticks.type, ticks.minimum, every.minimum, seed.type, options.required], ['integer', 0, 1, 'integer', ['ticks']])
+  const { ticks, every, seed, timeout } = options.properties
+  assert.deepEqual([ticks.type, ticks.minimum, every.minimum, seed.type, timeout.maximum, options.required], ['integer', 0, 1, 'integer', 86_400, ['ticks']])
 })
 
 test('shot and export check -o before they run the game or start Chrome, with one rule for one tick or many', () => {

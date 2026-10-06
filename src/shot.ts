@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, extname, join, sep } from 'node:path'
 import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
-import { DEFAULT_TIMEOUT, LimitError, gameFailure, isSystemError } from './load.ts'
+import { LimitError, gameFailure, isSystemError, timeLimit } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
 import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, serve, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
@@ -79,7 +79,8 @@ export async function launchChrome(chrome: string, { protocolTimeout, tmp }: { p
   }
 }
 
-export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, set, timeout = DEFAULT_TIMEOUT }: ShotOptions): Promise<string[]> {
+export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, set, timeout: given }: ShotOptions): Promise<string[]> {
+  const timeout = timeLimit(given)
   const paths = framePaths(out, at)
   const chrome = findChrome()
   if (!chrome) throw new BrowserError('shot needs Chrome or Chromium, or Edge on Windows; set CHROME_PATH to its executable')

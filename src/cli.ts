@@ -4,7 +4,7 @@ import { basename } from 'node:path'
 import { Cli, Errors, z } from 'incur'
 import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, show, type Code } from './errors.ts'
 import { exportGame, exportPath } from './export.ts'
-import { DEFAULT_TIMEOUT, LimitError, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
+import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
 import { createGame } from './new.ts'
 import { VERSION, mcpCommand } from './package.ts'
 import { bundlePage, play } from './serve.ts'
@@ -69,10 +69,10 @@ const inputs = {
   seed: integer().optional().describe('Random seed, a whole number; the same files, flags, and seed give the same run (default 0)'),
 }
 
-const seconds = expected('a number of seconds above 0')
-const timeout = digits(/^(\d+\.?\d*|\.\d+)$/, z.number({ error: seconds }).positive({ error: seconds }))
+const seconds = expected(`a number of seconds above 0, up to ${MAX_TIMEOUT}`)
+const timeout = digits(/^(\d+\.?\d*|\.\d+)$/, z.number({ error: seconds }).positive({ error: seconds }).max(MAX_TIMEOUT, { error: seconds }))
   .optional()
-  .describe(`Seconds the game's code may run before the command stops it and fails with TIMEOUT (default ${DEFAULT_TIMEOUT})`)
+  .describe(`Seconds the game's code may run before the command stops it and fails with TIMEOUT (default ${DEFAULT_TIMEOUT}, at most ${MAX_TIMEOUT})`)
 
 // Loading a game runs its code, and a driver's, so clients should treat these calls as running a program they didn't write.
 const runsGame = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
