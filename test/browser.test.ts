@@ -22,7 +22,7 @@ mkdirSync(TMP, { recursive: true })
 const made: string[] = []
 // The one Chrome the tests here share. The first page test starts it, since when a name pattern matches no test here, Node runs after without waiting for before.
 let shared: Promise<TestChrome> | undefined
-// shot's stuck pages, which use up their whole time limits, 17 s, so they run beside the other tests here rather than in shot.test.ts, which the runner starts last. They start once the first page test ends, so they don't compete with its start of the Chrome.
+// shot's stuck pages, which use up their whole time limits, 10 s, so they run beside the other tests here rather than in shot.test.ts, which the runner starts last. They start once the first page test ends, so they don't compete with its start of the Chrome.
 let stuck: Promise<string[]> | undefined
 after(async () => {
   await stuck?.catch(() => {})
@@ -827,12 +827,12 @@ async function stuckPages(): Promise<string[]> {
     // The page uses up the whole limit first, so a graceful close, which waits up to 10 s on a stuck page, can't finish under this on any machine.
     const took = Date.now() - started
     assert.ok(took < (timeout + 10) * 1000, `shot took ${took} ms with a page stuck ${when}`)
-    return `shot took ${took} ms with a page stuck ${when}, under a ${timeout} s limit`
+    return `shot took ${took} ms with a page stuck ${when}, against a time limit of ${timeout} s`
   }
   // The page never finishes loading, so the limit runs out as it loads however fast the machine is.
   const loading = await stuckAt('for (;;) {}\n', 2, 'as it loaded')
   // Loading and drawing tick 1 take well under this even on a slow machine, so the limit runs out at tick 2.
-  return [loading, await stuckAt("import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick === 2) for (;;) {}\n}\n", 15, 'drawing tick 2')]
+  return [loading, await stuckAt("import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick === 2) for (;;) {}\n}\n", 8, 'drawing tick 2')]
 }
 
 // The stuck pages run beside the page tests before this one, so its own duration leaves their time out, and it reports it instead.
