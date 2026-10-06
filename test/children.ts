@@ -12,15 +12,29 @@ export function spawnCli(args: readonly string[], signal: AbortSignal, cwd = ROO
   return child
 }
 
+// On macOS and Linux, SIGTERM lets run remove its page as it stops, and SIGKILL 2 s later ends any process that didn't.
 export function stopTree(child: ChildProcess): void {
   if (child.pid === undefined) return
   if (process.platform === 'win32') {
     if (child.exitCode === null && child.signalCode === null) spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
     return
   }
+  const group = -child.pid
+  if (!reached(group, 'SIGTERM')) return
+  const deadline = Date.now() + 2000
+  const waiting = setInterval(() => {
+    if (reached(group, 0) && Date.now() < deadline) return
+    reached(group, 'SIGKILL')
+    clearInterval(waiting)
+  }, 50)
+}
+
+// Whether the signal reached a process in the group, which none is left in once all have exited.
+function reached(group: number, signal: NodeJS.Signals | 0): boolean {
   try {
-    process.kill(-child.pid, 'SIGKILL')
+    process.kill(group, signal)
+    return true
   } catch {
-    // Every process in the group has exited already.
+    return false
   }
 }
