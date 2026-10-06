@@ -34,7 +34,9 @@ try {
   same(readFileSync(join(project, 'node_modules', 'esbuild', 'bin', 'esbuild'), 'latin1').startsWith('#!'), true)
   const manual = readFileSync(join(project, PACKAGE, 'AGENTS.md'), 'utf8')
   same([manual.includes('\n## Known problems\n'), manual.includes('\n## Working on ThreeJam\n')], [true, false])
-  done('installed it in a project with install scripts off, with the manual but not its section for contributors')
+  const skill = join('skills', 'threejam', 'SKILL.md')
+  same(readFileSync(join(project, PACKAGE, skill), 'utf8') === readFileSync(join(ROOT, skill), 'utf8'), true)
+  done('installed it in a project with install scripts off, with the manual but not its section for contributors, and the skill')
   same(threejam(project, ['new', 'catch']).files, ['game.ts', 'game.test.ts'])
   same(threejam(project, ['check', 'catch']), { ok: true, entities: 6 })
   const input = ['--press', 'Space@1', '--hold', 'Right@2-40']

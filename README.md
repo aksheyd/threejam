@@ -61,10 +61,12 @@ Install ThreeJam in your project, and give your coding agent the skill that teac
 
 ```bash
 npm install -D threejam
-npx skills add aksheyd/threejam
+npx skills add https://github.com/aksheyd/threejam/tree/v0.0.4/skills/threejam
 ```
 
 Then ask your agent for a game. Starting from an empty folder instead? `npx threejam new my-game` writes a project of its own; see [getting started](docs/getting-started.md).
+
+A skill installed from a tag stays on that version, so after you upgrade ThreeJam, run `npx skills add` again with the new tag.
 
 ## Docs
 

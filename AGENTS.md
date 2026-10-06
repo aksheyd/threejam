@@ -2,7 +2,7 @@
 
 ThreeJam is a game engine on Three.js for coding agents. A game is a folder with a `game.ts`: plain data for the entities and an `update` function, next to any images and sounds it uses. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run. The same commands work as a CLI, as MCP tools, and as generated agent skills.
 
-It's a prototype, published on npm as `threejam`, and this manual ships inside the package as `node_modules/threejam/AGENTS.md`.
+It's a prototype, published on npm as `threejam`, and this manual ships inside the package as `node_modules/threejam/AGENTS.md`, next to the agent skill, `node_modules/threejam/skills/threejam/SKILL.md`.
 
 ## Commands
 

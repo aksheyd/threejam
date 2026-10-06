@@ -4,12 +4,14 @@ ThreeJam is built for agents that can't watch a screen: they start a game with `
 
 ## The skill
 
-The hand-written [ThreeJam skill](../skills/threejam/SKILL.md) teaches that loop step by step. Install it with the [skills CLI](https://github.com/vercel-labs/skills) or the [GitHub CLI](https://cli.github.com):
+The hand-written [ThreeJam skill](../skills/threejam/SKILL.md) teaches that loop step by step. Install it with the [skills CLI](https://github.com/vercel-labs/skills) or the [GitHub CLI](https://cli.github.com), which both take it from the latest release, the version `npm install -D threejam` installs:
 
 ```bash
-npx skills add aksheyd/threejam
+npx skills add https://github.com/aksheyd/threejam/tree/v0.0.4/skills/threejam
 gh skill install aksheyd/threejam threejam
 ```
+
+A skill installed from a tag stays on that version, so after you upgrade ThreeJam, run `npx skills add` again with the new tag. Releases after 0.0.4 also ship the skill, as `node_modules/threejam/skills/threejam/SKILL.md`, so a project with one of them installed can take the matching copy with `npx skills add ./node_modules/threejam/skills/threejam`.
 
 ## MCP tools and other forms
 

@@ -1,6 +1,6 @@
-// Builds the published package in dist: the engine compiled to JavaScript with declarations in lib, a package.json that points at them, and the docs.
+// Builds the published package in dist: the engine compiled to JavaScript with declarations in lib, a package.json that points at them, the docs, and the skill.
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -56,13 +56,15 @@ const manifest = {
   type: 'module',
   bin: { threejam: 'lib/cli.js' },
   exports: { '.': { types: './lib/index.d.ts', default: './lib/index.js' } },
-  files: ['lib', 'AGENTS.md'],
+  files: ['lib', 'AGENTS.md', 'skills'],
   engines: root.engines,
   dependencies: root.dependencies,
 }
 writeFileSync(join(DIST, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 copyFileSync(join(ROOT, 'LICENSE'), join(DIST, 'LICENSE'))
 writeFileSync(join(DIST, 'AGENTS.md'), withoutSection(readFileSync(join(ROOT, 'AGENTS.md'), 'utf8'), 'Working on ThreeJam'))
+// In skills/, where the skills CLI looks inside node_modules, so a project can install the skill that matches its version.
+cpSync(join(ROOT, 'skills'), join(DIST, 'skills'), { recursive: true })
 writeFileSync(join(DIST, 'README.md'), absoluteLinks(readFileSync(join(ROOT, 'README.md'), 'utf8')))
 console.log(`Built ${root.name}@${root.version} in ${relative(process.cwd(), DIST).replaceAll(sep, '/') || '.'}; publish it with npm publish ./dist`)
 
