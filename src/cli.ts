@@ -34,7 +34,7 @@ function whole(min: number) {
   return digits(/^\d+$/, z.number({ error }).int({ error }).min(min, { error }))
 }
 
-function seed() {
+function integer() {
   const error = expected('a whole number')
   return digits(/^-?\d+$/, z.number({ error }).int({ error }))
 }
@@ -66,7 +66,7 @@ const inputs = {
     .array(z.string())
     .optional()
     .describe('Change a starting value before start runs, like paddle.w=1, bricks[*].points=5, or pipes[*].parts.top.h=2; repeatable'),
-  seed: seed().optional().describe('Random seed, a whole number; the same files, flags, and seed give the same run (default 0)'),
+  seed: integer().optional().describe('Random seed, a whole number; the same files, flags, and seed give the same run (default 0)'),
 }
 
 const seconds = expected('a number of seconds above 0')
@@ -330,7 +330,7 @@ const cli = Cli.create('threejam', {
     description: 'Play a game in a browser window; Esc quits and saving a file reloads it. For people, not agents',
     args,
     options: z.object({
-      seed: seed().optional().describe('Random seed, a whole number; without one, run picks one and prints it, and reloads replay it'),
+      seed: integer().optional().describe('Random seed, a whole number; without one, run picks one and prints it, and reloads replay it'),
       serveOnly: z.boolean().optional().describe('Serve the page and print its address without opening a window'),
     }),
     mcp: false,
@@ -351,7 +351,7 @@ const cli = Cli.create('threejam', {
     args,
     options: z.object({
       out: z.string().optional().describe(`HTML path, ${PATHS} (default: the game folder's name, like pong.html)`),
-      seed: seed().optional().describe('Random seed, a whole number; without one, the page picks a new one each time it loads'),
+      seed: integer().optional().describe('Random seed, a whole number; without one, the page picks a new one each time it loads'),
       timeout,
     }),
     alias: { out: 'o' },
