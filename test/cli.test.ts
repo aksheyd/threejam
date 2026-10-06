@@ -10,7 +10,7 @@ import { simulate } from '../src/engine.ts'
 import { crashed, describe } from '../src/load.ts'
 import { ENGINE, ROOT, VERSION, mcpCommand } from '../src/package.ts'
 import { findChrome } from '../src/serve.ts'
-import { framePaths } from '../src/shot.ts'
+import { callLimit, framePaths } from '../src/shot.ts'
 
 const CLI = join(ROOT, 'src', 'cli.ts')
 const TMP = join(ROOT, 'test', '.tmp')
@@ -183,6 +183,10 @@ test('shot and export check -o before they run the game or start Chrome, with on
   }
   const exported = threejam('export', broken, '-o', 'page.txt', '--format', 'json')
   assert.deepEqual({ code: exported.code, failure: JSON.parse(exported.out) }, { code: 1, failure: { code: 'USAGE', message: '-o "page.txt" should be an .html file, like pong.html' } })
+})
+
+test("shot lets each call into Chrome run past Puppeteer's 180 s when --timeout gives its page longer, and keeps 180 s as the least", () => {
+  assert.deepEqual([callLimit(2), callLimit(30), callLimit(300), callLimit(86_400)], [180_000, 180_000, 330_000, 86_430_000])
 })
 
 test('several frames keep the .png of -o after their numbers, in its case, even when -o is only .png', () => {

@@ -97,7 +97,7 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     const { PuppeteerError } = await import('puppeteer-core')
     server = await serve({ page })
     tmp = mkdtempSync(join(tmpdir(), 'threejam-chrome-'))
-    browser = await launchChrome(chrome, { tmp })
+    browser = await launchChrome(chrome, { tmp, protocolTimeout: callLimit(timeout) })
     const tab = await browser.newPage()
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const crashed = pageFailure(tab)
@@ -152,6 +152,11 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
       // A file that Chrome's helpers still hold, as Windows can keep one a moment, is left for the OS rather than failing the shot.
     }
   }
+}
+
+// Puppeteer ends any one call into Chrome after 180 s unless told otherwise, which would cut short a page step that a longer --timeout allows.
+export function callLimit(seconds: number): number {
+  return Math.max(180_000, (seconds + 30) * 1000)
 }
 
 // Chrome can't close a tab whose page is stuck in the game's loop, so then, or when closing takes too long, it's killed instead.
