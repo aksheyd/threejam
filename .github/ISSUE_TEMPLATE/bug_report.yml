@@ -1,0 +1,63 @@
+name: Bug report
+description: ThreeJam does something it shouldn't, or something the docs say it does doesn't happen
+labels: [bug]
+body:
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: The command you ran and everything it printed, including the code and the message. Paths in messages can show your folders, so trim what you'd rather not share.
+      placeholder: |
+        $ npx threejam sim games/catch --ticks 120 --press Space@1
+        code: GAME_ERROR
+        message: ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: game
+    attributes:
+      label: A game that shows it
+      description: The smallest game.ts that does it, or the example game and the flags.
+      render: ts
+  - type: dropdown
+    id: through
+    attributes:
+      label: Where you ran it
+      options:
+        - The command line
+        - MCP tools
+        - simulate or Session in a test
+        - A page from run or export
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ThreeJam version
+      description: What `npx threejam --version` prints.
+      placeholder: 0.0.4
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: What `node --version` prints.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS
+        - Linux
+        - Windows
+    validations:
+      required: true

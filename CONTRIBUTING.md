@@ -27,7 +27,7 @@ In a clone, `npx threejam` runs the TypeScript sources directly, with nothing to
 - `scripts/build.ts` and `tsconfig.build.json`: the build of the published package into `dist`, with its own `package.json`, the declarations its entry point needs, a copy of the README whose links point at GitHub, and `AGENTS.md` without its last section, the one that points here. It fails unless each runtime dependency names the exact version `package-lock.json` installs, since users install them without the lockfile, and `.npmrc` makes `npm install` save versions that way. `scripts/verify-package.ts`: `npm run test:package`, which builds and packs the package, installs the tarball in a project in a temporary folder with install scripts off, as npm 12 has them, and runs `new`, `check`, `sim`, `shot`, `export`, `run`, and the new game's test there, then runs ThreeJam through npx with nothing installed. It isn't part of `npm test`.
 - `AGENTS.md`: the manual for making games, which agents read here and in the package. `skills/threejam/SKILL.md`: the agent skill, which the package ships too, and which the docs' `npx skills add` installs from the latest release's tag.
 - `README.md` and `docs/`: the README is the pitch and a quick start, and the guides it links to are in `docs/`, next to the README's screenshots in `docs/images`. `CHANGELOG.md`: what changed in each release.
-- `.github/workflows/ci.yml`: CI for pushes to main, pull requests, and each release. It runs the typecheck, `npm test`, and `check` on every game with Node 26 on Linux, macOS, and Windows, and with Node 22.18 and 24 on Linux, and `npm run test:package` with all three on Linux. `.github/workflows/release.yml`: publishing to npm when a version tag is pushed.
+- `.github/workflows/ci.yml`: CI for pushes to main, pull requests, and each release. It runs the typecheck, `npm test`, and `check` on every game with Node 26 on Linux, macOS, and Windows, and with Node 22.18 and 24 on Linux, and `npm run test:package` with all three on Linux. `.github/workflows/release.yml`: publishing to npm when a version tag is pushed. `.github/ISSUE_TEMPLATE/` and `.github/pull_request_template.md`: the forms for bug reports and feature requests, and what a pull request's description starts with.
 
 ## Checks
 
@@ -55,9 +55,9 @@ npm run test:package    # build, pack, install, and use the package; needs Chrom
 - Don't leave a `run` window open: start `run --serve-only` in the background, check it, and stop it.
 - Commit messages are Conventional Commits, with a scope where one fits, in the imperative and lowercase after the colon, and with `!` for a breaking change, like `fix(shot): retry a page navigation Chrome aborts in a new tab`.
 
-## Pull requests
+## Issues and pull requests
 
-Open them against `main`, one change to a pull request. CI runs the checks above on every pull request, on Linux, macOS, and Windows.
+Report a bug or ask for a feature through the [issue forms](https://github.com/aksheyd/threejam/issues/new/choose). Open pull requests against `main`, one change to a pull request: the [template](.github/pull_request_template.md) lists the checks above, and CI runs them on Linux, macOS, and Windows.
 
 ## Releasing
 

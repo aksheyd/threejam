@@ -1,0 +1,16 @@
+name: Feature request
+description: Something you'd like ThreeJam to do that it doesn't yet
+labels: [enhancement]
+body:
+  - type: textarea
+    id: making
+    attributes:
+      label: What you're making
+      description: The game, or the part of one, and what stops you. "Not in ThreeJam yet" in AGENTS.md lists what's known to be missing.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: The field, function, flag, or behavior you have in mind, if you have one.
