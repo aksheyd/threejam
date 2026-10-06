@@ -316,6 +316,26 @@ test('audit 15: repeated loads leave no growing temp files', () => {
   assert.deepEqual(readdirSync(tmp), [], `loads left temp files: ${readdirSync(tmp).join(', ')}`)
 })
 
+test("audit 3: sim gives one run whatever the machine's language and time zone, formatting as en-US does and dates in UTC", () => {
+  const update = [
+    'const day = new Date(Date.UTC(2024, 0, 31, 23, 30))',
+    "world.ball.texts = [(1234567.5).toLocaleString(), day.toLocaleString(), new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(day), ['b', 'a', 'C', 'ä'].sort((a, b) => a.localeCompare(b)).join(''), 'i'.toLocaleUpperCase()]",
+  ].join('\n    ')
+  const { dir } = folder({ 'game.ts': game('', "x: 0, w: 0.1, texts: ['']").replace('world.ball.x += 0.01', update) })
+  const settings = [
+    { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', TZ: 'UTC' },
+    { LANG: 'fr_FR.UTF-8', LC_ALL: 'fr_FR.UTF-8', TZ: 'Europe/Paris' },
+    { LANG: 'hi_IN.UTF-8', LC_ALL: 'hi_IN.UTF-8', TZ: 'Asia/Kolkata' },
+    { LANG: 'tr_TR.UTF-8', LC_ALL: 'tr_TR.UTF-8', TZ: 'America/Los_Angeles' },
+  ]
+  const expected = [{ name: 'ball', texts: ['1,234,567.5', '1/31/2024, 11:30:00 PM', 'Wednesday, January 31, 2024', 'aäbC', 'I'] }]
+  for (const env of settings) {
+    const run = threejam(['sim', dir, '--ticks', '1', '--fields', 'texts'], env)
+    assert.equal(run.code, 0, run.out)
+    assert.deepEqual(run.json.entities, expected, env.LANG)
+  }
+})
+
 test("audit 4: what a game's top level keeps from Math, Date, or a driver's factory is guarded in sim, while top-level code itself computes with the platform's Math", () => {
   const kept = folder({
     'game.ts': game('const { sin } = Math\nconst TOP = Math.sin(1e22)', 'x: 0, w: 0.1, kept: 0, inline: 0, top: 0').replace(

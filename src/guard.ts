@@ -1,11 +1,28 @@
-import { GameError } from './errors.ts'
+import { GameError, quote } from './errors.ts'
 import { PORTABLE } from './math.ts'
 
 const CLOCK = 'count ticks with ctx.tick, since game time only moves in ticks'
 const SEEDED = 'use ctx.random(), which is seeded'
 const COLLECTED = 'keep what the game needs on its entities, since garbage collection runs at different times'
+const ZONE = "it reads the machine's time zone"
+// Game code formats and compares text as en-US does, and dates in UTC, unless it names a locale or a time zone itself.
+const LOCALE = 'en-US'
+const UTC = 'UTC'
 const TIMERS = ['setTimeout', 'setInterval', 'queueMicrotask', 'requestAnimationFrame'] as const
 const MATH = Object.entries(PORTABLE)
+const INTL = ['Collator', 'DateTimeFormat', 'DisplayNames', 'DurationFormat', 'ListFormat', 'NumberFormat', 'PluralRules', 'RelativeTimeFormat', 'Segmenter'] as const
+const PARTS = ['Date', 'Day', 'FullYear', 'Hours', 'Milliseconds', 'Minutes', 'Month', 'Seconds'] as const
+// The Date methods that read or write the local time, each with what to use instead.
+const LOCAL_TIME: ReadonlyArray<readonly [string, string]> = [
+  ...PARTS.map((part) => [`get${part}`, `getUTC${part}()`] as const),
+  ...PARTS.filter((part) => part !== 'Day').map((part) => [`set${part}`, `setUTC${part}()`] as const),
+  ['getYear', 'getUTCFullYear()'],
+  ['setYear', 'setUTCFullYear()'],
+  ['getTimezoneOffset', "0, UTC's offset"],
+  ...['toString', 'toDateString', 'toTimeString'].map((name) => [name, 'toISOString() or toUTCString()'] as const),
+]
+// The date strings every engine reads alike: ISO 8601, with a Z or an offset when there's a time.
+const ISO_DATE = /^(?:[+-]\d{6}|\d{4})(?:-\d{2}(?:-\d{2})?)?(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{3})?)?(?:Z|[+-]\d{2}:\d{2}))?$/
 
 function refuse(name: string, instead: string): never {
   throw new GameError(`${name} would make runs differ; ${instead}`)
@@ -47,7 +64,7 @@ type Window = 'load' | 'run'
 let running = 0
 let plans: Readonly<Record<Window, readonly Swap[]>> | undefined
 
-// Swaps the clock, unseeded randomness, timers, and garbage collection for errors, and Math's functions for portable ones, while fn runs; it keeps runs repeatable, not code contained.
+// Swaps the clock, unseeded randomness, timers, garbage collection, the locale, and the time zone for errors or fixed values, and Math's functions for portable ones, while fn runs; it keeps runs repeatable, not code contained.
 export function guarded<T>(fn: () => T): T {
   const lower = raise('run')
   running += 1
@@ -102,7 +119,7 @@ function raise(window: Window): () => void {
 // Made once, from the platform's own objects, so every window puts the same stand-ins in place.
 function plan(): Record<Window, Swap[]> {
   const swap = (change: Change): Swap => ({ ...change, plain: Object.getOwnPropertyDescriptor(change.owner, change.key)?.writable === true })
-  const shared = [{ owner: Math, key: 'random', value: blocked('Math.random()', SEEDED) }, ...globals()].map(swap)
+  const shared = [{ owner: Math, key: 'random', value: blocked('Math.random()', SEEDED) }, ...globals(), ...localeMethods()].map(swap)
   return {
     run: [...MATH.map(([key, portable]) => swap({ owner: Math, key, value: portable })), ...shared],
     load: [...MATH.map(([key, portable]) => swap({ owner: Math, key, value: deferred(Reflect.get(Math, key), portable) })), ...shared],
@@ -129,31 +146,85 @@ function globals(): Change[] {
   return swaps
 }
 
-// Date in game code has no clock.
+// The locale methods of primitives, which game code can't reach through a guarded global, and Temporal's.
+function localeMethods(): Change[] {
+  const swaps: Change[] = []
+  const pin = (owner: unknown, key: string, make: (native: Function) => Function) => {
+    const native: unknown = isObject(owner) ? Reflect.get(owner, key) : undefined
+    if (isObject(owner) && typeof native === 'function') swaps.push({ owner, key, value: make(native) })
+  }
+  pin(Number.prototype, 'toLocaleString', (native) => inLocale(native, false))
+  pin(BigInt.prototype, 'toLocaleString', (native) => inLocale(native, false))
+  pin(String.prototype, 'localeCompare', compared)
+  pin(String.prototype, 'toLocaleLowerCase', (native) => inLocale(native, false))
+  pin(String.prototype, 'toLocaleUpperCase', (native) => inLocale(native, false))
+  const temporal: unknown = Reflect.get(globalThis, 'Temporal')
+  if (!isObject(temporal)) return swaps
+  for (const name of Object.getOwnPropertyNames(temporal)) {
+    const type: unknown = Reflect.get(temporal, name)
+    // An Instant is formatted in a time zone, while a ZonedDateTime has its own and the plain types have none.
+    if (typeof type === 'function') pin(Reflect.get(type, 'prototype'), 'toLocaleString', (native) => inLocale(native, name === 'Instant'))
+  }
+  return swaps
+}
+
+// Date in game code: no clock, and no time zone. Dates it makes have their own prototype, so their local-time methods fail without the guard touching Date.prototype on every tick.
 function guardedDate(native: DateConstructor): DateConstructor {
+  const methods: PropertyDescriptorMap = {}
+  for (const [key, instead] of LOCAL_TIME) {
+    if (typeof Reflect.get(native.prototype, key) === 'function') methods[key] = { value: blocked(`date.${key}()`, `${ZONE}, so use ${instead}`), writable: true, configurable: true }
+  }
+  for (const key of ['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString']) {
+    const method: unknown = Reflect.get(native.prototype, key)
+    if (typeof method === 'function') methods[key] = { value: inLocale(method, true), writable: true, configurable: true }
+  }
+  const prototype: object = Object.create(native.prototype, methods)
+  function Made() {}
+  Made.prototype = prototype
   const now = blocked('Date.now()', CLOCK)
+  const parse = (text: unknown) => {
+    checkDate(text, 'Date.parse')
+    return Reflect.apply(native.parse, native, [text])
+  }
   const date: DateConstructor = new Proxy(native, {
     apply: blocked('Date()', CLOCK),
     construct(target, args, newTarget) {
       if (args.length === 0) refuse('new Date()', CLOCK)
-      return Reflect.construct(target, args, newTarget === date ? target : newTarget)
+      if (args.length > 1) refuse('new Date(year, month, ...)', `${ZONE}, so use new Date(Date.UTC(year, month, ...))`)
+      checkDate(args[0], 'new Date')
+      return Reflect.construct(target, args, newTarget === date ? Made : newTarget)
     },
     get(target, key) {
-      return key === 'now' ? now : Reflect.get(target, key)
+      return key === 'now' ? now : key === 'parse' ? parse : Reflect.get(target, key)
     },
   })
+  Object.defineProperty(prototype, 'constructor', { value: date, writable: true, configurable: true })
   return date
 }
 
-// Intl in game code has no clock either.
+function checkDate(value: unknown, call: string): void {
+  if (typeof value === 'string' && !ISO_DATE.test(value)) {
+    refuse(`${call}(${quote(value)})`, 'write dates as ISO 8601 with a Z or an offset, like "2024-01-31T12:00:00Z", since other strings depend on the time zone or the browser')
+  }
+}
+
 function guardedIntl(intl: object): object {
-  const native: unknown = Reflect.get(intl, 'DateTimeFormat')
-  if (typeof native !== 'function') return intl
+  const pinned: PropertyDescriptorMap = {}
+  for (const name of INTL) {
+    const native: unknown = Reflect.get(intl, name)
+    if (typeof native === 'function') pinned[name] = { value: inLocaleFormat(native, name === 'DateTimeFormat'), writable: true, configurable: true }
+  }
+  return Object.create(intl, pinned)
+}
+
+function inLocaleFormat(native: Function, dates: boolean): Function {
+  const args = (given: unknown[]) => [given[0] === undefined ? LOCALE : given[0], dates ? zoned(given[1]) : given[1], ...given.slice(2)]
+  const made = <T>(value: T): T => (dates ? clocked(value) : value)
   const format: Function = new Proxy(native, {
-    construct: (target, given, newTarget) => clocked(Reflect.construct(target, given, newTarget === format ? target : newTarget)),
-    apply: (target, self, given) => clocked(Reflect.apply(target, self, given)),
+    construct: (target, given, newTarget) => made(Reflect.construct(target, args(given), newTarget === format ? target : newTarget)),
+    apply: (target, self, given) => made(Reflect.apply(target, self, args(given))),
   })
-  return Object.create(intl, { DateTimeFormat: { value: format, writable: true, configurable: true } })
+  return format
 }
 
 // A DateTimeFormat reads the clock when it formats no date, so the ones game code makes refuse to.
@@ -176,6 +247,24 @@ function guardedTemporal(temporal: object): object {
     if (typeof Reflect.get(now, key) === 'function') stopped[key] = { value: blocked(`Temporal.Now.${key}()`, CLOCK), writable: true, configurable: true }
   }
   return Object.create(temporal, { Now: { value: Object.create(now, stopped), writable: true, configurable: true } })
+}
+
+function inLocale(native: Function, zone: boolean): Function {
+  return function (this: unknown, locales?: unknown, options?: unknown): unknown {
+    return Reflect.apply(native, this, [locales === undefined ? LOCALE : locales, zone ? zoned(options) : options])
+  }
+}
+
+function compared(native: Function): Function {
+  return function (this: unknown, that: unknown, locales?: unknown, options?: unknown): unknown {
+    return Reflect.apply(native, this, [that, locales === undefined ? LOCALE : locales, options])
+  }
+}
+
+function zoned(options: unknown): unknown {
+  if (options === undefined) return { timeZone: UTC }
+  if (!isObject(options) || Reflect.get(options, 'timeZone') !== undefined) return options
+  return Object.create(options, { timeZone: { value: UTC, enumerable: true } })
 }
 
 function isObject(value: unknown): value is object {

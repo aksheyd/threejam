@@ -105,6 +105,70 @@ test('with the portable math, trig-heavy code reaches the same state in the page
   }
 })
 
+const ELSEWHERE = [
+  "import { defineGame } from 'threejam'",
+  '',
+  'const { sin, cos } = Math',
+  'const random = Math.random',
+  'const now = Date.now',
+  'const TOP = Math.tan(0.3)',
+  '',
+  'export default defineGame({',
+  "  entities: { probe: { kept: 0, inline: 0, top: 0, texts: [''], refused: [''] } },",
+  '  update({ probe }, ctx) {',
+  '    const day = new Date(Date.UTC(2024, 0, 31, 23, 30) + ctx.tick * 60_000)',
+  '    probe.kept = sin(1e22 + ctx.tick) + cos(ctx.tick)',
+  '    probe.inline = Math.sin(1e22 + ctx.tick) + Math.cos(ctx.tick)',
+  '    probe.top = TOP',
+  "    probe.texts = [(1234567.5 + ctx.tick).toLocaleString(), day.toLocaleString(), new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(day), ['b', 'a', 'C', 'ä'].sort((a, b) => a.localeCompare(b)).join('')]",
+  '    const host: Record<string, any> = globalThis',
+  '    const tries = [() => random(), () => now(), () => host.crypto.randomUUID(), () => host.performance.now(), () => new Intl.DateTimeFormat().format(), () => day.getHours(), () => new WeakRef(day), () => Object.assign(ctx, { dt: 1 })]',
+  "    probe.refused = tries.map((attempt) => { try { attempt(); return 'allowed' } catch (error: any) { return String(error.message).split(';')[0] } })",
+  '  },',
+  '})',
+  '',
+].join('\n')
+
+test("in another locale and time zone, the page computes what sim does and refuses what sim refuses, even through what a game's top level keeps", { skip: !chrome && 'needs Chrome' }, async () => {
+  const dir = mkdtempSync(join(TMP, 'elsewhere-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), ELSEWHERE)
+  const expected = (await runGame(dir, { ticks: 30 })).snapshots[0].entities
+  const [probe] = expected
+  assert.equal(probe.kept, probe.inline)
+  assert.deepEqual(probe.refused, [
+    'Math.random() would make runs differ',
+    'Date.now() would make runs differ',
+    'crypto.randomUUID() would make runs differ',
+    'performance.now() would make runs differ',
+    'Intl.DateTimeFormat format() with no date would make runs differ',
+    'date.getHours() would make runs differ',
+    'new WeakRef() would make runs differ',
+    "Cannot assign to read only property 'dt' of object '#<Object>'",
+  ])
+  const page = await buildPage({ dir, config: { mode: 'shot' } })
+  const server = await serve({ page })
+  const browser = await launch()
+  try {
+    const tab = await browser.newPage()
+    await tab.emulateTimezone('Asia/Kolkata')
+    await (await tab.createCDPSession()).send('Emulation.setLocaleOverride', { locale: 'de-DE' })
+    await openPage(tab, server.url)
+    await tab.waitForFunction('window.engine !== undefined')
+    const actual = await tab.evaluate(() => {
+      window.engine.reset({ seed: 0 })
+      window.engine.advanceTo(30)
+      return { state: window.engine.state(), page: [new Intl.NumberFormat().format(1234567.5), new Intl.DateTimeFormat().resolvedOptions().timeZone !== 'UTC'] }
+    })
+    assert.deepEqual(actual.page, ['1.234.567,5', true])
+    assert.deepEqual(actual.state, expected)
+  } finally {
+    await browser.close()
+    server.close()
+    await page.dispose()
+  }
+})
+
 // A 2x2 image: red and green on top, blue and white below.
 const QUAD_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwHwyBNBgAAEnICff5q7YNAAAAAElFTkSuQmCC'
 

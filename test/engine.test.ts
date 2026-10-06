@@ -168,6 +168,45 @@ test('audit 12: ctx and its input are read-only, so game code can change neither
   assert.deepEqual(seen, [1 / 60, 0, 1 / 60, 1])
 })
 
+test('audit 3: game code formats and compares as en-US does and dates in UTC, whatever the time zone, and Date forms that read the local time fail with their UTC form', () => {
+  const zone = process.env.TZ
+  process.env.TZ = 'Asia/Kolkata'
+  try {
+    const at = Date.UTC(2024, 0, 31, 23, 30)
+    const game = defineGame({
+      entities: { out: { texts: listOf('') } },
+      update({ out }) {
+        const day = new Date(at)
+        out.texts = [
+          (1234567.5).toLocaleString(),
+          ['b', 'a', 'C'].sort((x, y) => x.localeCompare(y)).join(''),
+          'i'.toLocaleUpperCase(),
+          day.toLocaleString(),
+          new Intl.DateTimeFormat(undefined, { dateStyle: 'long' }).format(day),
+          new Intl.NumberFormat().format(0.5),
+          String(new Date('2024-01-31').getUTCDate()),
+          new Intl.DateTimeFormat('de-DE', { timeZone: 'Asia/Kolkata', dateStyle: 'short' }).format(day),
+        ]
+      },
+    })
+    assert.deepEqual([...simulate(game, { ticks: 1 }).world.out.texts], ['1,234,567.5', 'abC', 'I', '1/31/2024, 11:30:00 PM', 'January 31, 2024', '0.5', '31', '01.02.24'])
+    assert.notEqual(new Intl.DateTimeFormat().resolvedOptions().timeZone, 'UTC')
+    const forms: Array<[string, () => unknown, RegExp]> = [
+      ['getHours', () => new Date(at).getHours(), /^date\.getHours\(\) would make runs differ; it reads the machine's time zone, so use getUTCHours\(\)/],
+      ['setMonth', () => new Date(at).setMonth(1), /so use setUTCMonth\(\)/],
+      ['getTimezoneOffset', () => new Date(at).getTimezoneOffset(), /so use 0, UTC's offset/],
+      ['toString', () => `${new Date(at)}`, /^date\.toString\(\) would make runs differ; .* toISOString\(\) or toUTCString\(\)/],
+      ['components', () => new Date(2024, 0, 31), /^new Date\(year, month, \.\.\.\) would make runs differ; .* new Date\(Date\.UTC\(year, month, \.\.\.\)\)/],
+      ['a local time', () => new Date('2024-01-31T12:00'), /^new Date\("2024-01-31T12:00"\) would make runs differ; write dates as ISO 8601 with a Z or an offset/],
+      ['a loose string', () => Date.parse('Jan 31 2024'), /^Date\.parse\("Jan 31 2024"\) would make runs differ/],
+    ]
+    for (const [name, use, message] of forms) assert.match(failure(defineGame({ entities: { ball }, update: () => void use() })), message, name)
+  } finally {
+    if (zone === undefined) delete process.env.TZ
+    else process.env.TZ = zone
+  }
+})
+
 test('Mouse and MouseRight are keys, and the pointer moves on the ticks --pointer names, staying there until the next move', () => {
   const seen: string[] = []
   const game = defineGame({
