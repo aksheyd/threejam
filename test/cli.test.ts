@@ -135,6 +135,28 @@ test("a failure's code says what went wrong: BUILD_ERROR for a syntax error from
   assert.match(shot.out, /^code: BROWSER_ERROR\nmessage: .*no-chrome/)
 })
 
+test("incur's own refusals print one line with the code USAGE: a missing or fractional number, an unknown flag, and a flag with no value", () => {
+  const cases = [
+    [['sim', 'games/pong'], '--ticks:'],
+    [['sim', 'games/pong', '--ticks', '5', '--seed', '1.5'], '--seed:'],
+    [['sim', 'games/pong', '--ticks', '5', '--nope', '3'], 'Unknown flag: --nope'],
+    [['shot', 'games/pong', '--at'], 'Missing value for flag: --at'],
+  ] as const
+  for (const [args, named] of cases) {
+    const { code, out } = threejam(...args)
+    assert.equal(code, 1, out)
+    assert.match(out, /^code: USAGE\nmessage: [^\n]+\n$/)
+    assert.ok(out.includes(named), out)
+  }
+})
+
+test("run reports a page that doesn't build with its code instead of a bare error", () => {
+  const dir = folder({ 'game.ts': game({ update: 'world.ball.x += 1' }), 'view.ts': 'export function draw( {\n' })
+  const { code, out } = threejam('run', dir, '--serve-only')
+  assert.equal(code, 1, out)
+  assert.match(out, /^Error \(BUILD_ERROR\): test\/\.tmp\/game-\w+\/view\.ts:2: [^\n]+\n$/)
+})
+
 test("a sandbox V8 stopped for want of memory is the game's failure, and another stop names the last line before V8's native stack", () => {
   const frames = '----- Native stack trace -----\n 1: 0xb8d0a3 node::Abort() [node]\n 2: 0x7f9116e3ea76\n'
   const memory = crashed(`FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\n${frames}`, 'SIGABRT')

@@ -36,7 +36,7 @@ Every command that loads a game bundles it first, for the sandbox described belo
 
 ## Output and errors
 
-Output is [TOON](https://toonformat.dev) by default, `--format json` switches it, and every command takes `--help` and `--schema`. A failure prints a `code` and a one-line `message` and exits 1; for a problem in a game file, the message starts with `path:line:` and ends with when it happened, like `(in update at tick 61)`. The code says what went wrong:
+Output is [TOON](https://toonformat.dev) by default, `--format json` switches it, and every command takes `--help` and `--schema`. A failure prints a `code` and a one-line `message` and exits 1, and `run`, whose output is a stream, prints them as `Error (CODE): message`; for a problem in a game file, the message starts with `path:line:` and ends with when it happened, like `(in update at tick 61)`. The code says what went wrong:
 
 | Code | What went wrong |
 | --- | --- |

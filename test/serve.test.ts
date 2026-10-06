@@ -241,6 +241,17 @@ test('when Chrome fails to start, shot closes its server and esbuild and removes
   assert.deepEqual({ status: result.status, named: result.stdout.includes('no-chrome'), left: readdirSync(temp) }, { status: 0, named: true, left: [] }, result.stderr)
 })
 
+test('a Chrome that exits as it starts fails with one line naming it, though over a pipe its own output is lost', { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {
+  const dir = mkdtempSync(join(TMP, 'exits-'))
+  made.push(dir)
+  const fake = join(dir, 'chrome')
+  writeFileSync(fake, '#!/bin/sh\necho "no display" >&2\nexit 3\n', { mode: 0o755 })
+  await assert.rejects(launchChrome(fake), {
+    name: 'BrowserError',
+    message: `Chrome at ${fake} didn't start: it exited as soon as it started; set CHROME_PATH to a working Chrome or Chromium`,
+  })
+})
+
 test('commands other than shot start without loading Puppeteer', () => {
   const hook = "import { registerHooks } from 'node:module'\nregisterHooks({ resolve: (specifier, context, next) => { if (specifier.startsWith('puppeteer')) throw new Error(`loaded ${specifier}`); return next(specifier, context) } })"
   const cli = join(ROOT, 'src', 'cli.ts')

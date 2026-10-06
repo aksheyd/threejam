@@ -451,6 +451,17 @@ test('audit 48: shot repeats a frame byte for byte on one machine, images and te
   }
 })
 
+test("a page that fails in shot is the game's failure, told in one line without the page's stack or the server's address", { skip: !chrome && 'needs Chrome' }, async () => {
+  const dir = mkdtempSync(join(TMP, 'broken-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { rock: { w: 1, h: 1, image: 'rock.png' } }, update() {} })\n")
+  writeFileSync(join(dir, 'rock.png'), 'not a png')
+  await assert.rejects(shoot({ dir, at: [1], out: join(dir, 'frame.png') }), {
+    name: 'GameError',
+    message: "the page failed: the image rock.png couldn't be loaded; check that the file is a whole image of its type",
+  })
+})
+
 test('shot writes one PNG per tick into a folder it creates', { skip: !chrome && 'needs Chrome' }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'threejam-shot-'))
   try {

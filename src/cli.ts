@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { basename } from 'node:path'
-import { Cli, z } from 'incur'
+import { Cli, Errors, z } from 'incur'
 import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, type Code } from './errors.ts'
 import { exportGame } from './export.ts'
 import { DEFAULT_TIMEOUT, LimitError, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
@@ -59,7 +59,14 @@ function failure(error: unknown) {
 }
 
 function failed(code: Code, message: string) {
-  return { code, message: serving && message.length > MCP_REPLY_LIMIT ? `${message.slice(0, MCP_REPLY_LIMIT)}... (cut at ${MCP_REPLY_LIMIT} characters)` : message }
+  const line = message.replace(/\s*\n\s*/g, ' ')
+  return { code, message: serving && line.length > MCP_REPLY_LIMIT ? `${line.slice(0, MCP_REPLY_LIMIT)}... (cut at ${MCP_REPLY_LIMIT} characters)` : line }
+}
+
+// incur's own message for a flag zod refuses holds a JSON dump of zod's issues, so each is named by its flag instead.
+function invalid(error: Errors.ParseError | Errors.ValidationError): string {
+  if (error instanceof Errors.ParseError || error.fieldErrors.length === 0) return error.shortMessage
+  return error.fieldErrors.map(({ path, message }) => `${path === 'dir' ? '<dir>' : `--${path.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`}: ${message}`).join('; ')
 }
 
 // Anything else is a failure of ThreeJam itself.
@@ -137,6 +144,15 @@ const cli = Cli.create('threejam', {
       `A reply is at most ${MCP_REPLY_LIMIT} characters, so narrow a big sim with only, fields, every, or until.`,
   },
 })
+  // incur parses the flags inside this, so its parse and validation errors become USAGE failures like every other.
+  .use(async (c, next) => {
+    try {
+      await next()
+    } catch (error) {
+      if (!(error instanceof Errors.ParseError || error instanceof Errors.ValidationError)) throw error
+      return c.error(failed('USAGE', invalid(error)))
+    }
+  })
   .command('new', {
     description:
       'Start a game: write a small playable game.ts and its test into a new or empty folder, plus a package.json and tsconfig.json when no project above it depends on ThreeJam',
@@ -283,10 +299,10 @@ const cli = Cli.create('threejam', {
     async *run(c) {
       try {
         gameFiles(c.args.dir)
+        yield* play({ dir: c.args.dir, seed: c.options.seed, window: !c.options.serveOnly })
       } catch (error) {
         return c.error(failure(error))
       }
-      yield* play({ dir: c.args.dir, seed: c.options.seed, window: !c.options.serveOnly })
     },
   })
   .command('export', {
