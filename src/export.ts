@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import * as esbuild from 'esbuild'
 import { mediaType } from './assets.ts'
 import { BuildError, UsageError, quote } from './errors.ts'
 import { gameFiles } from './load.ts'
+import { makeFolder, saveFile } from './output.ts'
 import { formatMessage, html, pageBuild } from './serve.ts'
 
 export interface Exported {
@@ -19,8 +20,8 @@ export async function exportGame({ dir, out, seed }: { dir: string; out: string;
   const built = await esbuild.build({ ...pageBuild({ files, address }), minify: true, write: false }).catch((failure: esbuild.BuildFailure) => failure)
   if (built instanceof Error) throw new BuildError(built.errors.map(formatMessage).join('; '))
   const page = html({ title: basename(files.folder), config: { mode: 'export', seed }, script: { kind: 'inline', code: built.outputFiles[0].text } })
-  mkdirSync(dirname(resolve(out)), { recursive: true })
-  writeFileSync(out, page)
+  makeFolder(dirname(resolve(out)))
+  saveFile(out, page)
   return { file: out, bytes: Buffer.byteLength(page) }
 }
 

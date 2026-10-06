@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { dirname, extname, sep } from 'node:path'
 import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { LimitError, gameFailure, isSystemError } from './load.ts'
+import { makeFolder, saveFile } from './output.ts'
 import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, serve, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
@@ -101,10 +102,10 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     await until(tab.waitForFunction('window.engine !== undefined', { timeout: 15000 }))
     const reset: ResetOptions = { seed: seed ?? 0, ticks: Math.max(...at), press, hold, pointer, set, drive: driver !== undefined }
     await inPage(tab.evaluate((options) => window.engine.reset(options), reset))
-    for (const path of paths) mkdirSync(dirname(path), { recursive: true })
+    for (const path of paths) makeFolder(dirname(path))
     for (const [i, tick] of at.entries()) {
       await inPage(tab.evaluate((t) => window.engine.advanceTo(t), tick))
-      writeFileSync(paths[i], await tab.screenshot({ type: 'png', clip: { x: 0, y: 0, width: 800, height: 600 } }))
+      saveFile(paths[i], await tab.screenshot({ type: 'png', clip: { x: 0, y: 0, width: 800, height: 600 } }))
     }
     return paths
   } catch (error) {

@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { UsageError } from './errors.ts'
 import { COMPILER_OPTIONS, named } from './load.ts'
+import { makeFolder, saveFile } from './output.ts'
 import { NAME, VERSION, manifestsAbove } from './package.ts'
 
 export interface Created {
@@ -25,8 +26,8 @@ export function createGame(dir: string): Created {
     'game.test.ts': STARTER_TEST,
     ...(standalone ? { 'package.json': manifest(name), 'tsconfig.json': tsconfig() } : {}),
   }
-  mkdirSync(folder, { recursive: true })
-  for (const [file, text] of Object.entries(files)) writeFileSync(join(folder, file), text)
+  makeFolder(folder)
+  for (const [file, text] of Object.entries(files)) saveFile(join(folder, file), text)
   return { folder, files: Object.keys(files), standalone }
 }
 

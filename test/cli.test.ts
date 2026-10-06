@@ -9,6 +9,7 @@ import pong from '../games/pong/game.ts'
 import { simulate } from '../src/engine.ts'
 import { crashed, describe } from '../src/load.ts'
 import { ENGINE, ROOT, VERSION, mcpCommand } from '../src/package.ts'
+import { findChrome } from '../src/serve.ts'
 
 const CLI = join(ROOT, 'src', 'cli.ts')
 const TMP = join(ROOT, 'test', '.tmp')
@@ -176,6 +177,25 @@ test('shot checks -o before it runs the game or starts Chrome, with one rule for
   for (const [out, at] of [['frame.jpg', '1'], ['frame.jpg', '1,2'], ['frame', '1'], ['frame', '1,2']]) {
     const shot = threejamWith({ CHROME_PATH: join(TMP, 'no-chrome') }, 'shot', broken, '--at', at, '-o', out, '--format', 'json')
     assert.deepEqual({ code: shot.code, failure: JSON.parse(shot.out) }, { code: 1, failure: { code: 'USAGE', message: `-o ${JSON.stringify(out)} should be a .png file, like frame.png` } })
+  }
+})
+
+test("export makes the folders its file goes in, and one under /proc, where Node's recursive mkdir never returns, fails new, export, and shot at once", () => {
+  const nested = mkdtempSync(join(TMP, 'out-'))
+  made.push(nested)
+  const file = join(nested, 'two', 'levels', 'pong.html')
+  assert.equal(threejam('export', 'games/pong', '-o', file).code, 0)
+  assert.ok(readFileSync(file, 'utf8').startsWith('<!doctype html>'))
+  if (process.platform !== 'linux') return
+  const proc = `/proc/threejam-${process.pid}`
+  const runs = [['new', `${proc}/game`], ['export', 'games/pong', '-o', `${proc}/pong.html`], ...(findChrome() ? [['shot', 'games/pong', '-o', `${proc}/frame.png`]] : [])]
+  for (const args of runs) {
+    const result = spawnSync(process.execPath, [CLI, ...args, '--format', 'json'], { cwd: ROOT, encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL' })
+    assert.deepEqual(
+      { status: result.status, failure: JSON.parse(result.stdout || '{}') },
+      { status: 1, failure: { code: 'IO_ERROR', message: `couldn't make the folder ${proc}: no such file or directory` } },
+      args.join(' '),
+    )
   }
 })
 

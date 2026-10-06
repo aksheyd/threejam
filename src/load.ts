@@ -518,9 +518,14 @@ export function isSystemError(error: unknown): error is SystemError {
   return error instanceof Error && typeof Reflect.get(error, 'code') === 'string' && typeof Reflect.get(error, 'syscall') === 'string'
 }
 
-function systemMessage({ code, syscall, errno, path }: SystemError): string {
-  const reason = (typeof errno === 'number' ? getSystemErrorMap().get(errno)?.[1] : undefined) ?? code
-  return `couldn't ${syscall}${typeof path === 'string' ? ` ${path.replaceAll(sep, '/')}` : ''}: ${reason}`
+function systemMessage(error: SystemError): string {
+  return `couldn't ${error.syscall}${typeof error.path === 'string' ? ` ${error.path.replaceAll(sep, '/')}` : ''}: ${reasonOf(error)}`
+}
+
+// What the OS said, like "permission denied", without the code and path Node puts around it.
+export function reasonOf(error: unknown): string {
+  if (!isSystemError(error)) return error instanceof Error ? error.message : String(error)
+  return (typeof error.errno === 'number' ? getSystemErrorMap().get(error.errno)?.[1] : undefined) ?? error.code
 }
 
 function during(phase: Phase, tick: number): string {
