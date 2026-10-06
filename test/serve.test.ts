@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url'
 import { exportGame } from '../src/export.ts'
 import { ROOT } from '../src/package.ts'
 import { NO_DEVTOOLS_PORT, buildPage, findChrome, openWindow, serve } from '../src/serve.ts'
-import { launchChrome } from '../src/shot.ts'
+import { launchChrome, openPage } from '../src/shot.ts'
 
 const chrome = findChrome()
 const TMP = join(ROOT, 'test', '.tmp')
@@ -138,7 +138,7 @@ test('another page on this machine, or a file, can neither end a run nor run scr
   const browser = await launchChrome(chrome ?? 'no Chrome', { protocolTimeout: 60_000 })
   try {
     const tab = await browser.newPage()
-    await tab.goto(attacker)
+    await openPage(tab, attacker)
     await until('the attacking page to post /quit', () => reports.includes('posted'))
     assert.equal(quits, 0, 'a page on another port ended the session')
     await until('the attacking page to frame the SVG', () => reports.includes('framed'))
@@ -153,7 +153,7 @@ test('another page on this machine, or a file, can neither end a run nor run scr
     const player = await browser.newPage()
     let listening = false
     player.on('response', (response) => void (response.url().includes('/events?') && response.status() === 200 && (listening = true)))
-    await player.goto(game)
+    await openPage(player, game)
     await until('the game page to listen for reloads', () => listening)
     const reloaded = player.waitForNavigation()
     server.reload()
