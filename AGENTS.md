@@ -165,6 +165,9 @@ Tests use the library, as in `games/*/game.test.ts` and the `game.test.ts` that 
 ## Known problems
 
 - `Math.pow`, `Math.hypot`, and `**` come from the JavaScript engine; engines agree on them today, but nothing guarantees it.
+- Some ways to make runs differ get past every guard. A sort whose comparator isn't consistent, like `list.sort(() => ctx.random() - 0.5)`, leaves the order to each JavaScript engine, so shuffle with Fisher–Yates instead: `for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(ctx.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]] }`.
+- A promise's callbacks, and the rest of an `async` function after an `await`, run after the tick that started them, outside the guard and at different moments in `sim` and the page, so keep game code synchronous.
+- Text the JavaScript engine makes itself, like an error's message, or what `Intl` formats even in `en-US`, comes from each browser's own code and Unicode data, so it can differ between browsers; keep it out of a game's state.
 - Code at the top of a game's files calls the platform's own `Math.sin` and similar, so a constant computed there with one of them can differ in its last bit between browsers; compute it in `start`, or write the number. A test that imports the game runs that code with no guard at all, so `check` and `sim` are what catch a `const random = Math.random` there.
 - A game that loops forever is stopped at its `--timeout` (default 30 s) with the `TIMEOUT` code, so it no longer hangs `sim`; a game can still use the whole budget before it's cut off.
 - Command-line mistakes exit 1 like other failures, because incur sets the exit codes.
