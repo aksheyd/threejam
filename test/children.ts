@@ -4,10 +4,26 @@ import { ROOT } from '../src/package.ts'
 
 export const CLI = join(ROOT, 'src', 'cli.ts')
 
+// The groups still running: Ctrl-C reaches only the terminal's own group, and a test file it stops never aborts its tests' signals, so an interrupt passes SIGTERM on to each.
+const running = new Set<number>()
+if (process.platform !== 'win32') {
+  for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+    process.once(name, () => {
+      for (const pid of running) reached(-pid, 'SIGTERM')
+      process.kill(process.pid, name)
+    })
+  }
+}
+
 // The CLI in a child process, stopped with every process it started once signal aborts, as a test's does when the test ends or times out; the sandbox running a game would otherwise outlive the CLI until its own time limit.
 export function spawnCli(args: readonly string[], signal: AbortSignal, cwd = ROOT): ChildProcessWithoutNullStreams {
   // On macOS and Linux the child leads a process group of its own, which every process it starts joins.
   const child = spawn(process.execPath, [CLI, ...args], { cwd, detached: process.platform !== 'win32' })
+  const { pid } = child
+  if (pid !== undefined && process.platform !== 'win32') {
+    running.add(pid)
+    child.once('exit', () => running.delete(pid))
+  }
   signal.addEventListener('abort', () => stopTree(child), { once: true })
   return child
 }
