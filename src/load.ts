@@ -383,9 +383,11 @@ export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: stri
       other.push(line)
     }
   }
-  // A type error can quote what a file holds, so a game that imports past its folder, the engine's files, and the type packages check needs fails the check instead of leaking the file's text. The real path is what counts, so a link out of the folder doesn't exempt it.
-  const roots = [game, real(ENGINE), ...typeFolders()]
-  const stray = read.map(real).find((path) => !roots.some((root) => within(root, path)))
+  // A type error can quote what a file holds, so a game that imports past its folder, the engine's files, and the declarations check needs fails the check instead of leaking the file's text. The real path is what counts, so a link out of the folder doesn't exempt it.
+  const roots = [game, real(ENGINE)]
+  const declarations = declarationFolders()
+  const exempt = (path: string) => roots.some((root) => within(root, path)) || (/\.d\.[cm]?ts$/.test(path) && declarations.some((root) => within(root, path)))
+  const stray = read.map(real).find((path) => !exempt(path))
   if (stray !== undefined) throw new UsageError(`${shownPath(stray)} is outside the folder; an import must come from the game's folder or ThreeJam's own files`)
   if (result.status !== 0 && !/error TS\d+/.test(result.stdout)) {
     errors.push(`the TypeScript check failed: ${`${other.join('\n')}${result.stderr}`.trim() || `exit ${result.status}`}`)
@@ -393,8 +395,8 @@ export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: stri
   return errors
 }
 
-// The folders check may read outside the game's and the engine's: TypeScript's libs, and the packages ThreeJam's own types depend on (@types/three and what it needs), as this ThreeJam finds them. Any other node_modules, even one above the game or beside ThreeJam, is outside.
-function typeFolders(): string[] {
+// The folders whose declaration files check may read outside the game's and the engine's: TypeScript's libs, and ThreeJam's own type packages (@types/three and the type packages it needs), as this ThreeJam finds them. The code packages those types name, like fflate, and any other node_modules, even one above the game or beside ThreeJam, are outside.
+function declarationFolders(): string[] {
   const folders: string[] = []
   const typescript = packageFolder('typescript', ROOT)
   if (typescript !== undefined) {
@@ -407,7 +409,7 @@ function typeFolders(): string[] {
     const found = packageFolder(name, from)
     if (found === undefined || folders.includes(found)) return
     folders.push(found)
-    for (const dependency of dependenciesOf(found)) visit(dependency, found)
+    for (const dependency of dependenciesOf(found)) if (dependency.startsWith('@types/')) visit(dependency, found)
   }
   for (const name of dependenciesOf(ROOT)) if (name.startsWith('@types/')) visit(name, ROOT)
   return folders.map(real)

@@ -382,6 +382,33 @@ test("audit 12: game code in sim's realm finds the stand-ins a page gives it for
   assert.deepEqual(log.map((line) => line.split(';')[0]), ['object undefined now', 'crypto.randomUUID() would make runs differ', 'Temporal.Now.instant() would make runs differ'])
 })
 
+test("security follow-up: check reads only declaration files from ThreeJam's type packages, not other files there or the code packages those types name", () => {
+  const types = join(ROOT, 'node_modules', '@types', 'three')
+  const code = join(ROOT, 'node_modules', 'fflate')
+  const planted = [join(types, 'tj-canary.ts'), ...(existsSync(join(code, 'package.json')) ? [join(code, 'tj-canary.ts')] : [])]
+  try {
+    for (const file of planted) {
+      const canary = `CANARY-${relative(ROOT, file).replace(/\W+/g, '-')}`
+      writeFileSync(file, `export const token = '${canary}'\n`)
+      const g = folder({
+        'game.ts': [
+          `import { token } from '${file.replaceAll('\\', '/')}'`,
+          "import { defineGame } from 'threejam'",
+          'type Echo = Record<typeof token, number>',
+          'const missing: Echo = {}',
+          'export default defineGame({ entities: { ball: { x: 0, y: 0, w: 0.1, h: 0.1, seen: missing } }, update() {} })',
+        ].join('\n'),
+      })
+      const run = threejam(['check', g.dir])
+      assert.equal(run.code, 1, run.out)
+      assert.match(String(run.json.message), /is outside the folder/)
+      assert.ok(!run.out.includes(canary), `check quoted ${relative(ROOT, file)}`)
+    }
+  } finally {
+    for (const file of planted) rmSync(file, { force: true })
+  }
+})
+
 // The sandbox fixes the realm's globals before a game's module loads, and still keeps runs deterministic.
 test('the sandbox prepares the realm before the game loads, and the same seed still repeats a run', () => {
   const { dir } = folder({ 'game.ts': game('', 'x: 0, w: 0.1, roll: 0').replace('world.ball.x += 0.01', 'world.ball.roll = ctx.random()') })
