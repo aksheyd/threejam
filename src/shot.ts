@@ -59,7 +59,7 @@ export async function launchChrome(chrome: string, { protocolTimeout }: { protoc
     env: chromeEnv(),
     protocolTimeout,
     ignoreDefaultArgs: true,
-    // Software rendering makes frames the same on every machine.
+    // Software rendering repeats a frame byte for byte on one machine; on another it looks the same, though some pixels can be one shade off.
     args: [...defaults, '--use-gl=angle', '--use-angle=swiftshader', '--remote-debugging-pipe', NO_DEVTOOLS_PORT],
   })
 }

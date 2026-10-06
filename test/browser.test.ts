@@ -346,6 +346,18 @@ test('exported Asteroids draws its SVG rocks and plays sounds with nothing but t
   }
 })
 
+test('audit 48: shot repeats a frame byte for byte on one machine, images and text included', { skip: !chrome && 'needs Chrome' }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'threejam-shot-'))
+  try {
+    const driver = join('games', 'asteroids', 'autopilot.ts')
+    const shots = await Promise.all(['one', 'two'].map((name) => shoot({ dir: 'games/asteroids', at: [120], driver, out: join(dir, name, 'frame.png') })))
+    const [first, second] = shots.map(([file]) => readFileSync(file))
+    assert.ok(first.equals(second), 'two shots of one run differ')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('shot writes one PNG per tick into a folder it creates', { skip: !chrome && 'needs Chrome' }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'threejam-shot-'))
   try {
