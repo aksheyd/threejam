@@ -50,23 +50,23 @@ interface Reply {
   readonly result?: {
     readonly serverInfo?: { readonly version: string }
     readonly instructions?: string
-    readonly tools?: ReadonlyArray<{ readonly name: string }>
+    readonly tools?: ReadonlyArray<{ readonly name: string; readonly inputSchema?: { readonly properties?: Record<string, { readonly description?: string }> } }>
     readonly content?: ReadonlyArray<{ readonly text: string }>
     readonly isError?: boolean
   }
 }
 
 // A test that times out aborts its signal, which kills the child, so it can't hold the run open; the abort's error is expected then.
-function spawnCli(args: string[], signal: AbortSignal) {
-  const child = spawn(process.execPath, [CLI, ...args], { cwd: ROOT, signal })
+function spawnCli(args: string[], signal: AbortSignal, cwd = ROOT) {
+  const child = spawn(process.execPath, [CLI, ...args], { cwd, signal })
   child.on('error', (error) => {
     if (!signal.aborted) throw error
   })
   return child
 }
 
-function mcp(signal: AbortSignal) {
-  const server = spawnCli(['--mcp'], signal)
+function mcp(signal: AbortSignal, cwd = ROOT) {
+  const server = spawnCli(['--mcp'], signal, cwd)
   const waiting = new Map<number, (reply: Reply) => void>()
   let buffered = ''
   let next = 1
@@ -263,6 +263,28 @@ test("a failed MCP call's text starts with its code, which an MCP client has no 
     assert.match(await failure('check', { dir: typo }), /^TYPE_ERROR: test\/\.tmp\/game-\w+\/game\.ts:6: Property 'vxx' does not exist/)
     assert.match(await failure('sim', { dir: syntax, ticks: 1 }), /^BUILD_ERROR: test\/\.tmp\/game-\w+\/game\.ts:6: Unexpected ";"$/)
     assert.match(await failure('sim', { dir: 'games/pong', ticks: 1, press: ['Nope@1'] }), /^USAGE: --press "Nope@1": unknown key/)
+  } finally {
+    server.close()
+  }
+})
+
+test('an MCP server started in another folder says where a relative path led, and its tools say what paths are relative to', async (t) => {
+  const elsewhere = mkdtempSync(join(TMP, 'cwd-'))
+  made.push(elsewhere)
+  const server = mcp(t.signal, elsewhere)
+  try {
+    await server.ready
+    const reply = await server.request('tools/call', { name: 'check', arguments: { dir: 'games/pong' } })
+    const looked = join(elsewhere, 'games', 'pong').replaceAll(sep, '/')
+    assert.equal(reply.result?.content?.[0]?.text, `USAGE: games/pong (${looked}) isn't a folder`)
+    const tools = (await server.request('tools/list', {})).result?.tools ?? []
+    const described = tools.flatMap((tool) => Object.entries(tool.inputSchema?.properties ?? {}).map(([name, field]) => [`${tool.name} ${name}`, field.description ?? '']))
+    const paths = described.filter(([name]) => /^\w+ (dir|driver|out)$/.test(name))
+    assert.deepEqual(
+      paths.filter(([, description]) => !description.includes('relative to the working directory')),
+      [],
+    )
+    assert.equal(paths.length, 9)
   } finally {
     server.close()
   }

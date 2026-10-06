@@ -32,10 +32,16 @@ export interface GameFiles {
 
 export function gameFiles(dir: string): GameFiles {
   const folder = resolve(dir)
-  if (!existsSync(folder) || !statSync(folder).isDirectory()) throw new UsageError(`${dir} isn't a folder`)
+  if (!existsSync(folder) || !statSync(folder).isDirectory()) throw new UsageError(`${named(dir)} isn't a folder`)
   const game = firstFile(folder, 'game')
-  if (game === undefined) throw new UsageError(`${dir} has no game.ts`)
+  if (game === undefined) throw new UsageError(`${named(dir)} has no game.ts`)
   return { folder, game, view: firstFile(folder, 'view'), assets: assetsIn(folder) }
+}
+
+// A path as given and, when it's relative, where it led, since an MCP server resolves one from wherever its client started it.
+export function named(path: string): string {
+  const absolute = resolve(path).replaceAll(sep, '/')
+  return isAbsolute(path) ? absolute : `${path === '' ? '""' : path.replaceAll(sep, '/')} (${absolute})`
 }
 
 // Sorted, since folders list their files in a different order on each OS.
@@ -95,7 +101,7 @@ export async function runGame(dir: string, options: RunOptions): Promise<Run> {
 
 function driverFile(path: string): string {
   const file = resolve(path)
-  if (!existsSync(file)) throw new UsageError(`--driver ${path} doesn't exist`)
+  if (!existsSync(file)) throw new UsageError(`--driver ${named(path)} doesn't exist`)
   return file
 }
 

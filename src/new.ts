@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
-import { UsageError, quote } from './errors.ts'
-import { COMPILER_OPTIONS } from './load.ts'
+import { UsageError } from './errors.ts'
+import { COMPILER_OPTIONS, named } from './load.ts'
 import { NAME, VERSION, manifestsAbove } from './package.ts'
 
 export interface Created {
@@ -16,7 +16,7 @@ const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependenc
 export function createGame(dir: string): Created {
   const folder = resolve(dir)
   if (existsSync(folder) && (!statSync(folder).isDirectory() || readdirSync(folder).length > 0)) {
-    throw new UsageError(`${quote(dir)} already exists and isn't an empty folder; new writes a game into a new or empty folder`)
+    throw new UsageError(`${named(dir)} already exists and isn't an empty folder; new writes a game into a new or empty folder`)
   }
   const standalone = !inProject(dirname(folder))
   const name = basename(folder)
