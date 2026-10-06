@@ -433,20 +433,20 @@ test("mcp add takes only the forms its help shows, refusing any other word, or a
   const not = (word: string) => `mcp add takes --agent NAME, --command CMD or -c CMD, and --no-global, not "${word}"`
   const nameless = "--agent needs an agent's name, like --agent claude-code"
   const refused = [
-    [['mcp', 'add', '-a', 'cursor'], not('-a')],
-    [['mcp', 'add', '--agents', 'cursor'], not('--agents')],
-    [['mcp', 'add', '--agnet', 'cursor'], not('--agnet')],
-    [['mcp', 'add', '--agent=cursor'], not('--agent=cursor')],
+    [['mcp', 'add', '-a', 'claude-code'], not('-a')],
+    [['mcp', 'add', '--agents', 'claude-code'], not('--agents')],
+    [['mcp', 'add', '--agnet', 'claude-code'], not('--agnet')],
+    [['mcp', 'add', '--agent=claude-code'], not('--agent=claude-code')],
     [['mcp', 'add', '--agent'], nameless],
     [['mcp', 'add', '--agent', '', '--no-global'], nameless],
     [['mcp', 'add', '--agent', '--no-global'], nameless],
-    [['mcp', 'add', '--agent', 'cursor', '-c'], '-c needs the command agents will run, like -c "npx threejam --mcp"'],
+    [['mcp', 'add', '--agent', 'claude-code', '-c'], '-c needs the command agents will run, like -c "npx threejam --mcp"'],
   ] as const
   for (const [args, message] of refused) {
     const { code, out } = threejamWith(env, '--format', 'json', ...args)
     assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'USAGE', message } }, args.join(' '))
   }
-  for (const args of [['--agent', 'cursor', '--format', 'json'], ['--agent', 'cursor', '--command', 'node cli.ts --mcp', '--no-global'], ['-c', 'node cli.ts --mcp']]) {
+  for (const args of [['--agent', 'claude-code', '--format', 'json'], ['--agent', 'claude-code', '--command', 'node cli.ts --mcp', '--no-global'], ['-c', 'node cli.ts --mcp']]) {
     assert.match(threejamWith(env, 'mcp', 'add', ...args).out, /MCP_ADD_FAILED/, args.join(' '))
   }
   assert.deepEqual(readdirSync(home), [])
