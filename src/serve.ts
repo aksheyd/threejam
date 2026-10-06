@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, rmdirSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
@@ -15,9 +15,11 @@ import { NAME, engineFile } from './package.ts'
 import type { Config } from './browser/client.ts'
 
 export interface Page {
-  readonly outdir: string
   // The game's folder, which the page's images and sounds come from.
   readonly folder: string
+  // The page, and the script of the last build that didn't fail.
+  readonly index: string
+  readonly bundle: Uint8Array
   dispose(): Promise<void>
 }
 
@@ -31,13 +33,13 @@ export interface PageOptions {
 export async function buildPage({ dir, config, driver, onRebuild }: PageOptions): Promise<Page> {
   const files = gameFiles(dir)
   const page = pageBuild({ files, driver, address: (name) => `assets/${encodeURIComponent(name)}` })
-  const outdir = mkdtempSync(join(tmpdir(), 'threejam-'))
-  writeFileSync(join(outdir, 'index.html'), html({ title: basename(files.folder), config, script: { kind: 'file', src: '/bundle.js' } }))
+  let bundle: Uint8Array = new Uint8Array()
   let firstEnded: ((errors: esbuild.Message[]) => void) | undefined
   const first = new Promise<esbuild.Message[]>((ended) => (firstEnded = ended))
   const context = await esbuild.context({
     ...page,
-    outfile: join(outdir, 'bundle.js'),
+    // Built in memory, since esbuild deletes a file it wrote when a later build fails, and a folder for one would outlive a run that's killed.
+    write: false,
     sourcemap: config.mode === 'run' ? 'inline' : false,
     plugins: [
       ...page.plugins,
@@ -45,6 +47,7 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
         name: 'threejam-rebuild',
         setup: (build) =>
           void build.onEnd((result) => {
+            if (result.errors.length === 0 && result.outputFiles) bundle = result.outputFiles[0].contents
             if (firstEnded === undefined) onRebuild?.(result.errors.map(formatMessage))
             else firstEnded(result.errors)
             firstEnded = undefined
@@ -56,16 +59,15 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
   const errors = onRebuild ? await context.watch().then(() => first) : (await context.rebuild().catch((failure: esbuild.BuildFailure) => failure)).errors
   if (errors.length > 0) {
     await context.dispose()
-    rmSync(outdir, { recursive: true, force: true })
     throw new BuildError(errors.map(formatMessage).join('; '))
   }
   return {
-    outdir,
     folder: files.folder,
-    async dispose() {
-      await context.dispose()
-      rmSync(outdir, { recursive: true, force: true })
+    index: html({ title: basename(files.folder), config, script: { kind: 'file', src: '/bundle.js' } }),
+    get bundle() {
+      return bundle
     },
+    dispose: () => context.dispose(),
   }
 }
 
@@ -235,7 +237,7 @@ export function serve({ page, token, onQuit = () => {} }: { page: Page; token?: 
     }
     const headers = name === 'bundle.js' ? { 'content-type': 'text/javascript; charset=utf-8' } : { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': PAGE_POLICY }
     response.writeHead(200, { ...HEADERS, ...headers })
-    response.end(readFileSync(join(page.outdir, name)))
+    response.end(name === 'bundle.js' ? page.bundle : page.index)
   })
   return new Promise((ready, fail) => {
     server.listen(0, '127.0.0.1', () => {

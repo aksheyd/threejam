@@ -11,6 +11,7 @@ import { ROOT } from '../src/package.ts'
 import { NO_DEVTOOLS_PORT, buildPage, openWindow, serve } from '../src/serve.ts'
 import { launchChrome, openPage } from '../src/shot.ts'
 import { CHROME as chrome, testChrome } from './chrome.ts'
+import { spawnCli } from './children.ts'
 
 const TMP = join(ROOT, 'test', '.tmp')
 mkdirSync(TMP, { recursive: true })
@@ -202,7 +203,7 @@ test('a page bundles the files in its game\'s folder but refuses one from outsid
   game("import { inside } from './inside.ts'", 'inside')
   const page = await buildPage({ dir, config: { mode: 'shot' } })
   try {
-    assert.ok(readFileSync(join(page.outdir, 'bundle.js'), 'utf8').includes('INSIDE-VALUE'))
+    assert.ok(Buffer.from(page.bundle).toString().includes('INSIDE-VALUE'))
   } finally {
     await page.dispose()
   }
@@ -221,7 +222,7 @@ test("a page's driver may import from its own folder, but its game may not, as i
   writeFileSync(join(dir, 'game.ts'), GAME)
   const page = await buildPage({ dir, config: { mode: 'shot' }, driver })
   try {
-    assert.ok(readFileSync(join(page.outdir, 'bundle.js'), 'utf8').includes('HELPER-VALUE'))
+    assert.ok(Buffer.from(page.bundle).toString().includes('HELPER-VALUE'))
   } finally {
     await page.dispose()
   }
@@ -240,6 +241,19 @@ test('when Chrome fails to start, shot closes its server and esbuild and removes
   const env = { ...process.env, CHROME_PATH: join(temp, 'no-chrome'), TMPDIR: temp, TEMP: temp, TMP: temp }
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: ROOT, env, encoding: 'utf8', timeout: 30_000 })
   assert.deepEqual({ status: result.status, named: result.stdout.includes('no-chrome'), left: readdirSync(temp) }, { status: 0, named: true, left: [] }, result.stderr)
+})
+
+test('run keeps its page in memory, so even killed while it serves, it leaves nothing in the temporary folder', async (t) => {
+  const temp = mkdtempSync(join(TMP, 'temp-'))
+  made.push(temp)
+  const run = spawnCli(['run', folder({ 'game.ts': GAME }), '--serve-only'], t.signal, ROOT, { ...process.env, TMPDIR: temp, TEMP: temp, TMP: temp })
+  let out = ''
+  run.stdout.on('data', (chunk) => (out += chunk))
+  const exited = new Promise((done) => run.once('close', done))
+  await until('run to serve the page', () => out.includes('\n'))
+  run.kill('SIGKILL')
+  await exited
+  assert.deepEqual(readdirSync(temp), [])
 })
 
 test("a Chrome that shot kills for a page that never returns leaves nothing in the temporary folder, which a killed Chrome's socket would", { skip: !chrome && 'needs Chrome', timeout: 60_000 }, () => {

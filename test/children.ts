@@ -19,9 +19,9 @@ if (process.platform !== 'win32') {
 }
 
 // The CLI in a child process, stopped with every process it started once signal aborts, as a test's does when the test ends or times out; the sandbox running a game would otherwise outlive the CLI until its own time limit.
-export function spawnCli(args: readonly string[], signal: AbortSignal, cwd = ROOT): ChildProcessWithoutNullStreams {
+export function spawnCli(args: readonly string[], signal: AbortSignal, cwd = ROOT, env = process.env): ChildProcessWithoutNullStreams {
   // On macOS and Linux the child leads a process group of its own, which every process it starts joins.
-  const child = spawn(process.execPath, [CLI, ...args], { cwd, detached: process.platform !== 'win32' })
+  const child = spawn(process.execPath, [CLI, ...args], { cwd, env, detached: process.platform !== 'win32' })
   const { pid } = child
   if (pid !== undefined && process.platform !== 'win32') {
     running.add(pid)
