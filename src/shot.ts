@@ -146,7 +146,11 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     await closeChrome(browser, stuck)
     server?.close()
     await page.dispose()
-    if (tmp !== undefined) rmSync(tmp, { recursive: true, force: true, maxRetries: 5 })
+    try {
+      if (tmp !== undefined) rmSync(tmp, { recursive: true, force: true, maxRetries: 5 })
+    } catch {
+      // A file that Chrome's helpers still hold, as Windows can keep one a moment, is left for the OS rather than failing the shot.
+    }
   }
 }
 
