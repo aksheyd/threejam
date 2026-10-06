@@ -9,7 +9,7 @@ export const CHROME = findChrome()
 
 export interface TestChrome {
   readonly browser: Browser
-  // Closes Chrome, then removes its folder once every process Chrome started is gone.
+  // Closes Chrome, then removes its folder.
   close(): Promise<void>
 }
 
@@ -24,14 +24,10 @@ export async function testChrome(executable = CHROME ?? 'no Chrome'): Promise<Te
     remove(temp, profile)
     throw error
   }
-  // Every process Chrome starts shares its stdio, so close comes once none is left to write to the folder.
-  const chrome = browser.process()
-  const gone = new Promise<void>((done) => (chrome === null ? done() : chrome.once('close', () => done())))
   return {
     browser,
     async close() {
       await browser.close()
-      await Promise.race([gone, new Promise((late) => setTimeout(late, 10_000).unref())])
       remove(temp, profile)
     },
   }
