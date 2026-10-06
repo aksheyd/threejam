@@ -2,12 +2,12 @@ import { ChildProcess } from 'node:child_process'
 import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 import { once } from 'node:events'
 import { accessSync, constants, mkdtempSync, statSync } from 'node:fs'
-import { constants as osConstants, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
 import { finished } from 'node:stream/promises'
 import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
-import { LimitError, gameFailure, isSystemError, timeLimit } from './load.ts'
+import { LimitError, STOPS, endBy, gameFailure, isSystemError, timeLimit } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
 import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, removeProfile, removeSocketFolders, serve, socketFolders, tmpdirHint, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
@@ -229,9 +229,6 @@ async function within(ms: number, work: Promise<unknown>): Promise<boolean> {
   return settled
 }
 
-// Ctrl-C, SIGTERM, and the SIGHUP of a closed terminal, which can come twice.
-const STOPS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
-
 // What stops each shot running in this process, and why they were stopped, by the first signal or by this process exiting, which also stops any shot that starts before the last of them is done.
 const shots = new Set<() => void>()
 let stopped: NodeJS.Signals | 'exiting' | undefined
@@ -279,12 +276,6 @@ export async function interruptible<T>(work: (killer: AbortController) => Promis
     else endBy(reason)
   }
   return new Promise<never>(() => {})
-}
-
-// On Windows a process can't send itself SIGHUP, and SIGINT or SIGTERM end it with 1, so there it exits with the code a shell gives a process that the signal ended.
-function endBy(signal: NodeJS.Signals): void {
-  if (process.platform === 'win32') process.exit(128 + osConstants.signals[signal])
-  process.kill(process.pid, signal)
 }
 
 // Windows has no execute permission to check, so there any file passes.

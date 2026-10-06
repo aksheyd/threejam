@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { SourceMap } from 'node:module'
-import { tmpdir } from 'node:os'
+import { constants as osConstants, tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getSystemErrorMap } from 'node:util'
@@ -485,22 +485,52 @@ interface Tsc {
 // spawnSync's bound. tsc lists the files it read after its errors, so output cut short couldn't be checked for an import from outside the folder, and none of it is shown.
 const MAX_TSC_BYTES = 1024 * 1024
 
-// The folders of the type checks still running, which this process removes if it exits first, as an MCP server does when its client closes stdin; a signal that kills it leaves them.
+// Ctrl-C, SIGTERM, and the SIGHUP of a closed terminal, which can come twice.
+export const STOPS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
+
+// Ends this process as the signal would have, once what else listens for it, like shots cleaning up after it, is done and calls this again. On macOS and Linux the signal this process sends itself does that. On Windows a process can't send itself SIGHUP, and SIGINT or SIGTERM end it at once with 1, so there what else listens hears the signal from here, and once nothing does, the process exits with the code a shell gives a process the signal ended.
+export function endBy(signal: NodeJS.Signals): void {
+  if (process.platform !== 'win32') process.kill(process.pid, signal)
+  else if (process.listenerCount(signal) > 0) process.emit(signal, signal)
+  else process.exit(128 + osConstants.signals[signal])
+}
+
+// The folders of the type checks still running, which this process removes if it ends first: as it exits, as an MCP server does when its client closes stdin, or on Ctrl-C, SIGTERM, or the SIGHUP of a closed terminal, which then end it as they would have. SIGKILL leaves them.
 const checking = new Set<string>()
-process.on('exit', () => {
+
+function removeChecking(): void {
   for (const config of checking) {
     try {
       rmSync(config, { recursive: true, force: true })
     } catch {
-      // An exit can't wait for a file Windows still holds a moment; the system's temporary folder keeps it.
+      // An end can't wait for a file Windows still holds a moment; the system's temporary folder keeps it.
     }
   }
-})
+}
+
+process.on('exit', removeChecking)
+
+function interrupted(signal: NodeJS.Signals): void {
+  removeChecking()
+  for (const name of STOPS) process.off(name, interrupted)
+  endBy(signal)
+}
+
+// A listener changes what a signal does for the whole process, and run stops gently on its own, so these listen only while a type check runs.
+function startChecking(config: string): void {
+  if (checking.size === 0) for (const name of STOPS) process.on(name, interrupted)
+  checking.add(config)
+}
+
+function stopChecking(config: string): void {
+  checking.delete(config)
+  if (checking.size === 0) for (const name of STOPS) process.off(name, interrupted)
+}
 
 // paths is only a tsconfig.json setting, so each check writes one for its file, where only this user can read it; a type that never terminates is stopped at the time limit.
 async function runTsc({ compilerOptions, file, timeout }: { compilerOptions: object; file: string; timeout: number }): Promise<Tsc> {
   const config = mkdtempSync(join(tmpdir(), 'threejam-check-'))
-  checking.add(config)
+  startChecking(config)
   try {
     const project = join(config, 'tsconfig.json')
     writeFileSync(project, JSON.stringify({ compilerOptions, files: [file] }), { mode: 0o600, flag: 'wx' })
@@ -542,7 +572,7 @@ async function runTsc({ compilerOptions, file, timeout }: { compilerOptions: obj
       tsc.stdin.end()
     })
   } finally {
-    checking.delete(config)
+    stopChecking(config)
     rmSync(config, { recursive: true, force: true })
   }
 }

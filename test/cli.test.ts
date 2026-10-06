@@ -593,6 +593,22 @@ test("an MCP server whose client closes stdin gives the calls still running 2 s 
   assert.deepEqual({ left, chrome, answered }, { left: [], chrome: [], answered: [] })
 })
 
+test('check stopped by Ctrl-C, SIGTERM, or the SIGHUP of a closed terminal during its type check removes the folder the type check reads, then ends by that signal, even when the terminal sends SIGHUP twice at once', { skip: process.platform === 'win32' && 'Windows has neither a SIGTERM or SIGHUP a process can catch nor FIFOs' }, async (t) => {
+  const stalled = stalledCheck()
+  const stop = async (signal: NodeJS.Signals, times: number) => {
+    const tmp = mkdtempSync(join(TMP, 'tmp-'))
+    made.push(tmp)
+    const check = spawnCli(['check', stalled, '--timeout', '60'], t.signal, ROOT, { ...process.env, TMPDIR: tmp })
+    const typecheck = await started(check.pid, /--listFiles/)
+    assert.match(readdirSync(tmp).join(), /^threejam-check-\w+$/)
+    for (let i = 0; i < times; i++) check.kill(signal)
+    await until(`check to end on ${signal}`, () => check.exitCode !== null || check.signalCode !== null)
+    assert.deepEqual([check.exitCode, check.signalCode, readdirSync(tmp)], [null, signal, []])
+    await until(`the type check to end with check on ${signal}`, () => ended(typecheck))
+  }
+  await Promise.all([stop('SIGINT', 1), stop('SIGTERM', 1), stop('SIGHUP', 1), stop('SIGHUP', 2)])
+})
+
 test('mcp add registers node with this CLI from a clone or an install, and npx for a copy in npx\'s cache or an install on a path with a space', () => {
   const command = (cli: string) => mcpCommand({ cli, version: '1.2.3' })
   assert.equal(command('/work/threejam/src/cli.ts'), 'node /work/threejam/src/cli.ts --mcp')
@@ -784,10 +800,23 @@ test('a shot whose work throws before returning a promise fails with that error 
   assert.deepEqual(isolated(lines), { ended: 0, printed: 'thrown\n0 0 0\n' })
 })
 
-test('when something else in the process takes the signal a shot ends it by, the shots that start once the stopped ones are done run as usual', { skip: process.platform === 'win32' && 'on Windows shot exits, which nothing can take' }, () => {
+test('when something else in the process takes the signal a shot ends it by, the shots that start once the stopped ones are done run as usual', () => {
   const stopped = "void interruptible((killer) => new Promise((done) => killer.signal.addEventListener('abort', done))).finally(() => console.log('stopped settled'))"
   const lines = ["process.on('SIGTERM', () => {})", stopped, TERM, 'await new Promise((done) => setTimeout(done, 100))', "console.log(await interruptible(async () => 'later ran'))"]
   assert.deepEqual(isolated(lines), { ended: 0, printed: 'later ran\n' })
+})
+
+test("a signal during a type check and a shot removes the type check's folder, waits for the shot to clean up, then ends the process as the signal would", () => {
+  const tmp = mkdtempSync(join(TMP, 'tmp-'))
+  made.push(tmp)
+  const lines = [
+    `import { typecheck } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'load.ts')).href)}`,
+    `Object.assign(process.env, { TMPDIR: ${JSON.stringify(tmp)}, TMP: ${JSON.stringify(tmp)}, TEMP: ${JSON.stringify(tmp)} })`,
+    `void typecheck({ file: ${JSON.stringify(join(ROOT, slowCheck(), 'game.ts'))}, dom: false, timeout: 60 }).catch(() => {})`,
+    "void interruptible((killer) => new Promise((done) => killer.signal.addEventListener('abort', () => setTimeout(() => done(console.log('shot cleaned up')), 200))))",
+    TERM,
+  ]
+  assert.deepEqual({ ...isolated(lines), left: readdirSync(tmp) }, { ended: TERMINATED, printed: 'shot cleaned up\n', left: [] })
 })
 
 test('sim ends quietly when its reader closes the pipe', async (t) => {
