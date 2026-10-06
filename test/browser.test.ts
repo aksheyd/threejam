@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test, type TestContext } from 'node:test'
@@ -347,6 +347,46 @@ test('played by the mouse autopilot, Asteroids reaches the state sim computes in
     server.close()
     await page.dispose()
   }
+})
+
+// On every tick each key is down with a chance of 0.15, and the pointer lands anywhere on the screen, by the driver's own seeded numbers.
+const MONKEY = [
+  "import { KEYS, defineDriver } from 'threejam'",
+  '',
+  'export default defineDriver(() => ({ random }) => ({ keys: KEYS.filter(() => random() < 0.15), pointer: { x: random() * 4 - 2, y: random() * 3 - 1.5 } }))',
+  '',
+].join('\n')
+
+test('every example game, played by a seeded random driver for 1500 ticks with each of two seeds, reaches the state and sounds sim computes in the page', { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'monkey-'))
+  made.push(dir)
+  const driver = join(dir, 'monkey.ts')
+  writeFileSync(driver, MONKEY)
+  const games = readdirSync(join(ROOT, 'games'), { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? [join('games', entry.name)] : []))
+  assert.ok(games.length >= 7, games.join(', '))
+  const seeds = [3, 11]
+  await Promise.all(
+    games.map(async (game) => {
+      const [runs, page] = await Promise.all([Promise.all(seeds.map((seed) => runGame(game, { ticks: 1500, seed, driver }))), buildPage({ dir: game, config: { mode: 'shot' }, driver })])
+      const server = await serve({ page })
+      try {
+        const tab = await newTab(t)
+        await openPage(tab, server.url)
+        await tab.waitForFunction('window.engine !== undefined')
+        for (const [i, seed] of seeds.entries()) {
+          const actual = await tab.evaluate((s) => {
+            window.engine.reset({ seed: s, drive: true })
+            window.engine.advanceTo(1500)
+            return { entities: window.engine.state(), sounds: window.engine.sounds() }
+          }, seed)
+          assert.deepEqual(actual, { entities: runs[i].snapshots[0].entities, sounds: runs[i].sounds }, `${game} with seed ${seed}`)
+        }
+      } finally {
+        server.close()
+        await page.dispose()
+      }
+    }),
+  )
 })
 
 // Every error the page reports, and every address it asks for.
