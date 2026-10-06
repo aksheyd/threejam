@@ -57,3 +57,44 @@ export function reached(group: number, signal: NodeJS.Signals | 0): boolean {
     return false
   }
 }
+
+export interface Reply {
+  readonly id?: number
+  readonly result?: {
+    readonly serverInfo?: { readonly version: string }
+    readonly instructions?: string
+    readonly tools?: ReadonlyArray<{ readonly name: string; readonly inputSchema?: { readonly properties?: Record<string, { readonly description?: string }> } }>
+    readonly content?: ReadonlyArray<{ readonly text: string }>
+    readonly isError?: boolean
+  }
+}
+
+// The CLI as an MCP server, started like spawnCli, which a test sends requests to and reads the replies of by their ids.
+export function mcp(signal: AbortSignal, cwd = ROOT, env?: NodeJS.ProcessEnv) {
+  const server = spawnCli(['--mcp'], signal, cwd, env)
+  const exited = new Promise<[number | null, NodeJS.Signals | null]>((done) => server.once('exit', (code, by) => done([code, by])))
+  const waiting = new Map<number, (reply: Reply) => void>()
+  let buffered = ''
+  let next = 1
+  server.stdout.setEncoding('utf8')
+  server.stdout.on('data', (chunk: string) => {
+    const lines = (buffered + chunk).split('\n')
+    buffered = lines.pop() ?? ''
+    for (const line of lines.filter((l) => l.trim())) {
+      const reply: Reply = JSON.parse(line)
+      if (reply.id !== undefined) waiting.get(reply.id)?.(reply)
+    }
+  })
+  const send = (message: object) => server.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
+  const request = (method: string, params: object) =>
+    new Promise<Reply>((resolve) => {
+      const id = next++
+      waiting.set(id, resolve)
+      send({ id, method, params })
+    })
+  const ready = request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } }).then((reply) => {
+    send({ method: 'notifications/initialized' })
+    return reply
+  })
+  return { ready, request, notify: (method: string, params: object) => send({ method, params }), close: () => stopTree(server), kill: (signal: NodeJS.Signals) => server.kill(signal), end: () => server.stdin.end(), exited, pid: server.pid }
+}
