@@ -5,7 +5,7 @@ import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { LimitError, gameFailure, isSystemError, timeLimit } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
-import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, removeProfile, serve, type Server } from './serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, removeProfile, serve, tmpdirHint, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
 export interface ShotOptions {
@@ -65,11 +65,12 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
     const features = arg.slice('--disable-features='.length).split(',')
     return `--disable-features=${features.filter((feature) => feature !== 'IsolateSandboxedIframes').join(',')}`
   })
+  const env = temp === undefined ? chromeEnv() : { ...chromeEnv(), TMPDIR: temp, TMP: temp, TEMP: temp }
   try {
     return await puppeteer.launch({
       executablePath: chrome,
       pipe: true,
-      env: temp === undefined ? chromeEnv() : { ...chromeEnv(), TMPDIR: temp, TMP: temp, TEMP: temp },
+      env,
       protocolTimeout,
       signal,
       ignoreDefaultArgs: true,
@@ -78,8 +79,9 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
     })
   } catch (error) {
     // Over a pipe, a Chrome that exits as it starts only closes the connection, which Puppeteer reports with a TargetCloseError its types don't export.
-    const why = error instanceof Error && error.name === 'TargetCloseError' ? 'it exited as soon as it started' : firstLine(error)
-    throw new BrowserError(`Chrome at ${where} didn't start: ${why}; set CHROME_PATH to a working Chrome or Chromium`)
+    if (!(error instanceof Error && error.name === 'TargetCloseError')) throw new BrowserError(`Chrome at ${where} didn't start: ${firstLine(error)}; set CHROME_PATH to a working Chrome or Chromium`)
+    const hint = tmpdirHint(env.TMPDIR)
+    throw new BrowserError(`Chrome at ${where} didn't start: it exited as soon as it started${hint === undefined ? '; set CHROME_PATH to a working Chrome or Chromium' : `, ${hint}`}`)
   }
 }
 

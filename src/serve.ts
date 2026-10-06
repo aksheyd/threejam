@@ -296,6 +296,17 @@ export function chromeEnv(): Record<string, string> {
   return env
 }
 
+// Chrome on Linux binds its socket at TMPDIR/org.chromium.Chromium.XXXXXX/SingletonSocket, or in com.google.Chrome.XXXXXX for Google Chrome, and exits as it starts when that path passes the 107 bytes Linux allows a socket's.
+const LONGEST_TMPDIR = 107 - '/org.chromium.Chromium.XXXXXX/SingletonSocket'.length
+
+// Why a Chrome that exited as it started did, and what to do, when its TMPDIR leaves its socket no room.
+export function tmpdirHint(tmpdir: string | undefined): string | undefined {
+  if (process.platform !== 'linux' || tmpdir === undefined) return undefined
+  const bytes = Buffer.byteLength(tmpdir.replace(/\/+$/, ''))
+  if (bytes <= LONGEST_TMPDIR) return undefined
+  return `as Chrome on Linux does in a TMPDIR over ${LONGEST_TMPDIR} bytes, where its socket goes, and ${tmpdir} is ${bytes}; set TMPDIR to a shorter folder, like /tmp`
+}
+
 // Chrome keeps the last of a switch it's given twice, and a wrapper script puts its own first, so this comes after them: Chrome opens no DevTools port at -1.
 export const NO_DEVTOOLS_PORT = '--remote-debugging-port=-1'
 
@@ -340,16 +351,28 @@ export function openWindow(url: string): AppWindow | undefined {
   }
   const profile = mkdtempSync(join(tmpdir(), 'threejam-profile-'))
   const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628', NO_DEVTOOLS_PORT]
+  const env = chromeEnv()
   // Every process Chrome starts shares its stderr, so close comes once none is left to write to the profile.
-  const child = spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'], env: chromeEnv() })
+  const child = spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'], env })
   child.stderr?.resume()
+  let closing = false
+  child.once('exit', (code, signal) => {
+    const hint = closing || (code === 0 && signal === null) ? undefined : tmpdirHint(env.TMPDIR)
+    if (hint !== undefined) process.stderr.write(`Chrome at ${chrome} exited as soon as it started, ${hint}.\n`)
+  })
   const exited = new Promise<void>((done) => child.once('exit', () => done()))
   child.once('error', (error) => {
     process.stderr.write(`Couldn't start ${chrome} (${error.message}), so the default browser opens the game.\n`)
     openBrowser(url)
   })
   child.once('close', () => removeProfile(profile))
-  return { exited, close: () => void child.kill() }
+  return {
+    exited,
+    close: () => {
+      closing = true
+      child.kill()
+    },
+  }
 }
 
 // Chrome on macOS and Linux keeps its socket in a folder of its own in the temporary folder, linked from its profile, and removes it when it closes but not when it's killed or sent a signal; a TMPDIR of ours would lengthen the socket's path, and past 107 bytes Chrome on Linux won't start.

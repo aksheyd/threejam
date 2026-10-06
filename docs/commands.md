@@ -38,6 +38,8 @@ Every command that loads a game bundles it first, for the sandbox described belo
 
 `shot` and `run` start Chrome with no DevTools port and only the environment variables a browser needs. ThreeJam's switches come last and override a wrapper script's, like the `google-chrome` launchers on Linux, but a wrapper can still add switches that have no opposite, like `--no-sandbox`.
 
+On Linux, Chrome can't start in a `TMPDIR` over 62 bytes, or 66 for Google Chrome, since the socket it makes there would pass the 107 bytes Linux allows; `shot` and `run` then say to set `TMPDIR` to a shorter folder, like `/tmp`.
+
 ## Output and errors
 
 Output is [TOON](https://toonformat.dev) by default, `--format json` switches it, and every command takes `--help` and `--schema`. A failure prints a `code` and a one-line `message` and exits 1, though `run`, whose output is a stream, prints one it meets once it has started, like a game that doesn't build, as `Error (CODE): message`; for a problem in a game file, the message starts with `path:line:` and ends with when it happened, like `(in update at tick 61)`. The code says what went wrong:

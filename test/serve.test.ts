@@ -270,6 +270,31 @@ test("shot's Chrome starts in a TMPDIR with no room for a folder of shot's, sinc
   assert.deepEqual({ length: temp.length, status: result.status, printed: result.stdout.trim(), left: readdirSync(temp) }, { length: 50, status: 0, printed: 'ok', left: [] }, result.stderr)
 })
 
+test("on Linux, a TMPDIR too long for Chrome's socket gets shot and run's window to say to set a shorter one, and to remove their own folders from it", { skip: (!chrome && 'needs Chrome') || (process.platform !== 'linux' && "the cap is Linux's"), timeout: 60_000 }, () => {
+  // At least 70 bytes, too long for Google Chrome as well as Chromium.
+  const temp = mkdtempSync(join(tmpdir(), 'threejam-'.padEnd(70 - tmpdir().length - 7, 'x')))
+  made.push(temp)
+  const dir = mkdtempSync(join(TMP, 'long-'))
+  made.push(dir)
+  // Headless, so the window needs no display.
+  const window = wrapper(dir, ['--headless=new'])
+  const script = [
+    `import { shoot } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'shot.ts')).href)}`,
+    `import { openWindow } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'serve.ts')).href)}`,
+    `await shoot(${JSON.stringify({ dir: 'games/pong', at: [1], out: join(dir, 'frame.png') })}).catch((error) => console.log(error.message))`,
+    "await openWindow('http://127.0.0.1:9/')?.exited",
+  ].join('\n')
+  const env = { ...process.env, TMPDIR: temp, TEMP: temp, TMP: temp, CHROME_PATH: window }
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: ROOT, env, encoding: 'utf8', timeout: 45_000, killSignal: 'SIGKILL' })
+  const hint = `as Chrome on Linux does in a TMPDIR over 62 bytes, where its socket goes, and ${temp} is ${Buffer.byteLength(temp)}; set TMPDIR to a shorter folder, like /tmp`
+  // Chrome makes its socket's folder before it finds the path too long, and stops before its profile names the folder.
+  const left = readdirSync(temp).filter((name) => !/^(com\.google\.Chrome|org\.chromium\.Chromium)\.\w{6}$/.test(name))
+  assert.deepEqual(
+    { status: result.status, shot: result.stdout.trim(), run: result.stderr.trim(), left },
+    { status: 0, shot: `Chrome at ${window} didn't start: it exited as soon as it started, ${hint}`, run: `Chrome at ${window} exited as soon as it started, ${hint}.`, left: [] },
+  )
+})
+
 test('a Chrome that exits as it starts fails with one line naming it, though over a pipe its own output is lost, and a folder or a file that runs nothing says so', { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {
   const dir = mkdtempSync(join(TMP, 'exits-'))
   made.push(dir)
