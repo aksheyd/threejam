@@ -17,6 +17,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - `run` and `shot` now refuse a game that imports a CSS file, as `check` and `export` already did. Before, they bundled it into a file the page never loaded.
 - Esc quits `run` from a page that says why the game didn't load, as it does from one that plays.
 - A save that doesn't build says why on `run`'s page, as `AGENTS.md` says, and not only in the terminal, until a save that builds reloads the game.
+- Closing the terminal that `run` is in closes its window and removes the window's profile, as Ctrl-C does. Before, `run` stopped at once and left the profile and Chrome's socket folder in the temporary folder.
 
 ## [0.0.4](https://github.com/aksheyd/threejam/compare/v0.0.3...v0.0.4) - 2026-10-06
 

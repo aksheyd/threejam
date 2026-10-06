@@ -352,6 +352,8 @@ function browserPaths(): string[] {
 
 export interface AppWindow {
   readonly exited: Promise<void>
+  // Settles once every process Chrome started is gone, and its profile with them.
+  readonly closed: Promise<void>
   close(): void
 }
 
@@ -377,9 +379,15 @@ export function openWindow(url: string): AppWindow | undefined {
     process.stderr.write(`Couldn't start ${chrome} (${error.message}), so the default browser opens the game.\n`)
     openBrowser(url)
   })
-  child.once('close', () => removeProfile(profile))
+  const closed = new Promise<void>((done) =>
+    child.once('close', () => {
+      removeProfile(profile)
+      done()
+    }),
+  )
   return {
     exited,
+    closed,
     close: () => {
       closing = true
       child.kill()
@@ -433,10 +441,14 @@ export async function* play({ dir, seed = randomInt(2 ** 31), window }: { dir: s
   void app?.exited.then(() => quit())
   process.once('SIGINT', () => quit())
   process.once('SIGTERM', () => quit())
+  // A terminal that closes hangs up on run twice, from its shell and from the kernel, and the second must not end run before it has closed its window.
+  process.on('SIGHUP', () => quit())
   yield `Playing ${dir} with seed ${seed} at ${server.url}${window ? '. Esc quits, and saving a file replays the game with the same seed.' : ''}`
   await done
   app?.close()
   server.close()
   await page.dispose()
+  // Writing to a terminal that's gone fails and ends run, so the window and its profile go first.
+  await app?.closed
   yield 'Stopped.'
 }

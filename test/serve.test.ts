@@ -333,11 +333,11 @@ test('commands other than shot start without loading Puppeteer', () => {
   assert.equal(result.status, 0, result.stdout + result.stderr)
 })
 
-// A launcher like Linux's google-chrome scripts, which put their own switches before ThreeJam's; this one also notes what it was given.
+// A launcher like Linux's google-chrome scripts, which put their own switches before ThreeJam's; this one also notes what it was given, and its process ID, which Chrome takes over.
 function wrapper(dir: string, switches: readonly string[]): string {
   const sh = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`
   const file = join(dir, 'chrome')
-  const lines = ['#!/bin/sh', `env > ${sh(join(dir, 'env'))}`, `printf '%s\\n' "$@" > ${sh(join(dir, 'args'))}`, `exec ${[chrome ?? 'no Chrome', ...switches].map(sh).join(' ')} "$@"`]
+  const lines = ['#!/bin/sh', `echo $$ > ${sh(join(dir, 'pid'))}`, `env > ${sh(join(dir, 'env'))}`, `printf '%s\\n' "$@" > ${sh(join(dir, 'args'))}`, `exec ${[chrome ?? 'no Chrome', ...switches].map(sh).join(' ')} "$@"`]
   writeFileSync(file, `${lines.join('\n')}\n`, { mode: 0o755 })
   return file
 }
@@ -439,4 +439,60 @@ test("run's window opens no DevTools port even when a wrapper script asks for on
     else process.env.CHROME_PATH = CHROME_PATH
     delete process.env.THREEJAM_CANARY
   }
+})
+
+// Whether any process is left in a process group.
+function alive(group: number): boolean {
+  try {
+    process.kill(-group, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+test("closing the terminal that run is in closes its window and removes the window's profile before run stops, as Ctrl-C does", wrapped, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'hangup-'))
+  made.push(dir)
+  // The system's temporary folder, since one deep in a checkout can be too long for Chrome on Linux to start in.
+  const temp = mkdtempSync(join(tmpdir(), 'threejam-hangup-'))
+  made.push(temp)
+  let loaded = false
+  const site = createServer((incoming, response) => {
+    if (incoming.url === '/loaded') loaded = true
+    response.writeHead(204).end()
+  })
+  await new Promise<void>((listening) => site.listen(0, '127.0.0.1', listening))
+  t.after(() => site.close())
+  const address = site.address()
+  if (address === null || typeof address === 'string') throw new Error('the test server has no port')
+  // The game's view tells the test once the window has loaded the game.
+  const view = `export function init(): void {\n  void fetch('http://127.0.0.1:${address.port}/loaded', { mode: 'no-cors' })\n}\n`
+  // Headless, so the window needs no display.
+  const env = { ...process.env, CHROME_PATH: wrapper(dir, ['--headless=new']), TMPDIR: temp, TEMP: temp, TMP: temp }
+  const run = spawnCli(['run', folder({ 'game.ts': GAME, 'view.ts': view })], t.signal, ROOT, env)
+  const { pid } = run
+  assert.ok(pid)
+  const exited = new Promise((done) => run.once('close', done))
+  const hangUp = () => {
+    if (run.exitCode === null && run.signalCode === null) process.kill(pid, 'SIGHUP')
+  }
+  const pause = (ms: number) => new Promise((wait) => setTimeout(wait, ms))
+  await until('the window to load the game', () => loaded)
+  const { profile } = given(dir)
+  assert.ok(profile)
+  const socket = dirname(readlinkSync(join(profile, 'SingletonSocket')))
+  // A Chrome that a closing terminal hangs up on can take 5 s to exit, which a stopped one stands in for.
+  const window = Number(readFileSync(join(dir, 'pid'), 'utf8'))
+  process.kill(window, 'SIGSTOP')
+  // The terminal takes no more output, and it hangs up on run twice, from its shell and then from the kernel.
+  run.stdout.destroy()
+  hangUp()
+  await pause(100)
+  hangUp()
+  const stoppedFirst = await Promise.race([exited.then(() => true), pause(300).then(() => false)])
+  process.kill(window, 'SIGCONT')
+  await exited
+  assert.deepEqual({ stoppedFirst, profile: existsSync(profile), socket: existsSync(socket) }, { stoppedFirst: false, profile: false, socket: false })
+  await until("the window's Chrome to exit", () => !alive(pid))
 })
