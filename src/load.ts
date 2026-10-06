@@ -33,9 +33,17 @@ export interface GameFiles {
 export function gameFiles(dir: string): GameFiles {
   const folder = resolve(dir)
   if (!existsSync(folder) || !statSync(folder).isDirectory()) throw new UsageError(`${named(dir)} isn't a folder`)
-  const game = firstFile(folder, 'game')
+  const game = typescript(dir, 'game')
   if (game === undefined) throw new UsageError(`${named(dir)} has no game.ts`)
-  return { folder, game, view: firstFile(folder, 'view'), assets: assetsIn(folder) }
+  return { folder, game, view: typescript(dir, 'view'), assets: assetsIn(folder) }
+}
+
+// check can only type-check TypeScript, so a game.js or view.js without its .ts is refused instead of run unchecked or left out.
+function typescript(dir: string, stem: string): string | undefined {
+  const file = join(resolve(dir), `${stem}.ts`)
+  if (existsSync(file)) return file
+  if (existsSync(join(resolve(dir), `${stem}.js`))) throw new UsageError(`${named(dir)} has ${stem}.js, but ThreeJam reads only ${stem}.ts; rename it to ${stem}.ts`)
+  return undefined
 }
 
 // A path as given and, when it's relative, where it led, since an MCP server resolves one from wherever its client started it.
@@ -569,10 +577,6 @@ const HINTS: ReadonlyArray<readonly [RegExp, string]> = [
 function hinted(message: string): string {
   const hint = HINTS.find(([pattern]) => message.startsWith('Cannot find name') && pattern.test(message))
   return hint ? `${message.replace(/ Do you need.*$/, '')} Here, ${hint[1]}.` : message
-}
-
-function firstFile(folder: string, stem: string): string | undefined {
-  return [`${stem}.ts`, `${stem}.js`].map((name) => join(folder, name)).find((path) => existsSync(path))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -203,6 +203,18 @@ test('an error names the first file on its stack outside the engine, even one wh
   assert.equal(describe(thrown), `${relative(process.cwd(), game).replaceAll(sep, '/')}:6: boom`)
 })
 
+test("a game is TypeScript, so check and sim refuse a game.js, and a view.js beside a game.ts, saying to rename it", () => {
+  const source = game({ update: 'world.ball.x += 1' })
+  const js = folder({ 'game.js': source })
+  const message = `${js.replaceAll(sep, '/')} (${join(ROOT, js).replaceAll(sep, '/')}) has game.js, but ThreeJam reads only game.ts; rename it to game.ts`
+  for (const args of [['check', js], ['sim', js, '--ticks', '1']]) {
+    const { code, out } = threejam(...args, '--format', 'json')
+    assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'USAGE', message } })
+  }
+  const view = folder({ 'game.ts': source, 'view.js': 'export function draw() {}\n' })
+  assert.match(threejam('check', view).out, /^code: USAGE\nmessage: .*has view\.js, but ThreeJam reads only view\.ts; rename it to view\.ts"?\n$/)
+})
+
 test('a --driver file picks keys for sim from the typed world', () => {
   const driver = [
     "import type { Driver, EntitiesOf } from 'threejam'",
