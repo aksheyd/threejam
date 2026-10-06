@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import pong from '../games/pong/game.ts'
 import { simulate } from '../src/engine.ts'
-import { crashed, describe } from '../src/load.ts'
+import { crashed, describe, sandboxEnv } from '../src/load.ts'
 import { ENGINE, ROOT, VERSION, mcpCommand } from '../src/package.ts'
 import { findChrome } from '../src/serve.ts'
 import { callLimit, framePaths } from '../src/shot.ts'
@@ -86,7 +86,7 @@ function mcp(signal: AbortSignal, cwd = ROOT) {
     send({ method: 'notifications/initialized' })
     return reply
   })
-  return { ready, request, notify: (method: string, params: object) => send({ method, params }), close: () => stopTree(server), pid: server.pid }
+  return { ready, request, notify: (method: string, params: object) => send({ method, params }), close: () => stopTree(server), kill: (signal: NodeJS.Signals) => server.kill(signal), pid: server.pid }
 }
 
 test('check passes Pong, and sim prints exact state as JSON with the chosen fields', () => {
@@ -438,18 +438,55 @@ async function until(what: string, check: () => boolean, ms = 10_000): Promise<v
   }
 }
 
-test("closing a test's MCP server, or aborting its signal as a test that times out does, stops the server and the sandbox running a game for it, which would otherwise run on to its own time limit", { skip: process.platform === 'win32' && 'process groups are for macOS and Linux' }, async (t) => {
+// The process that parent started to run something matching what, once ps lists it on macOS and Linux.
+async function started(parent: number | undefined, what: RegExp): Promise<number> {
+  for (const deadline = Date.now() + 10_000; Date.now() < deadline; await new Promise((wait) => setTimeout(wait, 50))) {
+    const { stdout } = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,args='], { encoding: 'utf8' })
+    for (const line of stdout.split('\n')) {
+      const [pid, ppid, ...args] = line.trim().split(/\s+/)
+      if (Number(ppid) === parent && what.test(args.join(' '))) return Number(pid)
+    }
+  }
+  throw new Error(`gave up waiting for ${parent} to start a process matching ${what}`)
+}
+
+// ps still lists a process that has exited until it's reaped, as a zombie.
+function ended(pid: number): boolean {
+  const state = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim()
+  return state === '' || state.startsWith('Z')
+}
+
+// What Linux shows of a sandbox once its shell has become Node: its environment, but for the SHLVL=0 that bash's exec adds, and which descriptors are sockets, which should be only the server's 0 to 2.
+async function sandboxed(pid: number): Promise<{ env: string[]; sockets: number[] }> {
+  await until('the sandbox to become Node', () => realpathSync(`/proc/${pid}/exe`) === realpathSync(process.execPath))
+  const env = readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').filter((entry) => entry !== '' && entry !== 'SHLVL=0')
+  const sockets = readdirSync(`/proc/${pid}/fd`).filter((fd) => readlinkSync(`/proc/${pid}/fd/${fd}`).startsWith('socket:'))
+  return { env: env.sort(), sockets: sockets.map(Number).sort((a, b) => a - b) }
+}
+
+test("closing a test's MCP server, or aborting its signal as a test that times out does, stops the server and every process it started", { skip: process.platform === 'win32' && 'process groups are for macOS and Linux' }, async (t) => {
   const loop = folder({ 'game.ts': game({ update: 'for (;;) {}' }) })
   for (const end of ['close', 'abort'] as const) {
     const timedOut = new AbortController()
     const server = mcp(AbortSignal.any([t.signal, timedOut.signal]))
     await server.ready
     void server.request('tools/call', { name: 'sim', arguments: { dir: loop, ticks: 1, timeout: 60 } })
-    await until(`the server to start a sandbox before its ${end}`, () => inGroup(server.pid).length > 1)
+    const sandbox = await started(server.pid, /--permission/)
     if (end === 'close') server.close()
     else timedOut.abort()
-    await until(`the server and its sandbox to stop on its ${end}`, () => inGroup(server.pid).length === 0)
+    await until(`the server and its sandbox to stop on its ${end}`, () => inGroup(server.pid).length === 0 && ended(sandbox))
   }
+})
+
+test('an MCP server killed with SIGKILL takes the sandbox running a game with it, instead of leaving it to run on to its own time limit', { skip: process.platform === 'win32' && "Windows ends a process's children with it, since libuv puts each in a job object" }, async (t) => {
+  const loop = folder({ 'game.ts': game({ update: 'for (;;) {}' }) })
+  const server = mcp(t.signal)
+  await server.ready
+  void server.request('tools/call', { name: 'sim', arguments: { dir: loop, ticks: 1, timeout: 60 } })
+  const sandbox = await started(server.pid, /--permission/)
+  if (process.platform === 'linux') assert.deepEqual(await sandboxed(sandbox), { env: Object.entries(sandboxEnv()).map(([name, value]) => `${name}=${value}`).sort(), sockets: [0, 1, 2] })
+  server.kill('SIGKILL')
+  await until('the sandbox to end with its server', () => ended(sandbox))
 })
 
 test('mcp add registers node with this CLI from a clone or an install, and npx for a copy in npx\'s cache or an install on a path with a space', () => {

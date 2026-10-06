@@ -23,6 +23,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - On Windows, `shot`'s Chrome keeps its temporary files in its profile, which `shot` removes with it, instead of in `TEMP`, where a Chrome that `shot` killed could leave them.
 - When Chrome crashes during `shot`, `shot` waits for the processes Chrome started to exit before it removes Chrome's profile, since they can still write to it.
 - `shot` cleans up when it gets Ctrl-C, SIGTERM, or SIGHUP, even twice, as a closed terminal can send it: it removes its folders and Chrome's, then ends by the signal without writing anything, or on Windows exits with 128 plus the signal's number. Before, Ctrl-C ended it at once with exit code 130 and left those folders, SIGTERM made it fail with a `BROWSER_ERROR`, and an MCP server that got SIGTERM during a `shot` call kept running.
+- Killing an MCP server, or a command like `sim`, ends the sandbox running its game at once, even with SIGKILL. Before, on macOS and Linux, the sandbox ran on until its `--timeout`.
 
 ## [0.0.4](https://github.com/aksheyd/threejam/compare/v0.0.3...v0.0.4) - 2026-10-06
 

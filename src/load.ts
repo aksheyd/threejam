@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams, type SpawnSyncReturns } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { SourceMap } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -201,9 +201,25 @@ function child(settings: { key: string; bundle: string }): void {
 
 const CHILD = `(${child.toString()})(${JSON.stringify({ key: SANDBOX, bundle: BUNDLE })})`
 
+const SHELL = '/bin/sh'
+// The shell forks a watcher into the child's new process group, then becomes the child. Only this process holds the other end of the watcher's pipe, so it closes when this process ends, however it ends, and the watcher then kills its group, which lasts as long as the watcher does, so the kill can't reach another process.
+// kill 0 is safe only because detached gives the shell a session and process group of its own; without it, the watcher would kill whoever started this process.
+// A shell also exports PWD, which the child isn't given; bash's exec adds SHLVL=0, which tells it nothing. fd 3 closes on a line of its own, since bash 3.2, macOS's sh, keeps a copy of it at fd 10 through exec "$@" 3<&-.
+const TIED = '(read -r _ <&3; kill -KILL 0) </dev/null >/dev/null 2>&1 &\nunset PWD\nexec 3<&-\nexec "$@"'
+
+// A child that ends when this process does, even by SIGKILL, which on macOS and Linux would otherwise leave it running. Windows does this already: libuv puts every child in a job object that ends with this process. A system with no /bin/sh still starts the child, untied.
+function spawnTied(command: string, args: readonly string[], options: { readonly env?: NodeJS.ProcessEnv; readonly cwd?: string }): ChildProcessWithoutNullStreams {
+  if (process.platform === 'win32' || !existsSync(SHELL)) return spawn(command, args, { ...options, stdio: 'pipe', windowsHide: true })
+  const tied = spawn(SHELL, ['-c', TIED, 'sh', command, ...args], { ...options, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], detached: true })
+  // Once the child has exited, closing the watcher's pipe ends the watcher, alone in the group by then.
+  const release = () => void tied.stdio[3]?.destroy()
+  tied.once('exit', release).once('error', release)
+  return tied
+}
+
 function inChild({ code, request, timeout }: { code: string; request: string; timeout: number }): Promise<string> {
   return new Promise((done, fail) => {
-    const runner = spawn(process.execPath, [...SANDBOX_FLAGS, '-e', CHILD], { env: sandboxEnv(), stdio: 'pipe', windowsHide: true })
+    const runner = spawnTied(process.execPath, [...SANDBOX_FLAGS, '-e', CHILD], { env: sandboxEnv() })
     const out: Buffer[] = []
     const errors: Buffer[] = []
     let bytes = 0
