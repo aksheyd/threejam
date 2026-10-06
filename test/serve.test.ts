@@ -184,9 +184,9 @@ test('a page bundles the files in its game\'s folder but refuses one from outsid
     new RegExp(`game\\.ts:1: can't bundle "${specifier.replaceAll('.', '\\.')}", which is .*${file.replaceAll('.', '\\.')}: a game may import only its own folder and ThreeJam's files$`)
 
   game("import { secret } from '../outside/secret.ts'", 'secret')
-  await assert.rejects(buildPage({ dir, config: { mode: 'shot' } }), { name: 'UsageError', message: refused('../outside/secret.ts', 'outside/secret.ts') })
+  await assert.rejects(buildPage({ dir, config: { mode: 'shot' } }), { name: 'BuildError', message: refused('../outside/secret.ts', 'outside/secret.ts') })
   const out = join(root, 'game.html')
-  await assert.rejects(exportGame({ dir, out }), { name: 'UsageError', message: refused('../outside/secret.ts', 'outside/secret.ts') })
+  await assert.rejects(exportGame({ dir, out }), { name: 'BuildError', message: refused('../outside/secret.ts', 'outside/secret.ts') })
   assert.equal(existsSync(out), false)
 
   game("import data from '../outside/secret.json'", 'data.token')
@@ -226,7 +226,7 @@ test("a page's driver may import from its own folder, but its game may not, as i
   }
   writeFileSync(join(dir, 'game.ts'), `import { secret } from '../bot/secret.ts'\n${GAME.replace('w: 0.1,', 'w: 0.1, label: secret,')}`)
   await assert.rejects(buildPage({ dir, config: { mode: 'shot' }, driver }), {
-    name: 'UsageError',
+    name: 'BuildError',
     message: /game\.ts:1: can't bundle "\.\.\/bot\/secret\.ts", which is .*bot\/secret\.ts: a game may import only its own folder and ThreeJam's files$/,
   })
 })

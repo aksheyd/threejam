@@ -4,10 +4,11 @@ import { SourceMap } from 'node:module'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { getSystemErrorMap } from 'node:util'
 import * as esbuild from 'esbuild'
 import { isImageFile, isSoundFile } from './assets.ts'
 import { confinePlugin, confineRoots, real, within } from './confine.ts'
-import { RunError, UsageError, type Phase } from './errors.ts'
+import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, type Phase } from './errors.ts'
 import { ENGINE, NAME, ROOT, TYPES, engineFile, manifestsAbove } from './package.ts'
 import { SANDBOX, type Failure, type Place, type Reply, type Request, type Stage, type Thrown } from './sandbox.ts'
 import type { LogEntry, Snapshot, SoundEntry } from './types.ts'
@@ -125,7 +126,7 @@ async function bundle(files: GameFiles, driver: string | undefined): Promise<{ c
       plugins,
     })
     .catch((failure: unknown) => {
-      throw new UsageError(buildMessage(failure))
+      throw new BuildError(buildMessage(failure))
     })
   const script = result.outputFiles.find((file) => file.path.endsWith('.js'))
   const map = result.outputFiles.find((file) => file.path.endsWith('.map'))
@@ -205,13 +206,22 @@ function inChild({ code, request, timeout }: { code: string; request: string; ti
       clearTimeout(timer)
       if (stopped !== undefined) fail(stopped)
       else if (status === 0 && bytes > 0) done(Buffer.concat(out).toString('utf8'))
-      else {
-        const last = Buffer.concat(errors).toString('utf8').trim().split(/\r?\n/).filter(Boolean).at(-1)
-        fail(new Error(`the sandbox running the game stopped with ${signal ?? `exit code ${status}`}${last ? `: ${last.slice(0, 300)}` : ''}`))
-      }
+      else fail(crashed(Buffer.concat(errors).toString('utf8'), signal ?? `exit code ${status}`))
     })
     runner.stdin.end(JSON.stringify({ code, request, timeout }))
   })
+}
+
+// V8 says why it stopped a process before printing its native stack, whose lines mean nothing to a game's author.
+export function crashed(stderr: string, how: string): Error {
+  if (stderr.includes('JavaScript heap out of memory')) return gameFailure('the game ran out of memory; look for a list or a loop that keeps growing')
+  const last = stderr.split('----- Native stack trace -----', 1)[0].split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1)
+  return new Error(`the sandbox running the game stopped with ${how}${last ? `: ${last.slice(0, 300)}` : ''}`)
+}
+
+// A failure the game caused that ThreeJam noticed outside the game's code, so no line in the game's files is to blame.
+export function gameFailure(message: string): GameError {
+  return Object.assign(new GameError(message), { stack: '' })
 }
 
 // The child gets none of our environment, and runs in UTC and en-US, which the guard gives game code anyway, so sim reads no machine's time zone or language even where the guard might miss one.
@@ -234,7 +244,7 @@ function failed(failure: Failure, map: SourceMap, seconds: number): Error {
     case 'timeout':
       return new LimitError('TIMEOUT', `the game ran past the ${seconds} s time limit; ${MORE_TIME} (${placed(failure.at)})`)
     case 'lost':
-      return new Error("the sandbox couldn't send the run back: the game changed built-in objects that ThreeJam's engine uses")
+      return gameFailure("the sandbox couldn't send the run back: the game changed built-in objects that ThreeJam's engine uses")
     default: {
       const _exhaustive: never = failure
       return _exhaustive
@@ -242,10 +252,10 @@ function failed(failure: Failure, map: SourceMap, seconds: number): Error {
   }
 }
 
-// An error as the game threw it, with its stack pointed at the files it came from.
-function rebuilt(thrown: Thrown, map: SourceMap): Error {
-  if (thrown.kind === 'value') return Object.assign(new Error(thrown.text), { stack: '' })
-  const error = new Error(thrown.message)
+// An error as the game threw it, a GameError under the name it had, with its stack pointed at the files it came from.
+function rebuilt(thrown: Thrown, map: SourceMap): GameError {
+  if (thrown.kind === 'value') return gameFailure(thrown.text)
+  const error = new GameError(thrown.message)
   error.name = thrown.name
   const frames = new RegExp(`${BUNDLE.replaceAll('.', '\\.')}:(\\d+):(\\d+)`, 'g')
   error.stack = thrown.stack.replace(frames, (frame, line: string, column: string) => {
@@ -269,7 +279,7 @@ function parseReply(text: string): Reply {
     }
   }
   if (isRecord(value) && value.ok === false && isFailure(value.failure)) return { ok: false, failure: value.failure }
-  throw new Error("the sandbox sent back a reply ThreeJam can't read")
+  throw gameFailure("the sandbox sent back a reply ThreeJam can't read: the game may have changed built-in objects, like JSON, that ThreeJam's engine uses")
 }
 
 function listOf<T>(value: unknown, item: (each: unknown) => each is T): value is T[] {
@@ -355,8 +365,8 @@ export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: stri
     paths: { [NAME]: [TYPES], ...(three === undefined ? {} : { three: [join(three, 'index.d.ts')] }) },
   }
   const result = runTsc({ compilerOptions, file, timeout })
-  if (hasCode(result.error, 'ETIMEDOUT')) return [`the type check ran past the ${timeout} s time limit; a type in the game may not terminate`]
-  if (result.error) return [`the TypeScript check failed: ${result.error.message}`]
+  if (hasCode(result.error, 'ETIMEDOUT')) throw new LimitError('TIMEOUT', `the type check ran past the ${timeout} s time limit; a type in the game may not terminate, or allow more time with --timeout`)
+  if (result.error) throw new Error(`the TypeScript check couldn't run: ${result.error.message}`)
   const errors: string[] = []
   const read: string[] = []
   const other: string[] = []
@@ -385,7 +395,7 @@ export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: stri
   const declarations = declarationFolders()
   const exempt = (path: string) => roots.some((root) => within(root, path)) || (/\.d\.[cm]?ts$/.test(path) && declarations.some((root) => within(root, path)))
   const stray = read.map(real).find((path) => !exempt(path))
-  if (stray !== undefined) throw new UsageError(`${shownPath(stray)} is outside the folder; an import must come from the game's folder or ThreeJam's own files`)
+  if (stray !== undefined) throw new BuildError(`${shownPath(stray)} is outside the folder; an import must come from the game's folder or ThreeJam's own files`)
   if (result.status !== 0 && !/error TS\d+/.test(result.stdout)) {
     errors.push(`the TypeScript check failed: ${`${other.join('\n')}${result.stderr}`.trim() || `exit ${result.status}`}`)
   }
@@ -458,16 +468,19 @@ function typescriptEntry(): string {
   try {
     manifest = fileURLToPath(import.meta.resolve('typescript/package.json'))
   } catch {
-    throw new UsageError(`check needs the typescript package, which ${NAME} depends on; run npm install again`)
+    throw new Error(`check needs the typescript package, which ${NAME} depends on; run npm install again`)
   }
   const parsed: unknown = JSON.parse(readFileSync(manifest, 'utf8'))
   const tsc = isRecord(parsed) && isRecord(parsed.bin) ? parsed.bin.tsc : undefined
-  if (typeof tsc !== 'string') throw new UsageError(`${manifest} names no tsc to run`)
+  if (typeof tsc !== 'string') throw new Error(`${manifest} names no tsc to run`)
   return join(dirname(manifest), tsc)
 }
 
 export function describe(error: unknown): string {
-  if (error instanceof UsageError || error instanceof LimitError) return error.message
+  if (error instanceof UsageError || error instanceof LimitError || error instanceof BuildError || error instanceof BrowserError || error instanceof IoError) {
+    return error.message
+  }
+  if (isSystemError(error)) return systemMessage(error)
   const inner = error instanceof RunError ? error.cause : error
   const where = locate(inner)
   const text = !(inner instanceof Error)
@@ -477,6 +490,23 @@ export function describe(error: unknown): string {
       : `${inner.name}: ${inner.message}`
   const line = where === undefined ? text : `${where}: ${text}`
   return error instanceof RunError ? `${line} (${during(error.phase, error.tick)})` : line
+}
+
+interface SystemError extends Error {
+  readonly code: string
+  readonly syscall: string
+  readonly errno?: unknown
+  readonly path?: unknown
+}
+
+// What Node's fs and child_process throw when the OS refuses, which names the system call and usually the path.
+export function isSystemError(error: unknown): error is SystemError {
+  return error instanceof Error && typeof Reflect.get(error, 'code') === 'string' && typeof Reflect.get(error, 'syscall') === 'string'
+}
+
+function systemMessage({ code, syscall, errno, path }: SystemError): string {
+  const reason = (typeof errno === 'number' ? getSystemErrorMap().get(errno)?.[1] : undefined) ?? code
+  return `couldn't ${syscall}${typeof path === 'string' ? ` ${path.replaceAll(sep, '/')}` : ''}: ${reason}`
 }
 
 function during(phase: Phase, tick: number): string {

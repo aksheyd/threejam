@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
-import { describe } from '../src/load.ts'
+import { crashed, describe } from '../src/load.ts'
 import { ENGINE, ROOT, VERSION, mcpCommand } from '../src/package.ts'
 
 const CLI = join(ROOT, 'src', 'cli.ts')
@@ -15,7 +15,11 @@ const made: string[] = []
 after(() => made.forEach((dir) => rmSync(dir, { recursive: true, force: true })))
 
 function threejam(...args: string[]) {
-  const result = spawnSync(process.execPath, [CLI, ...args], { cwd: ROOT, encoding: 'utf8' })
+  return threejamWith({}, ...args)
+}
+
+function threejamWith(env: Record<string, string>, ...args: string[]) {
+  const result = spawnSync(process.execPath, [CLI, ...args], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, ...env } })
   return { code: result.status, out: result.stdout + result.stderr }
 }
 
@@ -110,6 +114,32 @@ test('type errors in game.ts and view.ts and runtime errors name the file and li
   const clock = threejam('sim', folder({ 'game.ts': game({ update: 'world.ball.x = Math.random()' }) }), '--ticks', '5')
   assert.equal(clock.code, 1)
   assert.match(clock.out, /message: "?test\/\.tmp\/game-\w+\/game\.ts:6: Math\.random\(\) would make runs differ; .* \(in update at tick 1\)/)
+})
+
+test("a failure's code says what went wrong: BUILD_ERROR for a syntax error from sim and check alike, IO_ERROR for a folder new can't make, and BROWSER_ERROR without Chrome", () => {
+  const broken = folder({ 'game.ts': game({ update: 'world.ball.x += ;' }) })
+  const sim = threejam('sim', broken, '--ticks', '1')
+  assert.match(sim.out, /^code: BUILD_ERROR\nmessage: "test\/\.tmp\/game-\w+\/game\.ts:6: Unexpected \\";\\""\n$/)
+  assert.deepEqual(threejam('check', broken), sim)
+
+  const parent = mkdtempSync(join(TMP, 'io-'))
+  made.push(parent)
+  writeFileSync(join(parent, 'file'), '')
+  assert.match(threejam('new', join(parent, 'file', 'game')).out, /^code: IO_ERROR\n/)
+  if (process.platform !== 'win32' && process.getuid?.() !== 0) {
+    mkdirSync(join(parent, 'locked'), { mode: 0o500 })
+    assert.match(threejam('new', join(parent, 'locked', 'game')).out, /^code: IO_ERROR\nmessage: .*permission denied/)
+  }
+
+  const shot = threejamWith({ CHROME_PATH: join(parent, 'no-chrome') }, 'shot', 'games/pong', '--at', '1', '-o', join(parent, 'frame.png'))
+  assert.match(shot.out, /^code: BROWSER_ERROR\nmessage: .*no-chrome/)
+})
+
+test("a sandbox V8 stopped for want of memory is the game's failure, and another stop names the last line before V8's native stack", () => {
+  const frames = '----- Native stack trace -----\n 1: 0xb8d0a3 node::Abort() [node]\n 2: 0x7f9116e3ea76\n'
+  const memory = crashed(`FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\n${frames}`, 'SIGABRT')
+  assert.deepEqual([memory.name, memory.message], ['GameError', 'the game ran out of memory; look for a list or a loop that keeps growing'])
+  assert.equal(crashed(`Segmentation fault\n${frames}`, 'SIGSEGV').message, 'the sandbox running the game stopped with SIGSEGV: Segmentation fault')
 })
 
 test('an error names the first file on its stack outside the engine, even one whose path has a space, and no place when only Node internals are there', () => {

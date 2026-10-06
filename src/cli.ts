@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { basename } from 'node:path'
 import { Cli, z } from 'incur'
-import { UsageError } from './errors.ts'
+import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, type Code } from './errors.ts'
 import { exportGame } from './export.ts'
-import { DEFAULT_TIMEOUT, LimitError, describe, gameFiles, runGame, typecheck } from './load.ts'
+import { DEFAULT_TIMEOUT, LimitError, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
 import { createGame } from './new.ts'
 import { VERSION, mcpCommand } from './package.ts'
 import { bundlePage, play } from './serve.ts'
@@ -55,9 +55,22 @@ const MCP_REPLY_LIMIT = 100_000
 const serving = process.argv.slice(2).includes('--mcp')
 
 function failure(error: unknown) {
-  const code = error instanceof UsageError ? 'USAGE' : error instanceof LimitError ? error.code : 'GAME_ERROR'
-  const message = describe(error)
+  return failed(codeOf(error), describe(error))
+}
+
+function failed(code: Code, message: string) {
   return { code, message: serving && message.length > MCP_REPLY_LIMIT ? `${message.slice(0, MCP_REPLY_LIMIT)}... (cut at ${MCP_REPLY_LIMIT} characters)` : message }
+}
+
+// Anything else is a failure of ThreeJam itself.
+function codeOf(error: unknown): Code {
+  if (error instanceof UsageError) return 'USAGE'
+  if (error instanceof BuildError) return 'BUILD_ERROR'
+  if (error instanceof LimitError) return error.code
+  if (error instanceof RunError || error instanceof GameError) return 'GAME_ERROR'
+  if (error instanceof BrowserError) return 'BROWSER_ERROR'
+  if (error instanceof IoError || isSystemError(error)) return 'IO_ERROR'
+  return 'INTERNAL_ERROR'
 }
 
 function rounded(value: Value): Value {
@@ -162,8 +175,9 @@ const cli = Cli.create('threejam', {
       try {
         const files = gameFiles(c.args.dir)
         const errors = [...typecheck({ file: files.game, dom: false, timeout: c.options.timeout }), ...(files.view ? typecheck({ file: files.view, dom: true, timeout: c.options.timeout }) : [])]
-        if (errors.length > 0) return c.error({ code: 'TYPE_ERROR', message: errors.join('; ') })
+        // A syntax error or an import that doesn't resolve fails the bundle as it does in sim, shot, and export, so it's a BUILD_ERROR here too.
         await bundlePage(c.args.dir)
+        if (errors.length > 0) return c.error(failed('TYPE_ERROR', errors.join('; ')))
         const { snapshots } = await runGame(c.args.dir, { ticks: 1, timeout: c.options.timeout })
         return { ok: true, entities: snapshots[0].entities.length }
       } catch (error) {
@@ -227,7 +241,7 @@ const cli = Cli.create('threejam', {
         const size = serving ? JSON.stringify(reply).length : 0
         if (size > MCP_REPLY_LIMIT) {
           const message = `this reply would be ${size} characters, and an MCP reply holds at most ${MCP_REPLY_LIMIT}; print less with only, fields, a larger every, or until`
-          return c.error({ code: 'OUTPUT_TOO_LARGE', message })
+          return c.error(failed('OUTPUT_TOO_LARGE', message))
         }
         return c.ok(reply, { cta: { commands: [{ command: again, description: 'See this tick as a PNG' }] } })
       } catch (error) {

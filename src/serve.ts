@@ -9,7 +9,7 @@ import { constants as vmConstants, createContext } from 'node:vm'
 import * as esbuild from 'esbuild'
 import { mediaType } from './assets.ts'
 import { confinePlugin, confineRoots } from './confine.ts'
-import { UsageError } from './errors.ts'
+import { BuildError } from './errors.ts'
 import { STAND_INS } from './guard.ts'
 import { assetsIn, gameFiles, type GameFiles } from './load.ts'
 import { NAME, engineFile } from './package.ts'
@@ -54,7 +54,7 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
   if (result.errors.length > 0) {
     await context.dispose()
     rmSync(outdir, { recursive: true, force: true })
-    throw new UsageError(result.errors.map(formatMessage).join('; '))
+    throw new BuildError(result.errors.map(formatMessage).join('; '))
   }
   if (onRebuild) {
     watching = true
@@ -129,7 +129,7 @@ function realmGlobals(): string[] {
 // The page that run, shot, and export build, bundled in memory only, so check refuses what they would.
 export async function bundlePage(dir: string): Promise<void> {
   const built = await esbuild.build({ ...pageBuild({ files: gameFiles(dir), address: (name) => name }), write: false }).catch((failure: esbuild.BuildFailure) => failure)
-  if (built instanceof Error) throw new UsageError(built.errors.map(formatMessage).join('; '))
+  if (built instanceof Error) throw new BuildError(built.errors.map(formatMessage).join('; '))
 }
 
 export function formatMessage(message: esbuild.Message): string {

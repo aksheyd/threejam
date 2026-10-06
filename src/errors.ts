@@ -1,3 +1,6 @@
+// What went wrong, which every failure prints as its code with a one-line message.
+export type Code = 'USAGE' | 'BUILD_ERROR' | 'TYPE_ERROR' | 'GAME_ERROR' | 'TIMEOUT' | 'OUTPUT_TOO_LARGE' | 'BROWSER_ERROR' | 'IO_ERROR' | 'INTERNAL_ERROR'
+
 export class GameError extends Error {
   constructor(message: string) {
     super(message)
@@ -9,6 +12,30 @@ export class UsageError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'UsageError'
+  }
+}
+
+// The game's files couldn't be bundled: a syntax error, or an import that doesn't resolve or that the import rule refuses.
+export class BuildError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BuildError'
+  }
+}
+
+// Chrome is missing, didn't start, or stopped answering, which no change to the game would fix.
+export class BrowserError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BrowserError'
+  }
+}
+
+// A file or folder couldn't be read, made, or written.
+export class IoError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'IoError'
   }
 }
 

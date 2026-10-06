@@ -36,7 +36,18 @@ Every command that loads a game bundles it first, for the sandbox described belo
 
 ## Output and errors
 
-Output is [TOON](https://toonformat.dev) by default, `--format json` switches it, and every command takes `--help` and `--schema`. A failure prints a `code` and a one-line `message` and exits 1; for a problem in a game file, the message starts with `path:line:` and ends with when it happened, like `(in update at tick 61)`.
+Output is [TOON](https://toonformat.dev) by default, `--format json` switches it, and every command takes `--help` and `--schema`. A failure prints a `code` and a one-line `message` and exits 1; for a problem in a game file, the message starts with `path:line:` and ends with when it happened, like `(in update at tick 61)`. The code says what went wrong:
+
+| Code | What went wrong |
+| --- | --- |
+| `USAGE` | The command was called wrong: a missing or malformed flag, a value out of range, or a folder or file that isn't there |
+| `BUILD_ERROR` | The game's files couldn't be bundled: a syntax error, or an import that doesn't resolve or comes from outside the folder |
+| `TYPE_ERROR` | `check` found type errors |
+| `GAME_ERROR` | The game's or driver's code threw or broke an engine rule, in the sandbox or in the page, or ran out of memory |
+| `TIMEOUT`, `OUTPUT_TOO_LARGE` | A run passed one of the sandbox's limits |
+| `BROWSER_ERROR` | Chrome is missing, didn't start, or failed while drawing |
+| `IO_ERROR` | A file or folder couldn't be read, made, or written |
+| `INTERNAL_ERROR` | ThreeJam itself failed, which is a bug to report |
 
 Because loading a game runs its code, `check`, `sim`, `shot`, and `export` run `game.ts` and any `--driver` in a sandbox with no files, processes, or network. A run that passes `--timeout` seconds stops with the `TIMEOUT` code, and an MCP `sim` reply too large for a client is refused with `OUTPUT_TOO_LARGE` and how to narrow it.
 

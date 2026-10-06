@@ -1,7 +1,8 @@
-import { mkdirSync } from 'node:fs'
-import { dirname, extname } from 'node:path'
+import { existsSync, mkdirSync } from 'node:fs'
+import { dirname, extname, sep } from 'node:path'
 import type { Browser, Page } from 'puppeteer-core'
-import { UsageError, quote } from './errors.ts'
+import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
+import { LimitError, gameFailure } from './load.ts'
 import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, serve, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
@@ -45,6 +46,8 @@ export async function openPage(tab: Page, url: string): Promise<void> {
 
 // Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs.
 export async function launchChrome(chrome: string, { protocolTimeout }: { protocolTimeout?: number } = {}): Promise<Browser> {
+  const where = chrome.replaceAll(sep, '/')
+  if (!existsSync(chrome)) throw new BrowserError(`there's no Chrome at ${where}; set CHROME_PATH to the executable of Chrome or Chromium, or Edge on Windows`)
   // Only shot loads Puppeteer, so the other commands start without it.
   const { default: puppeteer } = await import('puppeteer-core')
   // Puppeteer's defaults turn off IsolateSandboxedIframes so it can reach sandboxed frames, which these pages don't have.
@@ -53,41 +56,58 @@ export async function launchChrome(chrome: string, { protocolTimeout }: { protoc
     const features = arg.slice('--disable-features='.length).split(',')
     return `--disable-features=${features.filter((feature) => feature !== 'IsolateSandboxedIframes').join(',')}`
   })
-  return puppeteer.launch({
-    executablePath: chrome,
-    pipe: true,
-    env: chromeEnv(),
-    protocolTimeout,
-    ignoreDefaultArgs: true,
-    // Software rendering repeats a frame byte for byte on one machine; on another it looks the same, though some pixels can be one shade off.
-    args: [...defaults, '--use-gl=angle', '--use-angle=swiftshader', '--remote-debugging-pipe', NO_DEVTOOLS_PORT],
-  })
+  try {
+    return await puppeteer.launch({
+      executablePath: chrome,
+      pipe: true,
+      env: chromeEnv(),
+      protocolTimeout,
+      ignoreDefaultArgs: true,
+      // Software rendering repeats a frame byte for byte on one machine; on another it looks the same, though some pixels can be one shade off.
+      args: [...defaults, '--use-gl=angle', '--use-angle=swiftshader', '--remote-debugging-pipe', NO_DEVTOOLS_PORT],
+    })
+  } catch (error) {
+    // Over a pipe, a Chrome that exits as it starts only closes the connection, which Puppeteer reports with a TargetCloseError its types don't export.
+    const why = error instanceof Error && error.name === 'TargetCloseError' ? 'it exited as soon as it started' : firstLine(error)
+    throw new BrowserError(`Chrome at ${where} didn't start: ${why}; set CHROME_PATH to a working Chrome or Chromium`)
+  }
 }
 
 export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, set }: ShotOptions): Promise<string[]> {
   const chrome = findChrome()
-  if (!chrome) throw new UsageError('shot needs Chrome or Chromium, or Edge on Windows; set CHROME_PATH to its executable')
+  if (!chrome) throw new BrowserError('shot needs Chrome or Chromium, or Edge on Windows; set CHROME_PATH to its executable')
   const page = await buildPage({ dir, config: { mode: 'shot' }, driver })
   let server: Server | undefined
   let browser: Browser | undefined
   try {
+    const { PuppeteerError } = await import('puppeteer-core')
     server = await serve({ page })
     browser = await launchChrome(chrome)
     const tab = await browser.newPage()
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const crashed = pageFailure(tab)
     const until = <T>(work: Promise<T>) => Promise.race([work, crashed])
+    // The page runs the game's start, update, and view.ts here, so what they throw is the game's, while Puppeteer's own errors mean Chrome failed.
+    const inPage = <T>(work: Promise<T>) =>
+      until(
+        work.catch((error: unknown) => {
+          throw error instanceof PuppeteerError ? error : gameFailure(firstLine(error))
+        }),
+      )
     await until(openPage(tab, server.url))
     await until(tab.waitForFunction('window.engine !== undefined', { timeout: 15000 }))
     const reset: ResetOptions = { seed: seed ?? 0, ticks: Math.max(...at), press, hold, pointer, set, drive: driver !== undefined }
-    await until(tab.evaluate((options) => window.engine.reset(options), reset))
+    await inPage(tab.evaluate((options) => window.engine.reset(options), reset))
     const paths = framePaths(out, at)
     for (const path of paths) mkdirSync(dirname(path), { recursive: true })
     for (const [i, tick] of at.entries()) {
-      await until(tab.evaluate((t) => window.engine.advanceTo(t), tick))
+      await inPage(tab.evaluate((t) => window.engine.advanceTo(t), tick))
       await tab.screenshot({ path: pngPath(paths[i]), clip: { x: 0, y: 0, width: 800, height: 600 } })
     }
     return paths
+  } catch (error) {
+    if (error instanceof UsageError || error instanceof GameError || error instanceof BrowserError || error instanceof IoError || error instanceof LimitError) throw error
+    throw new BrowserError(`Chrome failed while drawing the game: ${firstLine(error)}`)
   } finally {
     await browser?.close()
     server?.close()
@@ -95,9 +115,14 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
   }
 }
 
+// Puppeteer puts the page's stack, with the page server's address, in an error's message after its first line.
+function firstLine(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).split('\n', 1)[0].trim()
+}
+
 function pageFailure(tab: Page): Promise<never> {
   const failed = new Promise<never>((_, reject) => {
-    tab.on('pageerror', (error) => reject(new Error(`the page failed: ${error instanceof Error ? error.message : String(error)}`)))
+    tab.on('pageerror', (error) => reject(gameFailure(`the page failed: ${firstLine(error)}`)))
   })
   failed.catch(() => {})
   return failed
