@@ -430,7 +430,7 @@ test("security follow-up: a path that still holds a .. is never inside a folder,
   assert.equal(within(root, [root, 'a..b', 'c.ts'].join(sep)), true)
 })
 
-test("review blockers 1 and 2 in sim: on three machines' settings, and once more on the first, the probe gives one output, with every path to the clock, zone, and locale guarded", () => {
+test("review blockers 1 to 3 in sim: on three machines' settings, and once more on the first, the probe gives one output, with every path to the clock, zone, and locale guarded", () => {
   const { dir } = folder({ 'game.ts': PROBE })
   const settings = [
     { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', TZ: 'UTC' },

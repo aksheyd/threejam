@@ -23,8 +23,9 @@ const LOCAL_TIME: ReadonlyArray<readonly [string, string]> = [
 ]
 // The date strings every engine reads alike: ISO 8601, with a Z or an offset when there's a time.
 const ISO_DATE = /^(?:[+-]\d{6}|\d{4})(?:-\d{2}(?:-\d{2})?)?(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{3})?)?(?:Z|[+-]\d{2}:\d{2}))?$/
-// The platform's own, kept before game code can reach it.
+// The platform's own, kept before game code can reach it, to tell an empty locale list from a named one.
 const INTL_AT_LOAD: unknown = Reflect.get(globalThis, 'Intl')
+const CANONICAL: unknown = isObject(INTL_AT_LOAD) ? Reflect.get(INTL_AT_LOAD, 'getCanonicalLocales') : undefined
 
 function refuse(name: string, instead: string): never {
   throw new GameError(`${name} would make runs differ; ${instead}`)
@@ -210,7 +211,7 @@ function intl(): Change[] {
 }
 
 function inLocaleFormat(native: Function, dates: boolean): Function {
-  const args = (given: unknown[]) => [given[0] === undefined ? LOCALE : given[0], dates ? zoned(given[1]) : given[1], ...given.slice(2)]
+  const args = (given: unknown[]) => [localeList(given[0]), dates ? zoned(given[1]) : given[1], ...given.slice(2)]
   const format: Function = new Proxy(native, {
     construct: (target, given, newTarget) => Reflect.construct(target, args(given), newTarget === format ? target : newTarget),
     apply: (target, self, given) => Reflect.apply(target, self, args(given)),
@@ -279,14 +280,21 @@ function localeMethods(): Change[] {
 
 function inLocale(native: Function, zone: boolean): Function {
   return function (this: unknown, locales?: unknown, options?: unknown): unknown {
-    return Reflect.apply(native, this, [locales === undefined ? LOCALE : locales, zone ? zoned(options) : options])
+    return Reflect.apply(native, this, [localeList(locales), zone ? zoned(options) : options])
   }
 }
 
 function compared(native: Function): Function {
   return function (this: unknown, that: unknown, locales?: unknown, options?: unknown): unknown {
-    return Reflect.apply(native, this, [that, locales === undefined ? LOCALE : locales, options])
+    return Reflect.apply(native, this, [that, localeList(locales), options])
   }
+}
+
+// The locales the game names, or en-US when it names none: Intl reads both undefined and an empty list as the machine's own.
+function localeList(given: unknown): unknown {
+  if (typeof CANONICAL !== 'function') return given === undefined ? LOCALE : given
+  const list: unknown = Reflect.apply(CANONICAL, INTL_AT_LOAD, [given])
+  return Array.isArray(list) && list.length > 0 ? list : LOCALE
 }
 
 function zoned(options: unknown): unknown {

@@ -179,7 +179,7 @@ test('audit 12: ctx and its input are read-only, so game code can change neither
 })
 
 // A process reads its language when it starts, so each setting gets one of its own.
-test("review blockers 1 and 2: in a process set to another language and time zone, the guard leaves no path to the platform's clock, zone, or locale through Date's and Intl's own prototypes and constructors, or a subclass", () => {
+test("review blockers 1 to 3: in a process set to another language and time zone, the guard leaves no path to the platform's clock, zone, or locale, through prototypes, subclasses, or an empty locale list", () => {
   const dir = mkdtempSync(join(TMP, 'probe-'))
   made.push(dir)
   writeFileSync(join(dir, 'game.ts'), PROBE)

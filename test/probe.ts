@@ -18,7 +18,7 @@ function attempt(run: () => unknown): string {
   }
 }
 
-// A call that names no locale or zone, beside the same call in en-US and UTC.
+// A call that names no locale or zone, beside the same call in en-US and UTC; an engine without the formatter, like Node 22's DurationFormat, agrees too.
 function english(given: () => unknown, named: () => unknown): string {
   const [a, b] = [attempt(given), attempt(named)]
   return a === b ? 'en-US' : a + ' (en-US: ' + b + ')'
@@ -45,12 +45,25 @@ export default defineGame({
       english(() => new (Intl.NumberFormat.prototype.constructor as any)().format(1234567.5), () => new Intl.NumberFormat('en-US').format(1234567.5)),
       attempt(() => typeof Object.getPrototypeOf(Intl).DateTimeFormat),
       attempt(() => (Object.getOwnPropertyDescriptor(Intl.DateTimeFormat.prototype, 'format') as any).get.call(new Intl.DateTimeFormat('en-US'))()),
+      english(() => 'I'.toLocaleLowerCase([]), () => 'I'.toLocaleLowerCase('en-US')),
+      english(() => 'i'.toLocaleUpperCase([]), () => 'i'.toLocaleUpperCase('en-US')),
+      english(() => (1234567.5).toLocaleString([]), () => (1234567.5).toLocaleString('en-US')),
+      english(() => (1234567n).toLocaleString([]), () => (1234567n).toLocaleString('en-US')),
+      english(() => new Intl.DateTimeFormat([], full).format(instant), () => new Intl.DateTimeFormat('en-US', { ...full, timeZone: 'UTC' }).format(instant)),
+      english(() => new Intl.NumberFormat([]).format(1234567.5), () => new Intl.NumberFormat('en-US').format(1234567.5)),
+      english(() => new Intl.RelativeTimeFormat([], { numeric: 'auto' }).format(1, 'day'), () => new Intl.RelativeTimeFormat('en-US', { numeric: 'auto' }).format(1, 'day')),
+      english(() => new Intl.DisplayNames([], { type: 'language' }).of('tr'), () => new Intl.DisplayNames('en-US', { type: 'language' }).of('tr')),
+      english(() => new Intl.ListFormat([]).format(['a', 'b']), () => new Intl.ListFormat('en-US').format(['a', 'b'])),
+      english(() => new Intl.PluralRules([]).select(0), () => new Intl.PluralRules('en-US').select(0)),
+      english(() => new host.Intl.DurationFormat([], { style: 'long' }).format({ hours: 1, minutes: 2 }), () => new host.Intl.DurationFormat('en-US', { style: 'long' }).format({ hours: 1, minutes: 2 })),
+      english(() => new Intl.Collator([]).compare('i', 'İ'), () => new Intl.Collator('en-US').compare('i', 'İ')),
+      english(() => (1234567.5).toLocaleString({} as any), () => (1234567.5).toLocaleString('en-US')),
     ]
   },
 })
 `
 
-// What the probe must show wherever it runs: every path to the clock or the machine's zone refused, and every unnamed locale in en-US and UTC.
+// What the probe must show wherever it runs: every path to the clock or the machine's zone refused, and every unnamed locale, an empty list included, in en-US and UTC.
 export function checkProbe(out: unknown): void {
   assert.ok(Array.isArray(out) && out.every((line) => typeof line === 'string'), `the probe gave ${JSON.stringify(out)}`)
   assert.deepEqual(out.slice(0, 4), ['Date.now() would make runs differ', 'date.getHours() would make runs differ', 'date.getTimezoneOffset() would make runs differ', 'date.toString() would make runs differ'])
@@ -58,5 +71,5 @@ export function checkProbe(out: unknown): void {
   assert.deepEqual(out.slice(7, 9), ['refused', 'refused'])
   assert.equal(out[11], 'undefined')
   assert.equal(out[12], 'Intl.DateTimeFormat format() with no date would make runs differ')
-  for (const index of [4, 9, 10]) assert.equal(out[index], 'en-US', `line ${index}`)
+  for (const index of [4, 9, 10, ...Array.from({ length: 13 }, (_, i) => 13 + i)]) assert.equal(out[index], 'en-US', `line ${index}`)
 }
