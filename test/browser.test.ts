@@ -6,12 +6,13 @@ import { after, test, type TestContext } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import type { Page } from 'puppeteer-core'
 import pong from '../games/pong/game.ts'
-import { simulate } from '../src/engine.ts'
+import { parseGame, simulate } from '../src/engine.ts'
 import { exportGame } from '../src/export.ts'
 import { runGame } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { buildPage, serve } from '../src/serve.ts'
 import { openPage, shoot } from '../src/shot.ts'
+import { isDrive, type Drive } from '../src/types.ts'
 import { CHROME as chrome, testChrome, type TestChrome } from './chrome.ts'
 import { spawnCli } from './children.ts'
 import { PROBE, checkProbe } from './probe.ts'
@@ -429,31 +430,34 @@ test('every example game, played by a seeded random driver for 1500 ticks with e
   made.push(dir)
   const driver = join(dir, 'monkey.ts')
   writeFileSync(driver, MONKEY)
+  const loaded: unknown = Reflect.get(await import(pathToFileURL(driver).href), 'default')
+  assert.ok(isDrive(loaded))
+  const drive: Drive = loaded
   const games = readdirSync(join(ROOT, 'games'), { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? [join('games', entry.name)] : []))
   assert.ok(games.length >= 7, games.join(', '))
-  const seeds = [3, 11]
-  await Promise.all(
-    games.map(async (game) => {
-      const [runs, page] = await Promise.all([Promise.all(seeds.map((seed) => runGame(game, { ticks: 1500, seed, driver }))), buildPage({ dir: game, config: { mode: 'shot' }, driver })])
-      const server = await serve({ page })
-      try {
-        const tab = await newTab(t)
-        await openPage(tab, server.url)
-        await tab.waitForFunction('window.engine !== undefined')
-        for (const [i, seed] of seeds.entries()) {
-          const actual = await tab.evaluate((s) => {
-            window.engine.reset({ seed: s, drive: true })
-            window.engine.advanceTo(1500)
-            return { entities: window.engine.state(), sounds: window.engine.sounds() }
-          }, seed)
-          assert.deepEqual(actual, { entities: runs[i].snapshots[0].entities, sounds: runs[i].sounds }, `${game} with seed ${seed}`)
-        }
-      } finally {
-        server.close()
-        await page.dispose()
+  // One game at a time in one tab, with sim's runs from this process, since the tests above check the sandbox's runs against the page.
+  const tab = await newTab(t)
+  for (const game of games) {
+    const played = parseGame(Reflect.get(await import(pathToFileURL(join(ROOT, game, 'game.ts')).href), 'default'))
+    const page = await buildPage({ dir: game, config: { mode: 'shot' }, driver })
+    const server = await serve({ page })
+    try {
+      await openPage(tab, server.url)
+      await tab.waitForFunction('window.engine !== undefined')
+      for (const seed of [3, 11]) {
+        const { snapshots, sounds } = simulate(played, { ticks: 1500, seed, drive })
+        const actual = await tab.evaluate((s) => {
+          window.engine.reset({ seed: s, drive: true })
+          window.engine.advanceTo(1500)
+          return { entities: window.engine.state(), sounds: window.engine.sounds() }
+        }, seed)
+        assert.deepEqual(actual, { entities: snapshots[0].entities, sounds }, `${game} with seed ${seed}`)
       }
-    }),
-  )
+    } finally {
+      server.close()
+      await page.dispose()
+    }
+  }
 })
 
 // Every error the page reports, and every address it asks for.
