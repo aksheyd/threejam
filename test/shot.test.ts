@@ -35,27 +35,6 @@ test("a page that fails in shot is the game's failure, told in one line without 
   })
 })
 
-test("shot's page gets --timeout too, from the moment it loads, so a view.ts that never returns fails with TIMEOUT and Chrome is killed", { skip: !chrome && 'needs Chrome' }, async () => {
-  const stuck = async (view: string, timeout: number, when: string) => {
-    const dir = mkdtempSync(join(TMP, 'stuck-'))
-    made.push(dir)
-    writeFileSync(join(dir, 'game.ts'), "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n")
-    writeFileSync(join(dir, 'view.ts'), view)
-    const started = Date.now()
-    await assert.rejects(shoot({ dir, at: [1, 2], out: join(dir, 'frame.png'), timeout }), {
-      name: 'LimitError',
-      message: `the page ran past the ${timeout} s time limit ${when}; look for a loop that never ends in view.ts, or allow more time with --timeout`,
-    })
-    // The page uses up the whole limit first, so a graceful close, which waits up to 10 s on a stuck page, can't finish under this on any machine.
-    const took = Date.now() - started
-    assert.ok(took < (timeout + 10) * 1000, `shot took ${took} ms with a page stuck ${when}`)
-  }
-  // The page never finishes loading, so the limit runs out as it loads however fast the machine is.
-  await stuck('for (;;) {}\n', 2, 'as it loaded')
-  // Loading and drawing tick 1 take well under this even on a slow machine, so the limit runs out at tick 2.
-  await stuck("import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick === 2) for (;;) {}\n}\n", 15, 'drawing tick 2')
-})
-
 test('shot writes one PNG per tick into a folder it creates', { skip: !chrome && 'needs Chrome' }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'threejam-shot-'))
   try {

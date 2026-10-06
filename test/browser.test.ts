@@ -11,7 +11,7 @@ import { exportGame } from '../src/export.ts'
 import { runGame } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { buildPage, serve } from '../src/serve.ts'
-import { openPage } from '../src/shot.ts'
+import { openPage, shoot } from '../src/shot.ts'
 import { CHROME as chrome, testChrome, type TestChrome } from './chrome.ts'
 import { spawnCli } from './children.ts'
 import { PROBE, checkProbe } from './probe.ts'
@@ -21,16 +21,29 @@ mkdirSync(TMP, { recursive: true })
 const made: string[] = []
 // The one Chrome the tests here share. The first page test starts it, since when a name pattern matches no test here, Node runs after without waiting for before.
 let shared: Promise<TestChrome> | undefined
+// shot's stuck pages, which use up their whole time limits, 17 s, so they run beside the other tests here rather than in shot.test.ts, which the runner starts last. They start once the first page test ends, so they don't compete with its start of the Chrome.
+let stuck: Promise<string[]> | undefined
 after(async () => {
+  await stuck?.catch(() => {})
   await (await shared?.catch(() => undefined))?.close()
   made.forEach((dir) => rmSync(dir, { recursive: true, force: true }))
 })
+
+function stuckShots(): Promise<string[]> {
+  if (stuck === undefined) {
+    stuck = stuckPages()
+    stuck.catch(() => {})
+  }
+  return stuck
+}
 
 // A tab in the one Chrome every test here shares, closed when its test ends, even one that fails.
 async function newTab(t: TestContext): Promise<Page> {
   shared ??= testChrome()
   const tab = await (await shared).browser.newPage()
   t.after(() => (tab.isClosed() ? undefined : tab.close()))
+  // A test's after hooks run in the order they were added, so this one comes once its tab has closed.
+  t.after(() => void stuckShots())
   return tab
 }
 
@@ -793,4 +806,32 @@ test("a run page whose game or view.ts fails as it loads says why on the page, i
       await page.dispose()
     }
   }
+})
+
+// How long shot took with each stuck page.
+async function stuckPages(): Promise<string[]> {
+  const stuckAt = async (view: string, timeout: number, when: string) => {
+    const dir = mkdtempSync(join(TMP, 'stuck-'))
+    made.push(dir)
+    writeFileSync(join(dir, 'game.ts'), "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n")
+    writeFileSync(join(dir, 'view.ts'), view)
+    const started = Date.now()
+    await assert.rejects(shoot({ dir, at: [1, 2], out: join(dir, 'frame.png'), timeout }), {
+      name: 'LimitError',
+      message: `the page ran past the ${timeout} s time limit ${when}; look for a loop that never ends in view.ts, or allow more time with --timeout`,
+    })
+    // The page uses up the whole limit first, so a graceful close, which waits up to 10 s on a stuck page, can't finish under this on any machine.
+    const took = Date.now() - started
+    assert.ok(took < (timeout + 10) * 1000, `shot took ${took} ms with a page stuck ${when}`)
+    return `shot took ${took} ms with a page stuck ${when}, under a ${timeout} s limit`
+  }
+  // The page never finishes loading, so the limit runs out as it loads however fast the machine is.
+  const loading = await stuckAt('for (;;) {}\n', 2, 'as it loaded')
+  // Loading and drawing tick 1 take well under this even on a slow machine, so the limit runs out at tick 2.
+  return [loading, await stuckAt("import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick === 2) for (;;) {}\n}\n", 15, 'drawing tick 2')]
+}
+
+// The stuck pages run beside the page tests before this one, so its own duration leaves their time out, and it reports it instead.
+test("shot's page gets --timeout too, from the moment it loads, so a view.ts that never returns fails with TIMEOUT and Chrome is killed", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  for (const line of await stuckShots()) t.diagnostic(line)
 })
