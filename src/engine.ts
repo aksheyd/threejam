@@ -49,7 +49,10 @@ export class Session<E extends Entities = Entities> {
     this.seed = checkSeed(options.seed ?? 0)
     const files = options.assets === undefined ? undefined : Object.freeze([...options.assets])
     this.#store = createStore(game.entities, files)
-    for (const assignment of options.set ?? []) applySet(this.#store, assignment)
+    const store = this.#store
+    store.edit(() => {
+      for (const assignment of options.set ?? []) applySet(store, assignment)
+    })
     settle(this.#store.all)
     this.#driverRandom = createRandom({ seed: this.seed, stream: 1 })
     const session = this
@@ -119,7 +122,9 @@ export class Session<E extends Entities = Entities> {
 
   #run(phase: 'start' | 'update' | 'driver', tick: number, fn: () => void): void {
     try {
-      guarded(fn)
+      // A driver sees only the read-only world, so the live one stays shut to it.
+      if (phase === 'driver') guarded(fn)
+      else this.#store.edit(() => guarded(fn))
     } catch (cause) {
       throw new RunError({ phase, tick, cause })
     }

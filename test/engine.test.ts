@@ -200,6 +200,23 @@ test("review blockers 1 to 3: in a process set to another language and time zone
   assert.deepEqual(outs[2], outs[0])
 })
 
+test('review blocker 4: a promise that game code starts can change the world neither after its tick nor through spawn', async () => {
+  const refused: string[] = []
+  const game = defineGame({
+    entities: { ball: { x: 0, y: 0, w: 0.1 }, pool: group(2, () => ({ w: 0.1, visible: false })) },
+    update(world, ctx) {
+      if (ctx.tick !== 1) return
+      const keep = (error: unknown) => void refused.push(error instanceof Error ? error.message : String(error))
+      Promise.resolve().then(() => void (world.ball.x = 5)).catch(keep)
+      Promise.resolve().then(() => void spawn(world.pool)).catch(keep)
+    },
+  })
+  const { world } = simulate(game, { ticks: 3, set: ['ball.x=0.5'] })
+  await new Promise((done) => setImmediate(done))
+  assert.deepEqual([world.ball.x, world.pool.map((member) => member.visible)], [0.5, [false, false]])
+  assert.deepEqual(refused, ['entity "ball" is read-only here; only start and update change the game', 'entity "pool[0]" is read-only here; only start and update change the game'])
+})
+
 test('audit 3: game code formats and compares as en-US does and dates in UTC, whatever the time zone, and Date forms that read the local time fail with their UTC form', () => {
   const zone = process.env.TZ
   process.env.TZ = 'Asia/Kolkata'

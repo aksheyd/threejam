@@ -85,6 +85,12 @@ interface Base {
   readonly schemas: ReadonlyMap<string, Schema>
   // The image and sound files in the game's folder, when the game came from one.
   readonly files: readonly string[] | undefined
+  readonly gate: Gate
+}
+
+// Open only while start, update, or --set runs, so code that runs between ticks, like a promise's callback, can't change the game.
+interface Gate {
+  open: boolean
 }
 
 export interface Stored extends Base {
@@ -115,12 +121,15 @@ export interface Store<E extends Entities> {
   readonly all: readonly Stored[]
   readonly live: World<E>
   readonly frozen: ReadonlyDeep<World<E>>
+  // Runs change with the live world taking writes, which it refuses at any other time.
+  edit<T>(change: () => T): T
 }
 
 export function createStore<E extends Entities>(entities: E, files: readonly string[] | undefined): Store<E> {
   const all: Stored[] = []
+  const gate: Gate = { open: false }
   const add = (name: string, init: unknown): Stored => {
-    const entity = createEntity(name, all.length, init, { owner: undefined, files })
+    const entity = createEntity(name, all.length, init, { owner: undefined, files, gate })
     all.push(entity, ...(entity.parts ?? []))
     return entity
   }
@@ -130,8 +139,17 @@ export function createStore<E extends Entities>(entities: E, files: readonly str
     else if (value[GROUP] === 'list') layouts.set(key, { kind: 'list', entities: value.members.map((init, i) => add(`${key}[${i}]`, init)) })
     else layouts.set(key, { kind: 'grid', rows: value.rows.map((row, r) => row.map((init, c) => add(`${key}[${r}][${c}]`, init))) })
   }
+  const edit = <T>(change: () => T): T => {
+    const was = gate.open
+    gate.open = true
+    try {
+      return change()
+    } finally {
+      gate.open = was
+    }
+  }
   // Both worlds are built from these entities, so they have exactly the shape World<E> describes.
-  return { all, live: worldOf(layouts, (e) => e.live) as World<E>, frozen: worldOf(layouts, (e) => e.frozen) as ReadonlyDeep<World<E>> }
+  return { all, live: worldOf(layouts, (e) => e.live) as World<E>, frozen: worldOf(layouts, (e) => e.frozen) as ReadonlyDeep<World<E>>, edit }
 }
 
 export function stateOf(entity: Stored): EntityState {
@@ -194,7 +212,7 @@ export function spawn<T extends Common>(group: readonly T[], fields: Spawn<T> = 
     const stored = STORED.get(member)
     if (stored === undefined) throw new GameError(`spawn takes a group of entities, like world.bullets, but it holds ${show(member)}`)
     if (stored.engine.visible) continue
-    if (stored.live !== member) throw new GameError(`entity "${stored.name}" is read-only here; only start and update change the game`)
+    if (stored.live !== member || !stored.gate.open) throw new GameError(`entity "${stored.name}" is read-only here; only start and update change the game`)
     for (const entity of [stored, ...(stored.parts ?? [])]) {
       Object.assign(entity.engine, entity.starting.engine)
       for (const [field, value] of Object.entries(entity.starting.custom)) entity.custom[field] = copy(value)
@@ -209,7 +227,7 @@ export function spawn<T extends Common>(group: readonly T[], fields: Spawn<T> = 
 // The fields spawn can set on a member: any of its own but its name and parts.
 export type Spawn<T> = { -readonly [F in keyof T as F extends 'name' | 'parts' ? never : F]?: T[F] }
 
-function createEntity(name: string, order: number, init: unknown, { owner, files }: { owner: Base | undefined; files: readonly string[] | undefined }): Stored {
+function createEntity(name: string, order: number, init: unknown, { owner, files, gate }: { owner: Base | undefined; files: readonly string[] | undefined; gate: Gate }): Stored {
   const where = `entity "${name}"`
   if (!isPlain(init)) throw new GameError(`${where} must be an object of fields, got ${show(init)}`)
   if ('name' in init) throw new GameError(`${where}: name is set by the engine, so it can't be declared`)
@@ -221,7 +239,7 @@ function createEntity(name: string, order: number, init: unknown, { owner, files
   const custom: Fields = {}
   const initial: Fields = {}
   const schemas = new Map<string, Schema>()
-  const base: Base = { name, kind, order, engine: { ...DEFAULTS }, custom, declared: fields.map(([field]) => field), initial, schemas, files }
+  const base: Base = { name, kind, order, engine: { ...DEFAULTS }, custom, declared: fields.map(([field]) => field), initial, schemas, files, gate }
   for (const [field, raw] of fields) {
     if (raw === undefined) throw new GameError(`${where}: ${field} is undefined; give it a starting value`)
     const schema = declaredSchema(where, field, raw)
@@ -241,7 +259,7 @@ function createEntity(name: string, order: number, init: unknown, { owner, files
 
 function createParts(entity: Base, init: unknown): Parts {
   const part = (suffix: string, index: number, fields: unknown) =>
-    createEntity(`${entity.name}.parts${suffix}`, entity.order + 1 + index, fields, { owner: entity, files: entity.files })
+    createEntity(`${entity.name}.parts${suffix}`, entity.order + 1 + index, fields, { owner: entity, files: entity.files, gate: entity.gate })
   if (Array.isArray(init)) {
     const all = init.map((fields: unknown, i) => part(`[${i}]`, i, fields))
     return { all, live: Object.freeze(all.map((p) => p.live)), frozen: Object.freeze(all.map((p) => p.frozen)) }
@@ -378,12 +396,12 @@ function entityProxy(entity: Base, live: boolean, parts: object | undefined): En
         return views.get(value) ?? view(value, path + step(t, prop), container(within(schema, prop)))
       },
       set(t, prop, value) {
-        if (!live) throw readOnly()
+        if (!live || !entity.gate.open) throw readOnly()
         if (typeof prop === 'symbol') throw new GameError(`${where}: ${path} can't hold symbol keys`)
         return Reflect.set(t, prop, change(where, path, schema, t, prop, value))
       },
       deleteProperty(t, prop) {
-        if (!live) throw readOnly()
+        if (!live || !entity.gate.open) throw readOnly()
         if (schema.kind === 'tuple' || schema.kind === 'record') {
           throw new GameError(`${where}: can't delete ${path}${step(t, String(prop))}, since ${path} holds ${describe(schema)}`)
         }
@@ -418,7 +436,7 @@ function entityProxy(entity: Base, live: boolean, parts: object | undefined): En
   const handler: ProxyHandler<object> = {
     get: (_, prop) => (typeof prop === 'symbol' ? undefined : get(prop)),
     set(_, prop, value) {
-      if (!live) throw readOnly()
+      if (!live || !entity.gate.open) throw readOnly()
       if (typeof prop === 'symbol' || prop === 'name') throw new GameError(`${where}: ${String(prop)} is set by the engine`)
       if (prop === 'parts' && parts !== undefined) throw new GameError(`${where}: parts can't be replaced; change the fields of each part instead`)
       if (!isEngineField(prop) && !Object.hasOwn(entity.custom, prop)) {
