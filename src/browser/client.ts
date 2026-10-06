@@ -68,8 +68,18 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   const bare = barePage(page.realm)
   const config = parseConfig(page.config)
   const reloads = config.mode === 'run'
-  // First, so the page of a game that fails below still reloads when a fix is saved.
-  if (config.mode === 'run') new EventSource(`/events?token=${encodeURIComponent(config.token)}`).onmessage = () => location.reload()
+  let stopped = false
+  // First, so the page of a game that fails below still reloads when a fix is saved, and still quits with Esc.
+  if (config.mode === 'run') {
+    new EventSource(`/events?token=${encodeURIComponent(config.token)}`).onmessage = () => location.reload()
+    addEventListener('keydown', (event) => {
+      if (event.code !== 'Escape') return
+      stopped = true
+      fetch(`/quit?token=${encodeURIComponent(config.token)}`, { method: 'POST' }).catch(() => {})
+      notice('Session ended.')
+      window.close()
+    })
+  }
   // Before the game runs, a failure shows on the page too, except in shot, which reads the page's error instead.
   const reported = (error: unknown, fix?: string): unknown => {
     if (config.mode !== 'shot') notice(`${error instanceof Error ? error.message : String(error)}${reloads && fix ? `\n\n${fix}` : ''}`)
@@ -101,7 +111,6 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   let session: Session | undefined
   let source: Source = { kind: 'keyboard' }
   let paused = false
-  let stopped = false
   // How many of the session's sounds the speaker has had.
   let heard = 0
 
@@ -205,13 +214,6 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
 
   addEventListener('keydown', (event) => {
     speaker?.unlock()
-    if (event.code === 'Escape' && config.mode === 'run') {
-      stopped = true
-      fetch(`/quit?token=${encodeURIComponent(config.token)}`, { method: 'POST' }).catch(() => {})
-      notice('Session ended.')
-      window.close()
-      return
-    }
     if (event.metaKey) return
     const key = keyFromCode(event.code)
     if (key) {

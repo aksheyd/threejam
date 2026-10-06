@@ -15,6 +15,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - `run` reloads the page only when a save builds. Before, it could also reload once by itself a moment after it started, restarting the game a player had just begun.
 - `run` keeps serving after a save that doesn't build. Before, reloading the page then stopped `run` with an `ENOENT` error and left its folder in the temporary folder. `run` and `shot` now keep the page in memory, so they leave no folder of it there, even when they're killed.
 - `run` and `shot` now refuse a game that imports a CSS file, as `check` and `export` already did. Before, they bundled it into a file the page never loaded.
+- Esc quits `run` from a page that says why the game didn't load, as it does from one that plays.
 
 ## [0.0.4](https://github.com/aksheyd/threejam/compare/v0.0.3...v0.0.4) - 2026-10-06
 

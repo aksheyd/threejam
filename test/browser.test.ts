@@ -783,7 +783,7 @@ test("a played page that fails as it runs, or whose image won't load, stops and 
   assert.deepEqual(await shown(await newTab(t), pathToFileURL(join(dir, 'stops.html')).href), ['no tick 3', 3])
 })
 
-test("a run page whose game or view.ts fails as it loads says why on the page, instead of staying blank, and still reloads when a fix is saved", { skip: !chrome && 'needs Chrome' }, async (t) => {
+test("a run page whose game or view.ts fails as it loads says why on the page, instead of staying blank, and still reloads when a fix is saved and quits with Esc", { skip: !chrome && 'needs Chrome' }, async (t) => {
   const game = "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n"
   const cases: ReadonlyArray<readonly [Record<string, string>, string]> = [
     [{ 'game.ts': game, 'view.ts': 'export const init = 5\n' }, 'view.ts: init must be a function'],
@@ -796,7 +796,8 @@ test("a run page whose game or view.ts fails as it loads says why on the page, i
     made.push(dir)
     for (const [name, source] of Object.entries(files)) writeFileSync(join(dir, name), source)
     const page = await buildPage({ dir, config: { mode: 'run', seed: 0, token } })
-    const server = await serve({ page, token })
+    let quits = 0
+    const server = await serve({ page, token, onQuit: () => (quits += 1) })
     try {
       const tab = await newTab(t)
       const listening = tab.waitForResponse((response) => response.url().includes('/events?'))
@@ -805,6 +806,8 @@ test("a run page whose game or view.ts fails as it loads says why on the page, i
       const shown = await tab.$eval('pre', (box) => box.textContent ?? '')
       assert.ok(shown.startsWith(reason) && shown.endsWith('\n\nFix the game and save; the page reloads.'), shown)
       assert.equal((await listening).status(), 200, `the page ${reason} doesn't listen for reloads`)
+      await tab.keyboard.press('Escape')
+      await until(`Esc to end the session on the page ${reason}`, () => quits === 1)
     } finally {
       server.close()
       await page.dispose()
