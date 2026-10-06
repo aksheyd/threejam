@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
-import { after, before, test, type TestContext } from 'node:test'
+import { after, test, type TestContext } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import type { Page } from 'puppeteer-core'
 import pong from '../games/pong/game.ts'
@@ -19,19 +19,17 @@ import { PROBE, checkProbe } from './probe.ts'
 const TMP = join(ROOT, 'test', '.tmp')
 mkdirSync(TMP, { recursive: true })
 const made: string[] = []
-let shared: TestChrome | undefined
-before(async () => {
-  if (chrome) shared = await testChrome()
-})
+// The one Chrome the tests here share. The first page test starts it, since when a name pattern matches no test here, Node runs after without waiting for before.
+let shared: Promise<TestChrome> | undefined
 after(async () => {
-  await shared?.close()
+  await (await shared?.catch(() => undefined))?.close()
   made.forEach((dir) => rmSync(dir, { recursive: true, force: true }))
 })
 
 // A tab in the one Chrome every test here shares, closed when its test ends, even one that fails.
 async function newTab(t: TestContext): Promise<Page> {
-  if (shared === undefined) throw new Error('this test needs Chrome')
-  const tab = await shared.browser.newPage()
+  shared ??= testChrome()
+  const tab = await (await shared).browser.newPage()
   t.after(() => (tab.isClosed() ? undefined : tab.close()))
   return tab
 }
