@@ -438,14 +438,18 @@ async function until(what: string, check: () => boolean): Promise<void> {
   }
 }
 
-test('ending a test stops the sandbox running a game for its MCP server, which would otherwise run on to its own time limit', { skip: process.platform === 'win32' && 'process groups are for macOS and Linux' }, async (t) => {
+test("closing a test's MCP server, or aborting its signal as a test that times out does, stops the server and the sandbox running a game for it, which would otherwise run on to its own time limit", { skip: process.platform === 'win32' && 'process groups are for macOS and Linux' }, async (t) => {
   const loop = folder({ 'game.ts': game({ update: 'for (;;) {}' }) })
-  const server = mcp(t.signal)
-  await server.ready
-  void server.request('tools/call', { name: 'sim', arguments: { dir: loop, ticks: 1, timeout: 60 } })
-  await until('the server to start a sandbox', () => inGroup(server.pid).length > 1)
-  server.close()
-  await until('the server and its sandbox to stop', () => inGroup(server.pid).length === 0)
+  for (const end of ['close', 'abort'] as const) {
+    const timedOut = new AbortController()
+    const server = mcp(AbortSignal.any([t.signal, timedOut.signal]))
+    await server.ready
+    void server.request('tools/call', { name: 'sim', arguments: { dir: loop, ticks: 1, timeout: 60 } })
+    await until(`the server to start a sandbox before its ${end}`, () => inGroup(server.pid).length > 1)
+    if (end === 'close') server.close()
+    else timedOut.abort()
+    await until(`the server and its sandbox to stop on its ${end}`, () => inGroup(server.pid).length === 0)
+  }
 })
 
 test('mcp add registers node with this CLI from a clone or an install, and npx for a copy in npx\'s cache or an install on a path with a space', () => {
