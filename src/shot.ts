@@ -1,11 +1,11 @@
-import { accessSync, constants, mkdtempSync, rmSync, statSync } from 'node:fs'
+import { accessSync, constants, mkdtempSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
 import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { LimitError, gameFailure, isSystemError, timeLimit } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
-import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, serve, type Server } from './serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, removeProfile, serve, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
 export interface ShotOptions {
@@ -50,8 +50,8 @@ export async function openPage(tab: Page, url: string, { timeout }: { timeout?: 
   }
 }
 
-// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs, and with tmp, a temporary folder of its own.
-export async function launchChrome(chrome: string, { protocolTimeout, tmp }: { protocolTimeout?: number; tmp?: string } = {}): Promise<Browser> {
+// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs; profile, when given, holds its profile, and signal kills it with every process it started.
+export async function launchChrome(chrome: string, { protocolTimeout, profile, signal }: { protocolTimeout?: number; profile?: string; signal?: AbortSignal } = {}): Promise<Browser> {
   const where = chrome.replaceAll(sep, '/')
   const found = statSync(chrome, { throwIfNoEntry: false })
   if (found === undefined) throw new BrowserError(`there's no Chrome at ${where}; set CHROME_PATH to the executable of Chrome or Chromium, or Edge on Windows`)
@@ -60,7 +60,7 @@ export async function launchChrome(chrome: string, { protocolTimeout, tmp }: { p
   // Only shot loads Puppeteer, so the other commands start without it.
   const { default: puppeteer } = await import('puppeteer-core')
   // Puppeteer's defaults turn off IsolateSandboxedIframes so it can reach sandboxed frames, which these pages don't have.
-  const defaults = (await puppeteer.defaultArgs({ browser: 'chrome', headless: true })).map((arg) => {
+  const defaults = (await puppeteer.defaultArgs({ browser: 'chrome', headless: true, userDataDir: profile })).map((arg) => {
     if (!arg.startsWith('--disable-features=')) return arg
     const features = arg.slice('--disable-features='.length).split(',')
     return `--disable-features=${features.filter((feature) => feature !== 'IsolateSandboxedIframes').join(',')}`
@@ -69,8 +69,9 @@ export async function launchChrome(chrome: string, { protocolTimeout, tmp }: { p
     return await puppeteer.launch({
       executablePath: chrome,
       pipe: true,
-      env: tmp === undefined ? chromeEnv() : { ...chromeEnv(), TMPDIR: tmp, TMP: tmp, TEMP: tmp },
+      env: chromeEnv(),
       protocolTimeout,
+      signal,
       ignoreDefaultArgs: true,
       // Software rendering repeats a frame byte for byte on one machine; on another it looks the same, though some pixels can be one shade off.
       args: [...defaults, '--use-gl=angle', '--use-angle=swiftshader', '--remote-debugging-pipe', NO_DEVTOOLS_PORT],
@@ -91,13 +92,14 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
   let server: Server | undefined
   let browser: Browser | undefined
   let stuck = false
-  // A Chrome that's killed leaves its sockets in its temporary folder, so it gets one that's removed after it, however it stopped.
-  let tmp: string | undefined
+  const killer = new AbortController()
+  // A profile of shot's own, so that it and the socket it links to go after Chrome, however Chrome stopped.
+  let profile: string | undefined
   try {
     const { PuppeteerError } = await import('puppeteer-core')
     server = await serve({ page })
-    tmp = mkdtempSync(join(tmpdir(), 'threejam-chrome-'))
-    browser = await launchChrome(chrome, { tmp, protocolTimeout: callLimit(timeout) })
+    profile = mkdtempSync(join(tmpdir(), 'threejam-chrome-'))
+    browser = await launchChrome(chrome, { profile, protocolTimeout: callLimit(timeout), signal: killer.signal })
     const tab = await browser.newPage()
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const crashed = pageFailure(tab)
@@ -143,14 +145,10 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     if (known || isSystemError(error)) throw error
     throw new BrowserError(`Chrome failed while drawing the game: ${firstLine(error)}`)
   } finally {
-    await closeChrome(browser, stuck)
+    await closeChrome(browser, stuck, killer)
     server?.close()
     await page.dispose()
-    try {
-      if (tmp !== undefined) rmSync(tmp, { recursive: true, force: true, maxRetries: 5 })
-    } catch {
-      // A file that Chrome's helpers still hold, as Windows can keep one a moment, is left for the OS rather than failing the shot.
-    }
+    if (profile !== undefined) removeProfile(profile)
   }
 }
 
@@ -160,16 +158,24 @@ export function callLimit(seconds: number): number {
 }
 
 // Chrome can't close a tab whose page is stuck in the game's loop, so then, or when closing takes too long, it's killed instead.
-async function closeChrome(browser: Browser | undefined, stuck: boolean): Promise<void> {
+async function closeChrome(browser: Browser | undefined, stuck: boolean, killer: AbortController): Promise<void> {
   if (browser === undefined) return
-  if (!stuck) {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const waited = new Promise<false>((done) => (timer = setTimeout(() => done(false), 10_000)))
-    const closed = await Promise.race([browser.close().then(() => true, () => true), waited])
-    clearTimeout(timer)
-    if (closed) return
-  }
-  browser.process()?.kill('SIGKILL')
+  if (!stuck && (await within(10_000, browser.close().catch(() => {})))) return
+  const chrome = browser.process()
+  if (chrome === null || chrome.exitCode !== null || chrome.signalCode !== null) return
+  const exited = new Promise<void>((done) => chrome.once('exit', () => done()))
+  // Puppeteer then kills every process Chrome started, since one left running, like its network service, can write to the profile after it's removed.
+  killer.abort()
+  await within(10_000, exited)
+}
+
+// Whether work settled within ms milliseconds.
+async function within(ms: number, work: Promise<unknown>): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const waited = new Promise<false>((done) => (timer = setTimeout(() => done(false), ms)))
+  const settled = await Promise.race([work.then(() => true), waited])
+  clearTimeout(timer)
+  return settled
 }
 
 // Windows has no execute permission to check, so there any file passes.

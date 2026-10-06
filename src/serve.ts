@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, rmdirSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -351,6 +351,22 @@ export function openWindow(url: string): AppWindow | undefined {
   // Chrome's helper processes can hold files in the profile for a moment after it exits, as on Windows.
   child.once('close', () => void rm(profile, { recursive: true, force: true, maxRetries: 5 }).catch(() => {}))
   return { exited, close: () => void child.kill() }
+}
+
+// Chrome on macOS and Linux keeps its socket in a folder of its own in the temporary folder, linked from its profile, and removes it when it closes but not when it's killed or sent a signal; a TMPDIR of ours would lengthen the socket's path, and past 107 bytes Chrome on Linux won't start.
+export function removeProfile(profile: string): void {
+  try {
+    const folder = dirname(resolve(profile, readlinkSync(join(profile, 'SingletonSocket'))))
+    for (const name of ['SingletonSocket', 'SingletonCookie']) rmSync(join(folder, name), { force: true })
+    rmdirSync(folder)
+  } catch {
+    // Without the link, Chrome removed its socket or made none, as on Windows; a folder that holds anything else stays.
+  }
+  try {
+    rmSync(profile, { recursive: true, force: true, maxRetries: 5 })
+  } catch {
+    // A file that Chrome's helpers still hold, as Windows can keep one a moment, is left for the OS.
+  }
 }
 
 function openBrowser(url: string): void {

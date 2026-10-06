@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, request, type IncomingHttpHeaders } from 'node:http'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
@@ -241,19 +242,32 @@ test('when Chrome fails to start, shot closes its server and esbuild and removes
   assert.deepEqual({ status: result.status, named: result.stdout.includes('no-chrome'), left: readdirSync(temp) }, { status: 0, named: true, left: [] }, result.stderr)
 })
 
-test("a Chrome that shot kills for a page that never returns leaves nothing in the temporary folder, which a killed Chrome's sockets would", { skip: !chrome && 'needs Chrome', timeout: 60_000 }, () => {
-  const temp = mkdtempSync(join(TMP, 'temp-'))
+test("a Chrome that shot kills for a page that never returns leaves nothing in the temporary folder, which a killed Chrome's socket would", { skip: !chrome && 'needs Chrome', timeout: 60_000 }, () => {
+  // The system's temporary folder, since one deep in a checkout can be too long for Chrome on Linux to start in.
+  const temp = mkdtempSync(join(tmpdir(), 'threejam-temp-'))
   made.push(temp)
   const dir = folder({ 'game.ts': GAME, 'view.ts': 'for (;;) {}\n' })
   const shot = pathToFileURL(join(ROOT, 'src', 'shot.ts')).href
   const options = JSON.stringify({ dir, at: [1], out: join(dir, 'frame.png'), timeout: 2 })
-  const script = `import { shoot } from ${JSON.stringify(shot)}\nawait shoot(${options}).catch((error) => console.log(error.code))`
+  const script = `import { shoot } from ${JSON.stringify(shot)}\nawait shoot(${options}).catch((error) => console.log(error.code + ': ' + error.message))`
   const env = { ...process.env, TMPDIR: temp, TEMP: temp, TMP: temp }
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: ROOT, env, encoding: 'utf8', timeout: 45_000, killSignal: 'SIGKILL' })
-  // On Windows, Chrome's helpers can hold a file in shot's or Puppeteer's folder a moment after Chrome is killed, and shot leaves those for the OS.
-  const held = /^(threejam-chrome-|puppeteer_dev_chrome_profile-)/
-  const left = readdirSync(temp).filter((name) => process.platform !== 'win32' || !held.test(name))
-  assert.deepEqual({ status: result.status, printed: result.stdout.trim(), left }, { status: 0, printed: 'TIMEOUT', left: [] }, result.stderr)
+  // On Windows, Chrome's helpers can hold a file in shot's profile a moment after Chrome is killed, and shot leaves those for the OS.
+  const left = readdirSync(temp).filter((name) => process.platform !== 'win32' || !name.startsWith('threejam-chrome-'))
+  const printed = 'TIMEOUT: the page ran past the 2 s time limit as it loaded; look for a loop that never ends in view.ts, or allow more time with --timeout'
+  assert.deepEqual({ status: result.status, printed: result.stdout.trim(), left }, { status: 0, printed, left: [] }, result.stderr)
+})
+
+test("shot's Chrome starts in a TMPDIR with no room for a folder of shot's, since its socket goes there and Linux caps a socket's path at 107 bytes", { skip: (!chrome && 'needs Chrome') || (process.platform !== 'linux' && "the cap is Linux's"), timeout: 60_000 }, () => {
+  // Chrome's socket lands 41 to 45 bytes past TMPDIR, depending on its build, so at 50 it fits with too little room for a folder like threejam-chrome-XXXXXX in between.
+  const temp = mkdtempSync(join(tmpdir(), 'threejam-'.padEnd(50 - tmpdir().length - 7, 'x')))
+  made.push(temp)
+  const shot = pathToFileURL(join(ROOT, 'src', 'shot.ts')).href
+  const options = JSON.stringify({ dir: 'games/pong', at: [1], out: join(folder({}), 'frame.png') })
+  const script = `import { shoot } from ${JSON.stringify(shot)}\nawait shoot(${options}).then(() => console.log('ok'), (error) => console.log(error.code + ': ' + error.message))`
+  const env = { ...process.env, TMPDIR: temp, TEMP: temp, TMP: temp }
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: ROOT, env, encoding: 'utf8', timeout: 45_000, killSignal: 'SIGKILL' })
+  assert.deepEqual({ length: temp.length, status: result.status, printed: result.stdout.trim(), left: readdirSync(temp) }, { length: 50, status: 0, printed: 'ok', left: [] }, result.stderr)
 })
 
 test('a Chrome that exits as it starts fails with one line naming it, though over a pipe its own output is lost, and a folder or a file that runs nothing says so', { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {
