@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs'
-import { dirname, extname, sep } from 'node:path'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, extname, join, sep } from 'node:path'
 import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { DEFAULT_TIMEOUT, LimitError, gameFailure, isSystemError } from './load.ts'
@@ -49,8 +50,8 @@ export async function openPage(tab: Page, url: string, { timeout }: { timeout?: 
   }
 }
 
-// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs.
-export async function launchChrome(chrome: string, { protocolTimeout }: { protocolTimeout?: number } = {}): Promise<Browser> {
+// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs, and with tmp, a temporary folder of its own.
+export async function launchChrome(chrome: string, { protocolTimeout, tmp }: { protocolTimeout?: number; tmp?: string } = {}): Promise<Browser> {
   const where = chrome.replaceAll(sep, '/')
   if (!existsSync(chrome)) throw new BrowserError(`there's no Chrome at ${where}; set CHROME_PATH to the executable of Chrome or Chromium, or Edge on Windows`)
   // Only shot loads Puppeteer, so the other commands start without it.
@@ -65,7 +66,7 @@ export async function launchChrome(chrome: string, { protocolTimeout }: { protoc
     return await puppeteer.launch({
       executablePath: chrome,
       pipe: true,
-      env: chromeEnv(),
+      env: tmp === undefined ? chromeEnv() : { ...chromeEnv(), TMPDIR: tmp, TMP: tmp, TEMP: tmp },
       protocolTimeout,
       ignoreDefaultArgs: true,
       // Software rendering repeats a frame byte for byte on one machine; on another it looks the same, though some pixels can be one shade off.
@@ -86,10 +87,13 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
   let server: Server | undefined
   let browser: Browser | undefined
   let stuck = false
+  // A Chrome that's killed leaves its sockets in its temporary folder, so it gets one that's removed after it, however it stopped.
+  let tmp: string | undefined
   try {
     const { PuppeteerError } = await import('puppeteer-core')
     server = await serve({ page })
-    browser = await launchChrome(chrome)
+    tmp = mkdtempSync(join(tmpdir(), 'threejam-chrome-'))
+    browser = await launchChrome(chrome, { tmp })
     const tab = await browser.newPage()
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const crashed = pageFailure(tab)
@@ -138,6 +142,7 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     await closeChrome(browser, stuck)
     server?.close()
     await page.dispose()
+    if (tmp !== undefined) rmSync(tmp, { recursive: true, force: true, maxRetries: 5 })
   }
 }
 
