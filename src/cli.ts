@@ -223,7 +223,7 @@ const cli = Cli.create('threejam', {
     async run(c) {
       try {
         const files = gameFiles(c.args.dir)
-        const errors = [...typecheck({ file: files.game, dom: false, timeout: c.options.timeout }), ...(files.view ? typecheck({ file: files.view, dom: true, timeout: c.options.timeout }) : [])]
+        const errors = [...(await typecheck({ file: files.game, dom: false, timeout: c.options.timeout })), ...(files.view ? await typecheck({ file: files.view, dom: true, timeout: c.options.timeout }) : [])]
         // A syntax error or an import that doesn't resolve fails the bundle as it does in sim, shot, and export, so it's a BUILD_ERROR here too.
         await bundlePage(c.args.dir)
         if (errors.length > 0) return c.error(failed('TYPE_ERROR', errors.join('; ')))

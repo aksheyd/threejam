@@ -36,12 +36,12 @@ Output is TOON by default; `--format json` switches it, and `--filter-output log
 - `TYPE_ERROR`: `check` found type errors.
 - `GAME_ERROR`: the game's or driver's code threw, broke an engine rule, or ran out of memory, as it loaded, in `start`, `update`, or the driver, or in the page, from `view.ts` or an image that won't load.
 - `TIMEOUT`: the game's code, its page in `shot`, or the type check ran past `--timeout`.
-- `OUTPUT_TOO_LARGE`: a run printed more than its reply can hold, as below.
+- `OUTPUT_TOO_LARGE`: a run printed more than its reply can hold, as below, or `check`'s type check printed more than 1 MB.
 - `BROWSER_ERROR`: Chrome is missing, didn't start, or failed while drawing.
 - `IO_ERROR`: a file or folder couldn't be read, made, or written, like a folder `new` has no permission to make.
 - `INTERNAL_ERROR`: ThreeJam itself failed, which is a bug to report.
 
-Loading a game is running its code, so `check`, `sim`, and the loads behind `shot` and `export` run `game.ts` and any `--driver` in a sandbox: a JavaScript realm with the language and the engine and nothing else, inside a child process that can't touch files, start processes, or reach the network. Each run has a time budget, `--timeout` seconds (default 30), after which it stops with the `TIMEOUT` code and the tick it reached, and an over-large `sim` reply is refused with `OUTPUT_TOO_LARGE` and how to narrow it. A run also stops as soon as the command or MCP server that started it ends, even by SIGKILL. The sandbox contains the code; the determinism guard below only keeps runs repeatable.
+Loading a game is running its code, so `check`, `sim`, and the loads behind `shot` and `export` run `game.ts` and any `--driver` in a sandbox: a JavaScript realm with the language and the engine and nothing else, inside a child process that can't touch files, start processes, or reach the network. Each run has a time budget, `--timeout` seconds (default 30), after which it stops with the `TIMEOUT` code and the tick it reached, and an over-large `sim` reply is refused with `OUTPUT_TOO_LARGE` and how to narrow it. A run and `check`'s type check also stop as soon as the command or MCP server that started them ends, even by SIGKILL. The sandbox contains the code; the determinism guard below only keeps runs repeatable.
 
 For agents:
 
@@ -189,7 +189,7 @@ Tests use the library, as in `games/*/game.test.ts` and the `game.test.ts` that 
 - Command-line mistakes exit 1 like other failures, because incur sets the exit codes. incur also refuses two of them itself, before ThreeJam sees the command: a misspelled command, with the code `COMMAND_NOT_FOUND`, and a bad value for one of incur's own flags, like `--format`, with `UNKNOWN`.
 - In `run` and exported pages, a sound plays when its tick runs, so the ticks a page catches up on after a slow frame play their sounds together, and a sound file played before the page has finished decoding it is skipped.
 - On Linux, Chrome makes its socket in `TMPDIR`, and a socket's path can't pass 107 bytes, so Chrome exits as it starts in a `TMPDIR` over 62 bytes, or 66 for Google Chrome. `shot` then fails with `BROWSER_ERROR`, and `run`'s window closes as it opens; both say to set `TMPDIR` to a shorter folder, like `/tmp`.
-- In a container whose PID 1 doesn't reap orphaned processes, like Node started by `docker run` without `--init`, each run leaves a defunct `sh`, the process that would have ended the run with its server, as each `shot` already leaves Chrome's; start such a container with `--init`.
+- In a container whose PID 1 doesn't reap orphaned processes, like Node started by `docker run` without `--init`, each run and type check leaves a defunct `sh`, the process that would have ended it with its server, as each `shot` already leaves Chrome's; start such a container with `--init`.
 - `threejam mcp add` fails on Windows, because incur, which registers the server, runs `npx add-mcp` without a shell, and there `npx` is a `.cmd` file. Run add-mcp yourself from a shell with the command for your install from the list above, like `npx add-mcp "node C:\games\node_modules\threejam\lib\cli.js --mcp" --name threejam -g -y`. add-mcp doesn't know Amp, so add the server to Amp's `settings.json` by hand.
 - add-mcp splits the command it's given at every space and keeps any quotes, so when the path to a clone of ThreeJam has a space, `mcp add` gives only Amp a working entry. For the other agents, run add-mcp yourself with the absolute path of `node` as the command and the rest as arguments: `npx add-mcp /usr/local/bin/node --args "/Users/Ada Byron/threejam/src/cli.ts" --args=--mcp --name threejam -g -y`.
 

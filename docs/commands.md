@@ -51,11 +51,11 @@ Output is [TOON](https://toonformat.dev) by default, `--format json` switches it
 | `TYPE_ERROR` | `check` found type errors |
 | `GAME_ERROR` | The game's or driver's code threw or broke an engine rule, in the sandbox or in the page, or ran out of memory |
 | `TIMEOUT` | The game's code, its page in `shot`, or the type check ran past `--timeout` |
-| `OUTPUT_TOO_LARGE` | A run printed more than its reply can hold |
+| `OUTPUT_TOO_LARGE` | A run printed more than its reply can hold, or `check`'s type check more than 1 MB |
 | `BROWSER_ERROR` | Chrome is missing, didn't start, or failed while drawing |
 | `IO_ERROR` | A file or folder couldn't be read, made, or written |
 | `INTERNAL_ERROR` | ThreeJam itself failed, which is a bug to report |
 
-Because loading a game runs its code, `check`, `sim`, `shot`, and `export` run `game.ts` and any `--driver` in a sandbox with no files, processes, or network. A run that passes `--timeout` seconds stops with the `TIMEOUT` code, and an MCP `sim` reply too large for a client is refused with `OUTPUT_TOO_LARGE` and how to narrow it. A run also stops as soon as the command or MCP server that started it ends, even by SIGKILL.
+Because loading a game runs its code, `check`, `sim`, `shot`, and `export` run `game.ts` and any `--driver` in a sandbox with no files, processes, or network. A run that passes `--timeout` seconds stops with the `TIMEOUT` code, and an MCP `sim` reply too large for a client is refused with `OUTPUT_TOO_LARGE` and how to narrow it. A run and `check`'s type check also stop as soon as the command or MCP server that started them ends, even by SIGKILL.
 
 [`AGENTS.md`](../AGENTS.md#testing) has every flag in detail, and [For coding agents](agents.md) covers the same commands as MCP tools and skills.

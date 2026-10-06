@@ -61,8 +61,8 @@ interface Reply {
   }
 }
 
-function mcp(signal: AbortSignal, cwd = ROOT) {
-  const server = spawnCli(['--mcp'], signal, cwd)
+function mcp(signal: AbortSignal, cwd = ROOT, env?: NodeJS.ProcessEnv) {
+  const server = spawnCli(['--mcp'], signal, cwd, env)
   const waiting = new Map<number, (reply: Reply) => void>()
   let buffered = ''
   let next = 1
@@ -478,15 +478,65 @@ test("closing a test's MCP server, or aborting its signal as a test that times o
   }
 })
 
-test('an MCP server killed with SIGKILL takes the sandbox running a game with it, instead of leaving it to run on to its own time limit', { skip: process.platform === 'win32' && "Windows ends a process's children with it, since libuv puts each in a job object" }, async (t) => {
+// A game whose type check never finishes: it imports a FIFO that nothing writes to, which TypeScript waits to read.
+function stalledCheck(): string {
+  const dir = folder({ 'game.ts': `import './stall.ts'\n${game({ update: 'world.ball.x += 1' })}` })
+  assert.equal(spawnSync('mkfifo', [join(ROOT, dir, 'stall.ts')]).status, 0)
+  return dir
+}
+
+// A game whose type check takes TypeScript over a minute, in memory that stays flat: each call takes only the last of thousands of overloads, so TypeScript checks its arguments, variables rather than numbers, against every one.
+function slowCheck(): string {
+  const last = 2999
+  const overloads = Array.from({ length: last + 1 }, (_, i) => `declare function pick(a: 0, b: 0, c: 0, d: 0, n: ${i}): ${i}`)
+  const calls = Array.from({ length: 8000 }, () => 'pick(z, z, z, z, l)').join(', ')
+  return folder({ 'game.ts': [game({ update: 'world.ball.x += 1' }), `const z = 0, l = ${last}`, ...overloads, `export const picked = [${calls}]`, ''].join('\n') })
+}
+
+test('a type check that runs past --timeout fails with TIMEOUT once its time is up, without waiting for TypeScript to finish', () => {
+  const started = Date.now()
+  assert.deepEqual(threejam('check', slowCheck(), '--timeout', '0.5'), {
+    code: 1,
+    out: 'code: TIMEOUT\nmessage: "the type check ran past the 0.5 s time limit; a type in the game may not terminate, or allow more time with --timeout"\n',
+  })
+  // On Windows, a check that waited for the tsc.exe that tsc.js starts, rather than for tsc.js, would wait for TypeScript to finish.
+  assert.ok(Date.now() - started < 15_000, `check took ${Date.now() - started} ms`)
+})
+
+test('a type check that prints more than 1 MB, as thousands of type errors do, fails with OUTPUT_TOO_LARGE and shows none of it', () => {
+  const errors = Array.from({ length: 15_000 }, (_, i) => `export const n${i}: number = 's${i}'`)
+  assert.deepEqual(threejam('check', folder({ 'game.ts': [game({ update: 'world.ball.x += 1' }), ...errors, ''].join('\n') })), {
+    code: 1,
+    out: 'code: OUTPUT_TOO_LARGE\nmessage: "the type check printed more than 1 MB, as thousands of type errors do, so it shows none; look for code that repeats one mistake, like a long list of data"\n',
+  })
+})
+
+test("check still type-checks a game when its environment holds what bash, macOS's sh, would take as its own: exported functions, SHELLOPTS, BASHOPTS, and TMOUT", () => {
+  const env = { 'BASH_FUNC_kill%%': '() { :; }', 'BASH_FUNC_read%%': '() { :; }', SHELLOPTS: 'noexec', BASHOPTS: 'extdebug', TMOUT: '1' }
+  const typo = threejamWith(env, 'check', folder({ 'game.ts': game({ update: 'world.ball.vxx = 2' }) }))
+  assert.equal(typo.code, 1)
+  assert.match(typo.out, /^code: TYPE_ERROR\nmessage: "?test\/\.tmp\/game-\w+\/game\.ts:6: Property 'vxx' does not exist/)
+})
+
+test("an MCP server killed with SIGKILL takes the sandbox running a game, and check's type check, with it, instead of leaving them to run on", { skip: process.platform === 'win32' && "Windows ends a process's children with it, since libuv puts each in a job object" }, async (t) => {
   const loop = folder({ 'game.ts': game({ update: 'for (;;) {}' }) })
-  const server = mcp(t.signal)
+  const stalled = stalledCheck()
+  // A killed server can't remove the folder its type check reads, so its temporary files go in a folder of the test's.
+  const tmp = mkdtempSync(join(TMP, 'tmp-'))
+  made.push(tmp)
+  const server = mcp(t.signal, ROOT, { ...process.env, TMPDIR: tmp })
   await server.ready
   void server.request('tools/call', { name: 'sim', arguments: { dir: loop, ticks: 1, timeout: 60 } })
   const sandbox = await started(server.pid, /--permission/)
   if (process.platform === 'linux') assert.deepEqual(await sandboxed(sandbox), { env: Object.entries(sandboxEnv()).map(([name, value]) => `${name}=${value}`).sort(), sockets: [0, 1, 2] })
-  server.kill('SIGKILL')
-  await until('the sandbox to end with its server', () => ended(sandbox))
+  void server.request('tools/call', { name: 'check', arguments: { dir: stalled, timeout: 60 } })
+  const children = [sandbox, await started(server.pid, /--listFiles/)]
+  try {
+    server.kill('SIGKILL')
+    await until('the sandbox and the type check to end with their server', () => children.every(ended))
+  } finally {
+    for (const pid of children) if (!ended(pid)) process.kill(pid, 'SIGKILL')
+  }
 })
 
 test('mcp add registers node with this CLI from a clone or an install, and npx for a copy in npx\'s cache or an install on a path with a space', () => {

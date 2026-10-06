@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams, type SpawnSyncReturns } from 'node:child_process'
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { SourceMap } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -207,10 +207,14 @@ const SHELL = '/bin/sh'
 // A shell also exports PWD, which the child isn't given; bash's exec adds SHLVL=0, which tells it nothing. fd 3 closes on a line of its own, since bash 3.2, macOS's sh, keeps a copy of it at fd 10 through exec "$@" 3<&-.
 const TIED = '(read -r _ <&3; kill -KILL 0) </dev/null >/dev/null 2>&1 &\nunset PWD\nexec 3<&-\nexec "$@"'
 
+// bash, macOS's sh, takes exported functions, options, and a timeout for read from its environment, so a function named kill or read, SHELLOPTS=noexec, or TMOUT could change what the watcher does, or keep the child from running at all; the child needs none of them.
+const BASH_IMPORTS = /^(BASH_FUNC_.*|SHELLOPTS|BASHOPTS|TMOUT)$/
+
 // A child that ends when this process does, even by SIGKILL, which on macOS and Linux would otherwise leave it running. Windows does this already: libuv puts every child in a job object that ends with this process. A system with no /bin/sh still starts the child, untied.
 function spawnTied(command: string, args: readonly string[], options: { readonly env?: NodeJS.ProcessEnv; readonly cwd?: string }): ChildProcessWithoutNullStreams {
   if (process.platform === 'win32' || !existsSync(SHELL)) return spawn(command, args, { ...options, stdio: 'pipe', windowsHide: true })
-  const tied = spawn(SHELL, ['-c', TIED, 'sh', command, ...args], { ...options, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], detached: true })
+  const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter(([name]) => !BASH_IMPORTS.test(name)))
+  const tied = spawn(SHELL, ['-c', TIED, 'sh', command, ...args], { ...options, env, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], detached: true })
   // Once the child has exited, closing the watcher's pipe ends the watcher, alone in the group by then.
   const release = () => void tied.stdio[3]?.destroy()
   tied.once('exit', release).once('error', release)
@@ -390,7 +394,7 @@ export const COMPILER_OPTIONS = {
   noEmit: true,
 } as const
 
-export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: string; dom: boolean; timeout?: number }): string[] {
+export async function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: string; dom: boolean; timeout?: number }): Promise<string[]> {
   const folder = dirname(file)
   const three = packageFolder('@types/three', ROOT)
   const compilerOptions = {
@@ -402,9 +406,7 @@ export function typecheck({ file, dom, timeout = DEFAULT_TIMEOUT }: { file: stri
     // The engine that's running, as in sim and the page, so a game checks without the package installed beside it, and Three.js's types as that engine has them, which describe the THREE a view receives.
     paths: { [NAME]: [TYPES], ...(three === undefined ? {} : { three: [join(three, 'index.d.ts')] }) },
   }
-  const result = runTsc({ compilerOptions, file, timeout })
-  if (hasCode(result.error, 'ETIMEDOUT')) throw new LimitError('TIMEOUT', `the type check ran past the ${timeout} s time limit; a type in the game may not terminate, or allow more time with --timeout`)
-  if (result.error) throw new Error(`the TypeScript check couldn't run: ${result.error.message}`)
+  const result = await runTsc({ compilerOptions, file, timeout })
   const errors: string[] = []
   const read: string[] = []
   const other: string[] = []
@@ -474,21 +476,57 @@ function dependenciesOf(folder: string): string[] {
   return isRecord(parsed) && isRecord(parsed.dependencies) ? Object.keys(parsed.dependencies) : []
 }
 
-function hasCode(error: Error | undefined, code: string): boolean {
-  return error !== undefined && 'code' in error && (error as { code?: unknown }).code === code
+interface Tsc {
+  readonly status: number | null
+  readonly stdout: string
+  readonly stderr: string
 }
 
+// spawnSync's bound. tsc lists the files it read after its errors, so output cut short couldn't be checked for an import from outside the folder, and none of it is shown.
+const MAX_TSC_BYTES = 1024 * 1024
+
 // paths is only a tsconfig.json setting, so each check writes one for its file, where only this user can read it; a type that never terminates is stopped at the time limit.
-function runTsc({ compilerOptions, file, timeout }: { compilerOptions: object; file: string; timeout: number }): SpawnSyncReturns<string> {
+async function runTsc({ compilerOptions, file, timeout }: { compilerOptions: object; file: string; timeout: number }): Promise<Tsc> {
   const config = mkdtempSync(join(tmpdir(), 'threejam-check-'))
   try {
     const project = join(config, 'tsconfig.json')
     writeFileSync(project, JSON.stringify({ compilerOptions, files: [file] }), { mode: 0o600, flag: 'wx' })
-    return spawnSync(process.execPath, [typescriptEntry(), '-p', project, '--pretty', 'false', '--listFiles'], {
-      cwd: ROOT,
-      encoding: 'utf8',
-      timeout: Math.min(Math.ceil(timeout * 1000), 2 ** 31 - 1),
-      killSignal: 'SIGKILL',
+    return await new Promise((done, fail) => {
+      const tsc = spawnTied(process.execPath, [typescriptEntry(), '-p', project, '--pretty', 'false', '--listFiles'], { cwd: ROOT })
+      const out: Buffer[] = []
+      const errors: Buffer[] = []
+      let bytes = 0
+      let stopped: LimitError | undefined
+      const stop = (error: LimitError) => {
+        stopped ??= error
+        tsc.kill('SIGKILL')
+      }
+      const late = new LimitError('TIMEOUT', `the type check ran past the ${timeout} s time limit; a type in the game may not terminate, or allow more time with --timeout`)
+      const timer = setTimeout(() => stop(late), Math.min(Math.ceil(timeout * 1000), 2 ** 31 - 1))
+      const collect = (into: Buffer[]) => (chunk: Buffer) => {
+        bytes += chunk.length
+        if (bytes <= MAX_TSC_BYTES) into.push(chunk)
+        else stop(new LimitError('OUTPUT_TOO_LARGE', `the type check printed more than ${MAX_TSC_BYTES / 1024 / 1024} MB, as thousands of type errors do, so it shows none; look for code that repeats one mistake, like a long list of data`))
+      }
+      tsc.stdout.on('data', collect(out))
+      tsc.stderr.on('data', collect(errors))
+      tsc.once('error', (error) => {
+        clearTimeout(timer)
+        fail(new Error(`the TypeScript check couldn't run: ${error.message}`))
+      })
+      // A stopped check settles as tsc exits: on Windows, the tsc.exe that tsc.js's job object ends can hold the pipes a moment longer, and what's left in them isn't needed.
+      tsc.once('exit', () => {
+        clearTimeout(timer)
+        if (stopped === undefined) return
+        tsc.stdout.destroy()
+        tsc.stderr.destroy()
+        fail(stopped)
+      })
+      tsc.once('close', (status) => {
+        if (stopped !== undefined) fail(stopped)
+        else done({ status, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(errors).toString('utf8') })
+      })
+      tsc.stdin.end()
     })
   } finally {
     rmSync(config, { recursive: true, force: true })
