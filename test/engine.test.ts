@@ -144,7 +144,7 @@ function temporal(): { readonly Now: { instant(): { readonly epochMilliseconds: 
   return Reflect.get(globalThis, 'Temporal')
 }
 
-test('audit 12: Intl, Temporal, and crypto read no clock or randomness in game code, nor does a WeakRef, and the platform has them back after', () => {
+test('Intl, Temporal, and crypto read no clock or randomness in game code, nor does a WeakRef, and the platform has them back after', () => {
   const cases: Array<[string, () => unknown]> = [
     ['Intl.DateTimeFormat format() with no date', () => new Intl.DateTimeFormat('en-US').format()],
     ['Intl.DateTimeFormat formatToParts() with no date', () => new Intl.DateTimeFormat('en-US').formatToParts()],
@@ -165,7 +165,7 @@ test('audit 12: Intl, Temporal, and crypto read no clock or randomness in game c
   assert.equal(typeof (temporal()?.Now.instant().epochMilliseconds ?? 0), 'number')
 })
 
-test('audit 12: ctx and its input are read-only, so game code can change neither time, input, nor randomness for the ticks after', () => {
+test('ctx and its input are read-only, so game code can change neither time, input, nor randomness for the ticks after', () => {
   const changes: Array<[string, (ctx: Context) => void]> = [
     ['dt', (ctx) => void Object.assign(ctx, { dt: 1 })],
     ['random', (ctx) => void Object.assign(ctx, { random: () => 0 })],
@@ -179,7 +179,7 @@ test('audit 12: ctx and its input are read-only, so game code can change neither
 })
 
 // A process reads its language when it starts, so each setting gets one of its own.
-test("review blockers 1 to 3: in a process set to another language and time zone, the guard leaves no path to the platform's clock, zone, or locale, through prototypes, subclasses, or an empty locale list", () => {
+test("in a process set to another language and time zone, the guard leaves no path to the platform's clock, zone, or locale, through prototypes, subclasses, or an empty locale list", () => {
   const dir = mkdtempSync(join(TMP, 'probe-'))
   made.push(dir)
   writeFileSync(join(dir, 'game.ts'), PROBE)
@@ -204,7 +204,7 @@ test("review blockers 1 to 3: in a process set to another language and time zone
   assert.deepEqual(outs[2], outs[0])
 })
 
-test('review blocker 4: a promise that game code starts can change the world neither after its tick nor through spawn', async () => {
+test('a promise that game code starts can change the world neither after its tick nor through spawn', async () => {
   const refused: string[] = []
   const game = defineGame({
     entities: { ball: { x: 0, y: 0, w: 0.1 }, pool: group(2, () => ({ w: 0.1, visible: false })) },
@@ -250,7 +250,7 @@ test("what game code puts in place of a guarded property stays until its run end
   assert.deepEqual(platform, ['number', 12, 'function', undefined])
 })
 
-test('audit 3: game code formats and compares as en-US does and dates in UTC, whatever the time zone, and Date forms that read the local time fail with their UTC form', () => {
+test('game code formats and compares as en-US does and dates in UTC, whatever the time zone, and Date forms that read the local time fail with their UTC form', () => {
   const zone = process.env.TZ
   process.env.TZ = 'Asia/Kolkata'
   try {

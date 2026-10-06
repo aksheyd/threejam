@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-// A game that tries each way around the guard the determinism review found, run by the tests in sim, in a Node process set to another language and time zone, and in a page. An error the guard raises keeps its text; any other reads "refused", since sim and a page word those differently.
+// A game that tries the ways around the guard through Date's and Intl's prototypes, a subclass, Temporal, an empty list of locales, a frame, and the host's globals, run by the tests in sim, in a Node process set to another language and time zone, and in a page. An error the guard raises keeps its text; any other reads "refused", since sim and a page word those differently.
 export const PROBE = `import { defineGame, listOf } from 'threejam'
 
 const host: Record<string, any> = globalThis

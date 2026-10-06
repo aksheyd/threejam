@@ -26,7 +26,7 @@ function shuffle(doc: string): string {
   return found[1]
 }
 
-test('audit 18: AGENTS.md and the skill give one shuffle, Fisher-Yates on ctx.random(), which passes check and orders by the seed alone', async () => {
+test('AGENTS.md and the skill give one shuffle, Fisher-Yates on ctx.random(), which passes check and orders by the seed alone', async () => {
   const snippet = shuffle('AGENTS.md')
   assert.equal(shuffle(join('skills', 'threejam', 'SKILL.md')), snippet)
   const dir = mkdtempSync(join(TMP, 'shuffle-'))

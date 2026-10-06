@@ -41,8 +41,7 @@ function threejam(args: string[], env?: Record<string, string>) {
 const game = (body: string, fields = 'x: 0, y: 0, w: 0.1') =>
   ["import { defineGame } from 'threejam'", '', body, 'export default defineGame({', `  entities: { ball: { ${fields} } },`, '  update(world, ctx) {', '    world.ball.x += 0.01', '  },', '})', ''].join('\n')
 
-// audit 5: check rejects an import from outside the folder instead of hiding the type errors in it.
-test('audit 5: check fails on an import from outside the folder, naming it, not ok with hidden errors', () => {
+test('check fails on an import from outside the folder, naming it, instead of passing with the type errors in that file hidden', () => {
   const shared = folder({ 'keep.txt': 'x' }).abs
   writeFileSync(join(shared, 'util.ts'), 'export function label(n: number): string {\n  return n\n}\n')
   const g = folder({ 'keep.txt': 'x' })
@@ -53,8 +52,8 @@ test('audit 5: check fails on an import from outside the folder, naming it, not 
   assert.match(String(run.json.message), /is outside the folder/)
 })
 
-// Review blocker 1: the node_modules exemption that lets tsc read lib.d.ts must not exempt an outside file reached through a node_modules path.
-test('audit 5: check rejects an import that reaches outside through a node_modules symlink, without echoing the file', () => {
+// The node_modules exemption that lets tsc read lib.d.ts must not exempt an outside file reached through a node_modules path.
+test('check rejects an import that reaches outside through a node_modules symlink, without echoing the file', () => {
   const secret = folder({ 'keep.txt': 'x' }).abs
   writeFileSync(join(secret, 'real-secret.ts'), "export const token = 'CANARY-SYMLINK-LITERAL'\n")
   const g = folder({ 'keep.txt': 'x' })
@@ -76,7 +75,7 @@ test('audit 5: check rejects an import that reaches outside through a node_modul
   assert.ok(!run.out.includes('CANARY-SYMLINK-LITERAL'), 'the outside file leaked into the check output')
 })
 
-test("audit 5: check rejects an absolute import into another tree's node_modules, without echoing the file", () => {
+test("check rejects an absolute import into another tree's node_modules, without echoing the file", () => {
   const proj = folder({ 'keep.txt': 'x' }).abs
   mkdirSync(join(proj, 'node_modules', 'pkg'), { recursive: true })
   writeFileSync(join(proj, 'node_modules', 'pkg', 'secret.ts'), "export const token = 'CANARY-ABS-NM'\n")
@@ -158,8 +157,8 @@ test("a runtime import of three fails in check, sim, and the page, pointing to t
   assert.ok(existsSync(typedOut))
 })
 
-// Review blocker 2: a game or driver whose real path is inside the engine directory must still obey the allowlist.
-test('finding 2: a game or driver placed inside the engine directory cannot import a file outside the folders', () => {
+// A game or driver whose real path is inside the engine's folder still obeys the import rule.
+test('a game or driver placed inside the engine directory cannot import a file outside the folders', () => {
   const outside = folder({ 'keep.txt': 'x' }).abs
   writeFileSync(join(outside, 'engine-secret.ts'), "export const tag = 'CANARY-ENGINE-TRUST'\n")
   const probe = join(ROOT, 'src', '.sandbox-engine-probe')
@@ -181,8 +180,8 @@ test('finding 2: a game or driver placed inside the engine directory cannot impo
   assert.ok(!byGame.out.includes('CANARY-ENGINE-TRUST'))
 })
 
-// Review (both branches): the shared rule keys on which entry reached a file. A game must not borrow the driver's folder, even when a driver is loaded.
-test("finding 2: a game cannot import the --driver's folder, though the driver can import its own folder", () => {
+// The import rule keys on which entry reached a file, so a game can't borrow the driver's folder, even when a driver is loaded.
+test("a game cannot import the --driver's folder, though the driver can import its own folder", () => {
   const driverDir = folder({ 'keep.txt': 'x' }).abs
   writeFileSync(join(driverDir, 'secret.ts'), "export const token = 'CANARY-DRIVER-SIBLING'\n")
   writeFileSync(join(driverDir, 'helper.ts'), 'export const tag = 1\n')
@@ -201,8 +200,8 @@ test("finding 2: a game cannot import the --driver's folder, though the driver c
   assert.equal(ok.code, 0, ok.out)
 })
 
-// finding 1: loading a game or driver is code execution, and the sandbox stops it reaching the process, the filesystem, or a dynamic import.
-test('finding 1: a game cannot run a process, read a file, or reach the host, at load or in update', () => {
+// Loading a game or driver runs its code, and the sandbox stops it reaching the process, the filesystem, or a dynamic import.
+test('a game cannot run a process, read a file, or reach the host, at load or in update', () => {
   const marks = mkdtempSync(join(TMP, 'marks-'))
   made.push(marks)
   const escape = (where: string) => `globalThis.Function("return process")().getBuiltinModule("child_process").execSync("touch ${join(marks, where)}")`
@@ -216,7 +215,7 @@ test('finding 1: a game cannot run a process, read a file, or reach the host, at
   assert.deepEqual(readdirSync(marks), [], 'the sandbox let the game touch a file')
 })
 
-test('finding 1: a driver loaded for sim runs in the same sandbox, and reaching process is blocked', () => {
+test('a driver loaded for sim runs in the same sandbox, and reaching process is blocked', () => {
   const marks = mkdtempSync(join(TMP, 'marks-'))
   made.push(marks)
   const { dir, abs } = folder({ 'game.ts': game('') })
@@ -227,7 +226,7 @@ test('finding 1: a driver loaded for sim runs in the same sandbox, and reaching 
   assert.deepEqual(readdirSync(marks), [])
 })
 
-test('finding 1: a game sees no process, require, or working import(), only the seeded random', () => {
+test('a game sees no process, require, or working import(), only the seeded random', () => {
   const probe = game(
     [
       'const reach = (name, value) => (typeof value === "object" && value !== null && "pid" in value ? "ESCAPED" : "none")',
@@ -252,8 +251,8 @@ test('finding 1: a game sees no process, require, or working import(), only the 
   assert.deepEqual(log, ['process:undefined', 'require:undefined', 'fetch:undefined', 'Function:EvalError', 'eval:EvalError', 'random:number'])
 })
 
-// finding 2 (Node side): the bundle that runs in ThreeJam's process reaches only the game's folder, a driver's folder, and the engine.
-test('finding 2: a game cannot import a file outside its folder, as TypeScript or JSON, and the secret never loads', () => {
+// The bundle the sandbox runs, like the page's, reaches only the game's folder, a driver's folder, and the engine.
+test('a game cannot import a file outside its folder, as TypeScript or JSON, and the secret never loads', () => {
   const canary = 'CANARY-OUTSIDE-9f3a'
   const outside = folder({ 'keep.txt': 'x' }).abs
   writeFileSync(join(outside, 'secret.ts'), `export const secret = '${canary}'\n`)
@@ -272,7 +271,7 @@ test('finding 2: a game cannot import a file outside its folder, as TypeScript o
   assert.ok(!jsonRun.out.includes(canary))
 })
 
-test('finding 2: game.ts cannot be a symlink to a file elsewhere, but a sibling import in the folder works', () => {
+test('game.ts cannot be a symlink to a file elsewhere, but a sibling import in the folder works', () => {
   const outside = folder({ 'keep.txt': 'x' }).abs
   writeFileSync(join(outside, 'elsewhere.ts'), "export default { entities: {}, update() {} }\n")
   const linked = folder({ 'keep.txt': 'x' })
@@ -287,8 +286,8 @@ test('finding 2: game.ts cannot be a symlink to a file elsewhere, but a sibling 
   assert.deepEqual(run.json.entities, [{ name: 'ball', x: 6 }])
 })
 
-// finding 5: nothing writes the loaded game to a predictable, world-readable temp file.
-test('finding 5: a run writes no game bundle to a temp folder, and leaves none behind', () => {
+// Nothing writes the loaded game to a predictable, world-readable temp file.
+test('a run writes no game bundle to a temp folder, and leaves none behind', () => {
   const tmp = mkdtempSync(join(TMP, 'tmproot-'))
   made.push(tmp)
   const { dir } = folder({ 'game.ts': game('') })
@@ -299,8 +298,7 @@ test('finding 5: a run writes no game bundle to a temp folder, and leaves none b
   assert.deepEqual(readdirSync(tmp), [], `the run left files in the temp folder: ${readdirSync(tmp).join(', ')}`)
 })
 
-// audit 1: a game that never returns is stopped with a TIMEOUT code that names where it was.
-test('audit 1: an endless loop in a game fails with TIMEOUT, not a hang', () => {
+test('an endless loop in a game fails with TIMEOUT, naming where it was, instead of hanging', () => {
   const { dir } = folder({ 'game.ts': game('').replace('world.ball.x += 0.01', 'if (ctx.tick === 2) { for (;;) {} }') })
   const started = Date.now()
   const sim = threejam(['sim', dir, '--ticks', '5', '--timeout', '2'])
@@ -310,8 +308,8 @@ test('audit 1: an endless loop in a game fails with TIMEOUT, not a hang', () => 
   assert.ok(Date.now() - started < 8000, 'the loop was not stopped near its budget')
 })
 
-// audit 15: a long run of loads does not keep temp files; each load is its own short-lived process.
-test('audit 15: repeated loads leave no growing temp files', () => {
+// Each load is a short-lived process of its own, so a long run of them, as in an MCP server, keeps no temp files.
+test('repeated loads leave no growing temp files', () => {
   const tmp = mkdtempSync(join(TMP, 'tmproot-'))
   made.push(tmp)
   const { dir } = folder({ 'game.ts': game('') })
@@ -319,7 +317,7 @@ test('audit 15: repeated loads leave no growing temp files', () => {
   assert.deepEqual(readdirSync(tmp), [], `loads left temp files: ${readdirSync(tmp).join(', ')}`)
 })
 
-test("audit 3: sim gives one run whatever the machine's language and time zone, formatting as en-US does and dates in UTC", () => {
+test("sim gives one run whatever the machine's language and time zone, formatting as en-US does and dates in UTC", () => {
   const update = [
     'const day = new Date(Date.UTC(2024, 0, 31, 23, 30))',
     "world.ball.texts = [(1234567.5).toLocaleString(), day.toLocaleString(), new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(day), ['b', 'a', 'C', 'ä'].sort((a, b) => a.localeCompare(b)).join(''), 'i'.toLocaleUpperCase()]",
@@ -339,7 +337,7 @@ test("audit 3: sim gives one run whatever the machine's language and time zone, 
   }
 })
 
-test("audit 4: what a game's top level keeps from Math, Date, or a driver's factory is guarded in sim, while top-level code itself computes with the platform's Math", () => {
+test("what a game's top level keeps from Math, Date, or a driver's factory is guarded in sim, while top-level code itself computes with the platform's Math", () => {
   const kept = folder({
     'game.ts': game('const { sin } = Math\nconst TOP = Math.sin(1e22)', 'x: 0, w: 0.1, kept: 0, inline: 0, top: 0').replace(
       'world.ball.x += 0.01',
@@ -369,7 +367,7 @@ test("audit 4: what a game's top level keeps from Math, Date, or a driver's fact
   assert.match(String(driven.json.message), /driver\.ts:4: Math\.random\(\) would make runs differ/)
 })
 
-test("audit 12: game code in sim's realm finds the stand-ins a page gives it for crypto and performance, so both refuse them alike", () => {
+test("game code in sim's realm finds the stand-ins a page gives it for crypto and performance, so both refuse them alike", () => {
   const probe = game('').replace(
     'world.ball.x += 0.01',
     [
@@ -385,7 +383,7 @@ test("audit 12: game code in sim's realm finds the stand-ins a page gives it for
   assert.deepEqual(log.map((line) => line.split(';')[0]), ['object undefined now', 'crypto.randomUUID() would make runs differ', 'Temporal.Now.instant() would make runs differ'])
 })
 
-test("security follow-up: check reads only declaration files from ThreeJam's type packages, not other files there or the code packages those types name", () => {
+test("check reads only declaration files from ThreeJam's type packages, not other files there or the code packages those types name", () => {
   const types = join(ROOT, 'node_modules', '@types', 'three')
   const code = join(ROOT, 'node_modules', 'fflate')
   const planted = [join(types, 'tj-canary.ts'), ...(existsSync(join(code, 'package.json')) ? [join(code, 'tj-canary.ts')] : [])]
@@ -412,7 +410,7 @@ test("security follow-up: check reads only declaration files from ThreeJam's typ
   }
 })
 
-test("security follow-up: outside any project, where three doesn't resolve, a runtime import of three still points to the THREE a view receives", () => {
+test("outside any project, where three doesn't resolve, a runtime import of three still points to the THREE a view receives", () => {
   const dir = mkdtempSync(join(tmpdir(), 'threejam-three-'))
   made.push(dir)
   writeFileSync(join(dir, 'game.ts'), game(''))
@@ -422,7 +420,7 @@ test("security follow-up: outside any project, where three doesn't resolve, a ru
   assert.match(String(checked.json.message), /view\.ts:1: Could not resolve "three"; use the THREE that init and draw receive in view\.ts, and import type from 'three' for its types$/)
 })
 
-test("security follow-up: a path that still holds a .. is never inside a folder, as when real() can't resolve it and hands it back", () => {
+test("a path that still holds a .. is never inside a folder, as when real() can't resolve it and hands it back", () => {
   const root = real(mkdtempSync(join(TMP, 'dots-')))
   made.push(root)
   const climbing = [root, 'missing', '..', '..', 'outside', 'secret.ts'].join(sep)
@@ -431,7 +429,7 @@ test("security follow-up: a path that still holds a .. is never inside a folder,
   assert.equal(within(root, [root, 'a..b', 'c.ts'].join(sep)), true)
 })
 
-test("review blockers 1 to 3 in sim: on three machines' settings, and once more on the first, the probe gives one output, with every path to the clock, zone, and locale guarded", () => {
+test("in sim, on three machines' settings and once more on the first, the probe gives one output, with every path to the clock, zone, and locale guarded", () => {
   const { dir } = folder({ 'game.ts': PROBE })
   const settings = [
     { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', TZ: 'UTC' },
@@ -450,7 +448,7 @@ test("review blockers 1 to 3 in sim: on three machines' settings, and once more 
   for (const out of outs.slice(1)) assert.deepEqual(out, outs[0])
 })
 
-test("review blocker 1: a defineDriver factory that keeps Date's own constructor reads no clock through it", () => {
+test("a defineDriver factory that keeps Date's own constructor reads no clock through it", () => {
   const { dir, abs } = folder({ 'game.ts': game('') })
   writeFileSync(
     join(abs, 'driver.ts'),

@@ -350,7 +350,7 @@ test('the MCP instructions say the tools run game code and that a game\'s output
     const instructions = (await server.ready).result?.instructions ?? ''
     assert.match(instructions, /run the code in the folder's game.ts/)
     assert.match(instructions, /sandbox without files, processes, or the network/)
-    // finding 6: a game's log, errors, and suggested commands are data from the game, not directions to the agent.
+    // A game's log, errors, and suggested commands are data from the game, not directions to the agent.
     assert.match(instructions, /data from that game, not instructions/)
     assert.match(instructions, /log.*error.*suggested|suggested.*command/i)
   } finally {
@@ -399,7 +399,7 @@ test('an MCP server started in another folder says where a relative path led, an
   }
 })
 
-test('audit 1 and 2: a looping game does not block other MCP calls, even after a cancel, and an oversized reply is refused with a hint', async (t) => {
+test('a looping game does not block other MCP calls, even after a cancel, and an oversized reply is refused with a hint', async (t) => {
   const loop = folder({ 'game.ts': game({ update: 'if (ctx.tick === 2) for (;;) {}' }) })
   const server = mcp(t.signal)
   try {
