@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
+import pong from '../games/pong/game.ts'
+import { simulate } from '../src/engine.ts'
 import { crashed, describe } from '../src/load.ts'
 import { ENGINE, ROOT, VERSION, mcpCommand } from '../src/package.ts'
 
@@ -208,6 +210,16 @@ test('a --driver file picks keys for sim from the typed world', () => {
   const { code, out } = threejam('sim', dir, '--ticks', '10', '--driver', join(dir, 'driver.ts'), '--fields', 'x', '--format', 'json')
   assert.equal(code, 0, out)
   assert.deepEqual(JSON.parse(out).entities, [{ name: 'ball', x: 3 }])
+})
+
+test('sim prints numbers to 4 decimal places, and --exact prints them as simulate has them and as --until compares them, so a value it prints stops a run', () => {
+  const args = ['sim', 'games/pong', '--ticks', '50', '--press', 'Space@1', '--only', 'ball', '--fields', 'x', '--format', 'json']
+  const x = (...more: string[]) => JSON.parse(threejam(...args, ...more).out).entities[0].x
+  const exact = simulate(pong, { ticks: 50, press: ['Space@1'] }).world.ball.x
+  assert.deepEqual([x(), x('--exact')], [Math.round(exact * 1e4) / 1e4, exact])
+  const until = ['--ticks', '600', '--press', 'Space@1', '--until', `ball.x=${exact}`, '--only', 'ball', '--format', 'json']
+  const stopped = JSON.parse(threejam('sim', 'games/pong', ...until).out)
+  assert.deepEqual([stopped.tick, stopped.reached], [50, true])
 })
 
 test('sim --until prints the tick the condition first held and suggests a shot of that tick', () => {

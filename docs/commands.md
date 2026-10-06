@@ -28,6 +28,8 @@ Ticks and other whole numbers in flags are plain digits, so `--ticks 1e2` or `--
 
 `sim` also takes `--until` to stop after the first tick a condition holds, like `--until 'match.state=over'` or `--until 'ball.x>1.9'`, `--only` and `--fields` to choose what it prints, and `--every N` to print every N ticks. Along with the entities it prints the game's log and the sounds it played, each with its tick.
 
+It rounds numbers to 4 decimal places, while `--until` compares exact values, so stop on a moving number with `<` or `>`, or copy the value from `--exact`, which prints numbers as they are.
+
 ## The page and Chrome
 
 Every command that loads a game bundles it first, for the sandbox described below and, in `run`, `shot`, and `export`, for the page, and both follow one rule: the game's files may import only `threejam` and files in the game's folder, and a `--driver` file may also import files in its own folder. An import of anything else, even through a link, fails with its `path:line`.

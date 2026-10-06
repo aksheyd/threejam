@@ -109,6 +109,7 @@ function codeOf(error: unknown): Code {
   return 'INTERNAL_ERROR'
 }
 
+// To 4 decimal places, which is easier to read than 0.11895782559369941; --exact prints numbers as --until compares them.
 function rounded(value: Value): Value {
   if (typeof value === 'number') {
     const round = Math.round(value * 1e4) / 1e4
@@ -141,7 +142,7 @@ function shellWord(word: string): string {
   return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`
 }
 
-function shown(entities: readonly EntityState[], fields: string | undefined): EntityState[] {
+function shown(entities: readonly EntityState[], { fields, exact }: { fields: string | undefined; exact: boolean }): EntityState[] {
   const wanted = fields
     ?.split(',')
     .map((field) => field.trim())
@@ -151,7 +152,7 @@ function shown(entities: readonly EntityState[], fields: string | undefined): En
   }
   return entities.map((entity) => {
     const kept = Object.entries(entity).filter(([field]) => field !== 'name' && (wanted === undefined || wanted.includes(field)))
-    return { name: entity.name, ...Object.fromEntries(kept.map(([field, value]) => [field, rounded(value)])) }
+    return { name: entity.name, ...Object.fromEntries(kept.map(([field, value]) => [field, exact ? value : rounded(value)])) }
   })
 }
 
@@ -254,6 +255,10 @@ const cli = Cli.create('threejam', {
         .describe('Print only these entities, like ball,bricks: * matches anything but a dot, a group name matches its members, and an entity brings its parts'),
       fields: z.string().optional().describe('Print only these fields, like x,y,vx; name is always printed'),
       every: whole(1).optional().describe('Also print the entities after tick 0 and every N ticks'),
+      exact: z
+        .boolean()
+        .optional()
+        .describe('Print numbers as they are, instead of rounded to 4 decimal places, which --until never rounds, so a value to stop on comes from here'),
     }),
     examples: [
       {
@@ -276,9 +281,9 @@ const cli = Cli.create('threejam', {
     mcp: { annotations: runsGame },
     async run(c) {
       try {
-        const { ticks, press, hold, pointer, driver, set, seed, every, only, fields, until, timeout } = c.options
+        const { ticks, press, hold, pointer, driver, set, seed, every, only, fields, exact = false, until, timeout } = c.options
         const run = await runGame(c.args.dir, { ticks, press, hold, pointer, driver, set, seed, every, until, only, timeout })
-        const printed = run.snapshots.map((snapshot) => ({ tick: snapshot.tick, entities: shown(snapshot.entities, fields) }))
+        const printed = run.snapshots.map((snapshot) => ({ tick: snapshot.tick, entities: shown(snapshot.entities, { fields, exact }) }))
         const data = every ? { snapshots: printed } : printed[0]
         const result = until === undefined ? data : { tick: run.tick, reached: run.reached, ...data }
         const again = shotCommand({ dir: c.args.dir, ticks: run.tick, inputs: { press, hold, pointer, driver, set, seed } })
