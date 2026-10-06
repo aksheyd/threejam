@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, extname, join, sep } from 'node:path'
+import { dirname, join, sep } from 'node:path'
 import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { LimitError, gameFailure, isSystemError, timeLimit } from './load.ts'
@@ -35,8 +35,8 @@ export function framePaths(out: string, at: readonly number[]): string[] {
   if (!/\.png$/i.test(out)) throw new UsageError(`-o ${quote(out)} should be a .png file, like frame.png`)
   if (at.length === 1) return [out]
   const width = Math.max(3, String(Math.max(...at)).length)
-  const extension = extname(out)
-  const stem = out.slice(0, out.length - extension.length)
+  // Past the check above, the name ends in .png in some case, even a name that's only that.
+  const [stem, extension] = [out.slice(0, -4), out.slice(-4)]
   return at.map((tick) => `${stem}-${String(tick).padStart(width, '0')}${extension}`)
 }
 
