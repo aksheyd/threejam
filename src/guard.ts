@@ -3,6 +3,7 @@ import { PORTABLE } from './math.ts'
 
 const CLOCK = 'count ticks with ctx.tick, since game time only moves in ticks'
 const SEEDED = 'use ctx.random(), which is seeded'
+const COLLECTED = 'keep what the game needs on its entities, since garbage collection runs at different times'
 const TIMERS = ['setTimeout', 'setInterval', 'queueMicrotask', 'requestAnimationFrame'] as const
 const MATH = Object.entries(PORTABLE)
 
@@ -11,17 +12,19 @@ function refuse(name: string, instead: string): never {
 }
 
 function blocked(name: string, instead: string): () => never {
+  // A function, not an arrow, so new WeakRef() fails with this message too.
   return function () {
     return refuse(name, instead)
   }
 }
 
-// What game code finds instead of performance while the guard is up, as in sim's realm, which has none: sim and a page agree on what's there.
+// What game code finds instead of performance and crypto while the guard is up, as in sim's realm, which has neither: sim and a page agree on what's there.
 const PERFORMANCE = Object.freeze({ now: blocked('performance.now()', CLOCK) })
+const CRYPTO = Object.freeze({ getRandomValues: blocked('crypto.getRandomValues()', SEEDED), randomUUID: blocked('crypto.randomUUID()', SEEDED) })
 
-// A realm with no clock or timers, like the one sim runs a game in, keeps the stand-ins game code finds in their place, so the guard swaps plain properties there on every tick.
+// A realm with no clock, timers, or crypto, like the one sim runs a game in, keeps the stand-ins game code finds in their place, so the guard swaps plain properties there on every tick.
 export function withStandIns(): void {
-  const missing: Record<string, unknown> = { performance: PERFORMANCE }
+  const missing: Record<string, unknown> = { performance: PERFORMANCE, crypto: CRYPTO }
   for (const key of TIMERS) missing[key] = blocked(`${key}()`, CLOCK)
   for (const [key, value] of Object.entries(missing)) if (Reflect.get(globalThis, key) === undefined) Reflect.set(globalThis, key, value)
 }
@@ -44,7 +47,7 @@ type Window = 'load' | 'run'
 let running = 0
 let plans: Readonly<Record<Window, readonly Swap[]>> | undefined
 
-// Swaps the clock, Math.random, and the timers for errors and Math's functions for portable ones while fn runs; it keeps runs repeatable, not code contained.
+// Swaps the clock, unseeded randomness, timers, and garbage collection for errors, and Math's functions for portable ones, while fn runs; it keeps runs repeatable, not code contained.
 export function guarded<T>(fn: () => T): T {
   const lower = raise('run')
   running += 1
@@ -60,7 +63,7 @@ export function guarded<T>(fn: () => T): T {
   }
 }
 
-// Loads a game's or driver's modules with the guard up, so what their top level keeps from Math or Date stays guarded. Math's functions kept there turn portable only once the game runs, so top-level code computes what it does in a test that imports the game.
+// Loads a game's or driver's modules with the guard up, so what their top level keeps from Math, Date, or Intl stays guarded. Math's functions kept there turn portable only once the game runs, so top-level code computes what it does in a test that imports the game.
 export function loading<T>(load: () => T): T {
   const lower = raise('load')
   try {
@@ -114,9 +117,15 @@ function deferred(native: unknown, portable: Function): Function {
 function globals(): Change[] {
   const swaps: Change[] = [
     { owner: globalThis, key: 'performance', value: PERFORMANCE },
+    { owner: globalThis, key: 'crypto', value: CRYPTO },
     ...TIMERS.map((key) => ({ owner: globalThis, key, value: blocked(`${key}()`, CLOCK) })),
+    ...['WeakRef', 'FinalizationRegistry'].map((key) => ({ owner: globalThis, key, value: blocked(`new ${key}()`, COLLECTED) })),
   ]
   if (typeof Date === 'function') swaps.push({ owner: globalThis, key: 'Date', value: guardedDate(Date) })
+  const intl: unknown = Reflect.get(globalThis, 'Intl')
+  if (isObject(intl)) swaps.push({ owner: globalThis, key: 'Intl', value: guardedIntl(intl) })
+  const temporal: unknown = Reflect.get(globalThis, 'Temporal')
+  if (isObject(temporal)) swaps.push({ owner: globalThis, key: 'Temporal', value: guardedTemporal(temporal) })
   return swaps
 }
 
@@ -134,4 +143,41 @@ function guardedDate(native: DateConstructor): DateConstructor {
     },
   })
   return date
+}
+
+// Intl in game code has no clock either.
+function guardedIntl(intl: object): object {
+  const native: unknown = Reflect.get(intl, 'DateTimeFormat')
+  if (typeof native !== 'function') return intl
+  const format: Function = new Proxy(native, {
+    construct: (target, given, newTarget) => clocked(Reflect.construct(target, given, newTarget === format ? target : newTarget)),
+    apply: (target, self, given) => clocked(Reflect.apply(target, self, given)),
+  })
+  return Object.create(intl, { DateTimeFormat: { value: format, writable: true, configurable: true } })
+}
+
+// A DateTimeFormat reads the clock when it formats no date, so the ones game code makes refuse to.
+function clocked<T>(made: T): T {
+  if (!isObject(made)) return made
+  for (const key of ['format', 'formatToParts']) {
+    const method: unknown = Reflect.get(made, key)
+    if (typeof method !== 'function') continue
+    const value = (date?: unknown) => (date === undefined ? refuse(`Intl.DateTimeFormat ${key}() with no date`, CLOCK) : Reflect.apply(method, made, [date]))
+    Object.defineProperty(made, key, { value, writable: true, configurable: true })
+  }
+  return made
+}
+
+function guardedTemporal(temporal: object): object {
+  const now: unknown = Reflect.get(temporal, 'Now')
+  if (!isObject(now)) return temporal
+  const stopped: PropertyDescriptorMap = {}
+  for (const key of Object.getOwnPropertyNames(now)) {
+    if (typeof Reflect.get(now, key) === 'function') stopped[key] = { value: blocked(`Temporal.Now.${key}()`, CLOCK), writable: true, configurable: true }
+  }
+  return Object.create(temporal, { Now: { value: Object.create(now, stopped), writable: true, configurable: true } })
+}
+
+function isObject(value: unknown): value is object {
+  return typeof value === 'object' && value !== null
 }

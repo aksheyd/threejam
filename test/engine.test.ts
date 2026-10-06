@@ -129,6 +129,45 @@ test('game code can read neither the clock nor unseeded randomness, and the guar
   assert.match(failure(defineGame({ entities: { ball }, update: async () => {} })), /must not be async/)
 })
 
+// Node 26 has Temporal and 22.18 doesn't, and no TypeScript lib this repo uses declares it. It's read where it's used, since the guard swaps the global.
+function temporal(): { readonly Now: { instant(): { readonly epochMilliseconds: number } } } | undefined {
+  return Reflect.get(globalThis, 'Temporal')
+}
+
+test('audit 12: Intl, Temporal, and crypto read no clock or randomness in game code, nor does a WeakRef, and the platform has them back after', () => {
+  const cases: Array<[string, () => unknown]> = [
+    ['Intl.DateTimeFormat format() with no date', () => new Intl.DateTimeFormat('en-US').format()],
+    ['Intl.DateTimeFormat formatToParts() with no date', () => new Intl.DateTimeFormat('en-US').formatToParts()],
+    ['crypto.randomUUID()', () => crypto.randomUUID()],
+    ['crypto.getRandomValues()', () => crypto.getRandomValues(new Uint8Array(4))],
+    ['new WeakRef()', () => new WeakRef({})],
+    ['new FinalizationRegistry()', () => new FinalizationRegistry(() => {})],
+  ]
+  if (temporal() !== undefined) cases.push(['Temporal.Now.instant()', () => temporal()?.Now.instant()])
+  for (const [name, read] of cases) {
+    assert.match(failure(defineGame({ entities: { ball }, update: () => void read() })), new RegExp(`^${name.replace(/[().]/g, '\\$&')} would make runs differ`), name)
+  }
+  const formatted = simulate(defineGame({ entities: { clock: { text: '' } }, update: ({ clock }) => void (clock.text = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC' }).format(0)) }), { ticks: 1 })
+  assert.equal(formatted.world.clock.text, '1/1/1970')
+  assert.equal(typeof crypto.randomUUID(), 'string')
+  assert.equal(typeof new Intl.DateTimeFormat().format(), 'string')
+  assert.equal(typeof new WeakRef({}).deref(), 'object')
+  assert.equal(typeof (temporal()?.Now.instant().epochMilliseconds ?? 0), 'number')
+})
+
+test('audit 12: ctx and its input are read-only, so game code can change neither time, input, nor randomness for the ticks after', () => {
+  const changes: Array<[string, (ctx: Context) => void]> = [
+    ['dt', (ctx) => void Object.assign(ctx, { dt: 1 })],
+    ['random', (ctx) => void Object.assign(ctx, { random: () => 0 })],
+    ['input.held', (ctx) => void Object.assign(ctx.input, { held: () => true })],
+    ['a new field', (ctx) => void Object.defineProperty(ctx, 'extra', { value: 1 })],
+  ]
+  for (const [name, change] of changes) assert.match(failure(defineGame({ entities: { ball }, update: (_, ctx) => change(ctx) })), /Cannot assign to read only property|not extensible/, name)
+  const seen: number[] = []
+  simulate(defineGame({ entities: { ball }, update: (_, ctx) => void seen.push(ctx.dt, ctx.input.held('Space') ? 1 : 0) }), { ticks: 2, hold: ['Space@2'] })
+  assert.deepEqual(seen, [1 / 60, 0, 1 / 60, 1])
+})
+
 test('Mouse and MouseRight are keys, and the pointer moves on the ticks --pointer names, staying there until the next move', () => {
   const seen: string[] = []
   const game = defineGame({

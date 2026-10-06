@@ -346,6 +346,22 @@ test("audit 4: what a game's top level keeps from Math, Date, or a driver's fact
   assert.match(String(driven.json.message), /driver\.ts:4: Math\.random\(\) would make runs differ/)
 })
 
+test("audit 12: game code in sim's realm finds the stand-ins a page gives it for crypto and performance, so both refuse them alike", () => {
+  const probe = game('').replace(
+    'world.ball.x += 0.01',
+    [
+      'const host = globalThis',
+      "ctx.print(typeof host.crypto, typeof host.crypto.subtle, Object.keys(host.performance).join(','))",
+      'try { host.crypto.randomUUID() } catch (error) { ctx.print(error.message) }',
+      'try { host.Temporal.Now.instant() } catch (error) { ctx.print(host.Temporal ? error.message : "Temporal.Now.instant() would make runs differ") }',
+    ].join('\n    '),
+  )
+  const sim = threejam(['sim', folder({ 'game.ts': probe }).dir, '--ticks', '1'])
+  assert.equal(sim.code, 0, sim.out)
+  const log = (sim.json.log as Array<{ text: string }>).map((entry) => entry.text)
+  assert.deepEqual(log.map((line) => line.split(';')[0]), ['object undefined now', 'crypto.randomUUID() would make runs differ', 'Temporal.Now.instant() would make runs differ'])
+})
+
 // The sandbox fixes the realm's globals before a game's module loads, and still keeps runs deterministic.
 test('the sandbox prepares the realm before the game loads, and the same seed still repeats a run', () => {
   const { dir } = folder({ 'game.ts': game('', 'x: 0, w: 0.1, roll: 0').replace('world.ball.x += 0.01', 'world.ball.roll = ctx.random()') })

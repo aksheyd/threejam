@@ -53,12 +53,21 @@ export class Session<E extends Entities = Entities> {
     settle(this.#store.all)
     this.#driverRandom = createRandom({ seed: this.seed, stream: 1 })
     const session = this
-    this.#ctx = {
+    const input = this.#input
+    // Frozen, with input behind functions of its own, so game code can't change time, input, or randomness for the ticks after.
+    this.#ctx = Object.freeze({
       get tick() {
         return session.#tick
       },
       dt: DT,
-      input: this.#input,
+      input: Object.freeze({
+        held: (key: Key) => input.held(key),
+        pressed: (key: Key) => input.pressed(key),
+        released: (key: Key) => input.released(key),
+        get pointer() {
+          return input.pointer
+        },
+      }),
       random: createRandom({ seed: this.seed }),
       print: (...values: unknown[]) => {
         this.logs.push({ tick: this.#tick, text: values.map((value) => (typeof value === 'string' ? value : show(value))).join(' ') })
@@ -66,7 +75,7 @@ export class Session<E extends Entities = Entities> {
       play: (sound: unknown, options?: unknown) => {
         this.sounds.push(soundEntry({ tick: this.#tick, sound, options, files }))
       },
-    }
+    })
   }
 
   get tick(): number {
