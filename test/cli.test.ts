@@ -124,6 +124,13 @@ test("check's type error for console, document, or setTimeout in game logic says
   assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'TYPE_ERROR', message } })
 })
 
+test('--filter-output log prints only the log and the suggested command', () => {
+  const { code, out } = threejam('sim', 'games/pong', '--ticks', '200', '--press', 'Space@1', '--filter-output', 'log', '--format', 'json')
+  assert.equal(code, 0, out)
+  const cta = { description: 'Suggested command:', commands: [{ command: 'threejam shot games/pong --at 200 --press Space@1', description: 'See this tick as a PNG' }] }
+  assert.deepEqual(JSON.parse(out), { log: [{ tick: 131, text: 'left scores, 1-0' }], cta })
+})
+
 test("a failure's code says what went wrong: BUILD_ERROR for a syntax error from sim and check alike, IO_ERROR for a folder new can't make, and BROWSER_ERROR without Chrome", () => {
   const broken = folder({ 'game.ts': game({ update: 'world.ball.x += ;' }) })
   const sim = threejam('sim', broken, '--ticks', '1')
