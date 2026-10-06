@@ -115,7 +115,9 @@ export async function runGame(dir: string, options: RunOptions): Promise<Run> {
 
 function driverFile(path: string): string {
   const file = resolve(path)
-  if (!existsSync(file)) throw new UsageError(`--driver ${named(path)} doesn't exist`)
+  const found = statSync(file, { throwIfNoEntry: false })
+  if (found === undefined) throw new UsageError(`--driver ${named(path)} doesn't exist`)
+  if (!found.isFile()) throw new UsageError(`--driver ${named(path)} isn't a file; give the driver's file, like bot.ts`)
   return file
 }
 

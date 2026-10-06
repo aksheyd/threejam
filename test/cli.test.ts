@@ -257,6 +257,14 @@ test("a game is TypeScript, so check and sim refuse a game.js, and a view.js bes
   assert.match(threejam('check', view).out, /^code: USAGE\nmessage: .*has view\.js, but ThreeJam reads only view\.ts; rename it to view\.ts"?\n$/)
 })
 
+test('a --driver that is empty or a folder fails as USAGE naming where it led, instead of reaching the bundler', () => {
+  const at = (path: string) => join(ROOT, path).replaceAll(sep, '/')
+  for (const [driver, named] of [['', `"" (${at('')})`], ['games', `games (${at('games')})`]]) {
+    const { code, out } = threejam('sim', 'games/pong', '--ticks', '1', '--driver', driver, '--format', 'json')
+    assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'USAGE', message: `--driver ${named} isn't a file; give the driver's file, like bot.ts` } })
+  }
+})
+
 test('a --driver file picks keys for sim from the typed world', () => {
   const driver = [
     "import type { Driver, EntitiesOf } from 'threejam'",
