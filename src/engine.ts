@@ -2,7 +2,7 @@ import { soundEntry } from './assets.ts'
 import { isColor } from './colors.ts'
 import { createStore, drawableOf, settle, stateOf, type Store } from './entities.ts'
 import { GameError, RunError, UsageError, quote, show } from './errors.ts'
-import { guarded } from './guard.ts'
+import { guarded, throughout } from './guard.ts'
 import { InputState, controlsOf, pointerMoves, schedule } from './input.ts'
 import { checkSeed, createRandom } from './random.ts'
 import {
@@ -160,19 +160,22 @@ export function simulate<E extends Entities>(game: Game<E>, options: SimOptions<
   const keysAt = schedule({ press, hold, ticks, clip })
   const pointerAt = pointerMoves({ pointer, ticks, clip })
   const session = new Session(game, options)
-  // A defineDriver factory is driver code too.
-  const driver = drive === undefined ? undefined : guarded(() => driverFor(drive))
   const snapshots: Snapshot[] = []
   const take = () => snapshots.push({ tick: session.tick, entities: session.state() })
-  session.start()
-  if (every) take()
-  let reached = false
-  for (let tick = 1; tick <= ticks && !reached; tick++) {
-    session.step(driver === undefined ? { keys: keysAt(tick), pointer: pointerAt(tick) } : session.drive(driver))
-    reached = until?.({ world: session.world, tick }) ?? false
-    if (every && tick % every === 0 && tick < ticks && !reached) take()
-  }
-  if (!every || session.tick > 0) take()
+  const reached = throughout(() => {
+    // A defineDriver factory is driver code too.
+    const driver = drive === undefined ? undefined : guarded(() => driverFor(drive))
+    session.start()
+    if (every) take()
+    let done = false
+    for (let tick = 1; tick <= ticks && !done; tick++) {
+      session.step(driver === undefined ? { keys: keysAt(tick), pointer: pointerAt(tick) } : session.drive(driver))
+      done = until?.({ world: session.world, tick }) ?? false
+      if (every && tick % every === 0 && tick < ticks && !done) take()
+    }
+    if (!every || session.tick > 0) take()
+    return done
+  })
   return { snapshots, logs: session.logs, sounds: session.sounds, world: session.world, tick: session.tick, reached }
 }
 

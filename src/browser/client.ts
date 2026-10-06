@@ -1,5 +1,5 @@
 import { Session, parseGame, pick } from '../engine.ts'
-import { guarded, loading } from '../guard.ts'
+import { guarded, loading, throughout } from '../guard.ts'
 import { CENTER, keyFromCode, pointerMoves, schedule } from '../input.ts'
 import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Key, type Point, type SoundEntry } from '../types.ts'
 import { loadImages, parseAssets } from './assets.ts'
@@ -120,23 +120,30 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   }
 
   const reset = (options: ResetOptions = {}): number => {
-    session = new Session(game, { seed: options.seed ?? seed, set: options.set, assets: Object.keys(assets) })
-    source = inputSource(options, drive)
+    const next = new Session(game, { seed: options.seed ?? seed, set: options.set, assets: Object.keys(assets) })
+    session = next
     heard = 0
-    session.start()
+    throughout(() => {
+      source = inputSource(options, drive)
+      next.start()
+    })
     draw()
-    return session.seed
+    return next.seed
   }
 
   window.engine = {
     reset,
     step(count = 1) {
-      for (let i = 0; i < count; i++) stepOnce()
+      throughout(() => {
+        for (let i = 0; i < count; i++) stepOnce()
+      })
       draw()
       return current().tick
     },
     advanceTo(tick) {
-      while (current().tick < tick) stepOnce()
+      throughout(() => {
+        while (current().tick < tick) stepOnce()
+      })
       draw()
       return current().tick
     },
@@ -235,7 +242,11 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     try {
       if (!paused && !document.hidden) {
         owed = Math.min(owed + (now - last), 250)
-        for (; owed >= TICK_MS; owed -= TICK_MS) stepOnce()
+        if (owed >= TICK_MS) {
+          throughout(() => {
+            for (; owed >= TICK_MS; owed -= TICK_MS) stepOnce()
+          })
+        }
       }
       last = now
       const { sounds } = current()

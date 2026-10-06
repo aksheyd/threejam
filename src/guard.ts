@@ -39,7 +39,7 @@ function blocked(name: string, instead: string): () => never {
 const PERFORMANCE = Object.freeze({ now: blocked('performance.now()', CLOCK) })
 const CRYPTO = Object.freeze({ getRandomValues: blocked('crypto.getRandomValues()', SEEDED), randomUUID: blocked('crypto.randomUUID()', SEEDED) })
 
-// A realm with no clock, timers, or crypto, like the one sim runs a game in, keeps the stand-ins game code finds in their place, so the guard swaps plain properties there on every tick.
+// A realm with no clock, timers, or crypto, like the one sim runs a game in, keeps the stand-ins game code finds in their place, so the guard swaps plain properties there.
 export function withStandIns(): void {
   const missing: Record<string, unknown> = { performance: PERFORMANCE, crypto: CRYPTO }
   for (const key of TIMERS) missing[key] = blocked(`${key}()`, CLOCK)
@@ -53,7 +53,7 @@ interface Change {
   readonly value: unknown
 }
 
-// plain is for a writable data property, which gets and sets swap several times faster than descriptors do; the guard swaps on every tick.
+// plain is for a writable data property, which gets and sets swap several times faster than descriptors do.
 interface Swap extends Change {
   readonly plain: boolean
 }
@@ -62,31 +62,43 @@ interface Swap extends Change {
 type Window = 'load' | 'run'
 
 let running = 0
+let raised = 0
 let plans: Readonly<Record<Window, readonly Swap[]>> | undefined
 
 // Swaps the clock, unseeded randomness, timers, garbage collection, the locale, and the time zone for errors or fixed values, and Math's functions for portable ones, while fn runs; it keeps runs repeatable, not code contained.
 export function guarded<T>(fn: () => T): T {
-  const lower = raise('run')
-  running += 1
-  try {
-    const result = fn()
-    if (typeof result === 'object' && result !== null && 'then' in result && typeof result.then === 'function') {
-      throw new GameError('start and update must not be async, since game time only moves in ticks')
+  return up('run', () => {
+    running += 1
+    try {
+      const result = fn()
+      if (typeof result === 'object' && result !== null && 'then' in result && typeof result.then === 'function') {
+        throw new GameError('start and update must not be async, since game time only moves in ticks')
+      }
+      return result
+    } finally {
+      running -= 1
     }
-    return result
-  } finally {
-    running -= 1
-    lower()
-  }
+  })
 }
 
 // Loads a game's or driver's modules with the guard up, so what their top level keeps from Math, Date, or Intl stays guarded. Math's functions kept there turn portable only once the game runs, so top-level code computes what it does in a test that imports the game.
 export function loading<T>(load: () => T): T {
-  const lower = raise('load')
+  return up('load', load)
+}
+
+// Keeps the guard up through a whole run of ticks, so each tick's guarded() finds it raised and swaps nothing, since one raise costs more than a tick; between ticks only the engine runs, and nothing it does depends on what the guard swaps.
+export function throughout<T>(ticks: () => T): T {
+  return up('run', ticks)
+}
+
+function up<T>(window: Window, fn: () => T): T {
+  const lower = raised === 0 ? raise(window) : undefined
+  raised += 1
   try {
-    return load()
+    return fn()
   } finally {
-    lower()
+    raised -= 1
+    lower?.()
   }
 }
 
@@ -168,7 +180,7 @@ function localeMethods(): Change[] {
   return swaps
 }
 
-// Date in game code: no clock, and no time zone. Dates it makes have their own prototype, so their local-time methods fail without the guard touching Date.prototype on every tick.
+// Date in game code: no clock, and no time zone. Dates it makes have their own prototype, so their local-time methods fail without the guard swapping Date.prototype's.
 function guardedDate(native: DateConstructor): DateConstructor {
   const methods: PropertyDescriptorMap = {}
   for (const [key, instead] of LOCAL_TIME) {
