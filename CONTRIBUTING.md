@@ -57,7 +57,7 @@ npm run test:package    # build, pack, install, and use the package; needs Chrom
 
 ## Issues and pull requests
 
-Report a bug or ask for a feature through the [issue forms](https://github.com/aksheyd/threejam/issues/new/choose), and a vulnerability privately, as [`SECURITY.md`](SECURITY.md) says. Open pull requests against `main`, one change to a pull request: the [template](.github/pull_request_template.md) lists the checks above, and CI runs them on Linux, macOS, and Windows.
+Report a bug or ask for a feature through the [issue forms](https://github.com/aksheyd/threejam/issues/new/choose), and a vulnerability privately, as [`SECURITY.md`](SECURITY.md) says. Open pull requests against `main`, one change to a pull request: the [template](.github/pull_request_template.md) lists the checks above, and CI runs them on Linux, macOS, and Windows, apart from `npm run test:package`, which runs on Linux.
 
 ## Releasing
 
