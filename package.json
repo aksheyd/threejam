@@ -4,6 +4,7 @@
   "private": true,
   "description": "A 2D game engine on Three.js where coding agents prove what their games do: exact, repeatable runs, state from sim, frames from shot, as a CLI and MCP tools",
   "license": "MIT",
+  "author": "Akshey Deokule <131929364+aksheyd@users.noreply.github.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/aksheyd/threejam.git"

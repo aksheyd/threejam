@@ -49,6 +49,7 @@ const manifest = {
   version: root.version,
   description: root.description,
   license: root.license,
+  author: root.author,
   repository: root.repository,
   homepage: root.homepage,
   bugs: root.bugs,
