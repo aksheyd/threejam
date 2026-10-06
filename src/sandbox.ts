@@ -1,7 +1,7 @@
-// The side of the sandbox that runs inside the realm each game gets: it fixes the realm's globals, then loads the game and its driver and runs one simulation.
+// The side of the sandbox that runs inside the realm each game gets: it fixes the realm's globals, then loads the game and its driver with the guard up and runs one simulation.
 import { parseGame, pick, simulate, untilCondition } from './engine.ts'
 import { GameError, RunError, UsageError, type Phase } from './errors.ts'
-import { withoutClocks } from './guard.ts'
+import { loading, withStandIns } from './guard.ts'
 import { defineDriver, driverFor, isDrive, type Drive, type Game, type LogEntry, type Snapshot, type SoundEntry } from './types.ts'
 
 // The property of the realm's global object the child process finds the sandbox at.
@@ -68,7 +68,7 @@ export function sandbox(modules: Modules): void {
 
 // The realm has the language's built-ins and nothing else; this is where its globals get fixed before a game can capture them.
 function prepareRealm(): void {
-  withoutClocks()
+  withStandIns()
   if (Reflect.get(globalThis, 'structuredClone') === undefined) Reflect.set(globalThis, 'structuredClone', clonePlain)
 }
 
@@ -107,8 +107,8 @@ function reply(modules: Modules, request: string): string {
 }
 
 function simulated(modules: Modules, request: Request): Omit<Extract<Reply, { ok: true }>, 'ok'> {
-  const game = tracked(parseGame(defaultExport(modules.game())))
-  const drive = modules.driver === undefined ? undefined : trackedDriver(driverIn(modules.driver(), request.driver))
+  const game = tracked(parseGame(defaultExport(loading(modules.game))))
+  const drive = modules.driver === undefined ? undefined : trackedDriver(driverIn(loading(modules.driver), request.driver))
   const until = request.until === undefined ? undefined : untilCondition(request.until)
   const { ticks, press, hold, pointer, set, seed, every, clip, assets } = request
   const run = simulate(game, { ticks, press, hold, pointer, set, seed, every, clip, assets, drive, until })
@@ -148,6 +148,7 @@ function tracked(game: Game): Game {
 
 function trackedDriver(drive: Drive): Drive {
   return defineDriver(() => {
+    stage = 'driver'
     const driver = driverFor(drive)
     return (frame) => {
       stage = 'driver'

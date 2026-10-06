@@ -1,4 +1,5 @@
 import { Session, parseGame, pick } from '../engine.ts'
+import { guarded, loading } from '../guard.ts'
 import { CENTER, keyFromCode, pointerMoves, schedule } from '../input.ts'
 import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Key, type Point, type SoundEntry } from '../types.ts'
 import { loadImages, parseAssets } from './assets.ts'
@@ -52,10 +53,18 @@ const BUTTONS: ReadonlyMap<number, Key> = new Map([
   [2, 'MouseRight'],
 ])
 
-export async function play(page: { game: unknown; view: unknown; driver: unknown; assets: unknown; config: unknown }): Promise<void> {
-  const game = parseGame(page.game)
+// The game's, view's, and driver's modules, each loaded when called.
+export interface PageModules {
+  readonly game: () => unknown
+  readonly view: () => unknown
+  readonly driver: (() => unknown) | undefined
+}
+
+export async function play(page: PageModules & { assets: unknown; config: unknown }): Promise<void> {
+  // The game's and driver's modules load with the guard up, as in the sandbox, so what their top level keeps is guarded too.
+  const game = parseGame(defaultOf(loading(page.game)))
   const config = parseConfig(page.config)
-  const drive = parseDrive(page.driver)
+  const drive = page.driver === undefined ? undefined : parseDrive(defaultOf(loading(page.driver)))
   const assets = parseAssets(page.assets)
   const canvas = document.querySelector('canvas')
   if (!canvas) throw new Error('the page needs a <canvas>')
@@ -68,7 +77,7 @@ export async function play(page: { game: unknown; view: unknown; driver: unknown
     if (config.mode !== 'shot') notice(`${error instanceof Error ? error.message : String(error)}${fix}`)
     throw error
   })
-  const view = new View({ canvas, game, custom: parseView(page.view), images })
+  const view = new View({ canvas, game, custom: parseView(page.view()), images })
   const speaker = config.mode === 'shot' ? undefined : new Speaker(assets)
   const seed = config.mode === 'shot' ? 0 : (config.seed ?? Math.floor(Math.random() * 2 ** 31))
   const down = new Set<Key>()
@@ -244,7 +253,7 @@ export async function play(page: { game: unknown; view: unknown; driver: unknown
 function inputSource(options: ResetOptions, drive: Drive | undefined): Source {
   if (options.drive) {
     if (!drive) throw new Error('this page was built without a driver')
-    return { kind: 'driver', driver: driverFor(drive) }
+    return { kind: 'driver', driver: guarded(() => driverFor(drive)) }
   }
   const { ticks } = options
   if (ticks === undefined) return { kind: 'keyboard' }
@@ -273,10 +282,13 @@ function parseConfig(value: unknown): Config {
   }
 }
 
-function parseDrive(value: unknown): Drive | undefined {
-  if (value === undefined) return undefined
+function parseDrive(value: unknown): Drive {
   if (isDrive(value)) return value
   throw new Error('the driver file must export default a driver function or defineDriver(...)')
+}
+
+function defaultOf(module: unknown): unknown {
+  return typeof module === 'object' && module !== null && 'default' in module ? module.default : undefined
 }
 
 function notice(message: string): void {

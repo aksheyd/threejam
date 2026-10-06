@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, w
 import { join, relative } from 'node:path'
 import { after, test } from 'node:test'
 import { real, within } from '../src/confine.ts'
+import { PORTABLE } from '../src/math.ts'
 import { ROOT } from '../src/package.ts'
 
 const CLI = join(ROOT, 'src', 'cli.ts')
@@ -313,6 +314,36 @@ test('audit 15: repeated loads leave no growing temp files', () => {
   const { dir } = folder({ 'game.ts': game('') })
   for (let i = 0; i < 6; i++) threejam(['sim', dir, '--ticks', '1', '--only', 'ball'], { TMPDIR: tmp, TMP: tmp, TEMP: tmp })
   assert.deepEqual(readdirSync(tmp), [], `loads left temp files: ${readdirSync(tmp).join(', ')}`)
+})
+
+test("audit 4: what a game's top level keeps from Math, Date, or a driver's factory is guarded in sim, while top-level code itself computes with the platform's Math", () => {
+  const kept = folder({
+    'game.ts': game('const { sin } = Math\nconst TOP = Math.sin(1e22)', 'x: 0, w: 0.1, kept: 0, inline: 0, top: 0').replace(
+      'world.ball.x += 0.01',
+      'world.ball.kept = sin(1e22)\n    world.ball.inline = Math.sin(1e22)\n    world.ball.top = TOP',
+    ),
+  })
+  const run = threejam(['sim', kept.dir, '--ticks', '1', '--fields', 'kept,inline,top'])
+  assert.equal(run.code, 0, run.out)
+  const [{ kept: sine, inline, top }] = run.json.entities as Array<{ kept: number; inline: number; top: number }>
+  assert.equal(sine, inline)
+  assert.ok(Math.abs(sine - PORTABLE.sin(1e22)) < 1e-4 && Math.abs(top - Math.sin(1e22)) < 1e-4 && Math.abs(sine - top) > 0.1, run.out)
+
+  const failing: Array<[string, Record<string, string>, RegExp]> = [
+    ['a kept Math.random', { 'game.ts': game('const random = Math.random').replace('world.ball.x += 0.01', 'world.ball.x = random()') }, /game\.ts:7: Math\.random\(\) would make runs differ.*\(in update at tick 1\)$/],
+    ['a kept Date.now', { 'game.ts': game('const now = Date.now').replace('world.ball.x += 0.01', 'world.ball.x = now() % 1') }, /game\.ts:7: Date\.now\(\) would make runs differ/],
+    ['Math.random at the top level', { 'game.ts': game('const SEED = Math.random()') }, /game\.ts:3: Math\.random\(\) would make runs differ; use ctx\.random\(\), which is seeded$/],
+  ]
+  for (const [name, files, message] of failing) {
+    const sim = threejam(['sim', folder(files).dir, '--ticks', '1'])
+    assert.equal(sim.code, 1, `${name}: ${sim.out}`)
+    assert.match(String(sim.json.message), message, name)
+  }
+  const { dir, abs } = folder({ 'game.ts': game('') })
+  writeFileSync(join(abs, 'driver.ts'), "import { defineDriver } from 'threejam'\n\nexport default defineDriver(() => {\n  const wait = Math.random() * 10\n  return ({ tick }) => (tick > wait ? ['Space'] : [])\n})\n")
+  const driven = threejam(['sim', dir, '--ticks', '5', '--driver', join(dir, 'driver.ts')])
+  assert.equal(driven.code, 1, driven.out)
+  assert.match(String(driven.json.message), /driver\.ts:4: Math\.random\(\) would make runs differ/)
 })
 
 // The sandbox fixes the realm's globals before a game's module loads, and still keeps runs deterministic.

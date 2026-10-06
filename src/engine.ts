@@ -151,7 +151,8 @@ export function simulate<E extends Entities>(game: Game<E>, options: SimOptions<
   const keysAt = schedule({ press, hold, ticks, clip })
   const pointerAt = pointerMoves({ pointer, ticks, clip })
   const session = new Session(game, options)
-  const driver = drive === undefined ? undefined : driverFor(drive)
+  // A defineDriver factory is driver code too.
+  const driver = drive === undefined ? undefined : guarded(() => driverFor(drive))
   const snapshots: Snapshot[] = []
   const take = () => snapshots.push({ tick: session.tick, entities: session.state() })
   session.start()

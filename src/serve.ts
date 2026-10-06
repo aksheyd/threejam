@@ -73,13 +73,14 @@ export function pageBuild({ files, driver, address }: { files: GameFiles; driver
   const driverFile = driver === undefined ? undefined : resolve(driver)
   const roots = confineRoots({ game: files.folder, driver: driverFile === undefined ? undefined : dirname(driverFile) })
   const seeds = [files.game, ...(files.view === undefined ? [] : [files.view]), ...(driverFile === undefined ? [] : [driverFile])]
+  // The game's own modules load only when play runs them, as in the sandbox's bundle, so it can raise the guard first.
+  const load = (file: string) => `() => require(${JSON.stringify(file)})`
   const entry = [
-    `import game from ${JSON.stringify(files.game)}`,
-    files.view ? `import * as view from ${JSON.stringify(files.view)}` : 'const view = {}',
-    driverFile ? `import driver from ${JSON.stringify(driverFile)}` : 'const driver = undefined',
     "import assets from 'threejam:assets'",
     `import { play } from ${JSON.stringify(engineFile(join('browser', 'client')))}`,
-    'play({ game, view, driver, assets, config: window.THREEJAM })',
+    `const view = ${files.view ? load(files.view) : '() => ({})'}`,
+    `const driver = ${driverFile ? load(driverFile) : 'undefined'}`,
+    `play({ game: ${load(files.game)}, view, driver, assets, config: window.THREEJAM })`,
   ].join('\n')
   // A module in no folder, unlike stdin, which esbuild places in its resolveDir, so the import rule judges what the entry pulls in as the engine's.
   const page: esbuild.Plugin = {
