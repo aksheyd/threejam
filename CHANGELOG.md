@@ -7,6 +7,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - The manual the package ships, `AGENTS.md`, leaves out working on ThreeJam itself, which moves to `CONTRIBUTING.md` in the repo.
 - The package ships the agent skill, as `node_modules/threejam/skills/threejam/SKILL.md`, and the docs' `npx skills add` installs it from the latest release's tag instead of from `main`, so the skill describes the version npm installs.
 - `AGENTS.md` says that keys are places on the keyboard, so a game's W, A, S, and D are the keys marked Z, Q, S, and D on a French AZERTY keyboard.
+- `AGENTS.md` and the commands guide name `run --serve-only`, which serves the page without opening a window, and `--out`, the long form of `-o`.
 
 ## [0.0.4](https://github.com/aksheyd/threejam/compare/v0.0.3...v0.0.4) - 2026-10-06
 
