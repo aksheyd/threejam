@@ -6,7 +6,7 @@
 - [For coding agents](agents.md): the skill, the MCP server, and the other forms the commands take.
 - [Example games](examples.md): the games in this repo, how to play them, and what each is worth reading for.
 
-[`AGENTS.md`](../AGENTS.md) is the full manual: every part of `game.ts` and `view.ts`, the rules the engine checks, testing, the [known problems](../AGENTS.md#known-problems), and how to [work on ThreeJam](../AGENTS.md#working-on-threejam) itself. It ships in the package too, as `node_modules/threejam/AGENTS.md`.
+[`AGENTS.md`](../AGENTS.md) is the full manual: every part of `game.ts` and `view.ts`, the rules the engine checks, testing, and the [known problems](../AGENTS.md#known-problems). It ships in the package too, as `node_modules/threejam/AGENTS.md`. [`CONTRIBUTING.md`](../CONTRIBUTING.md) covers working on ThreeJam itself, and [`CHANGELOG.md`](../CHANGELOG.md) what changed in each release.
 
 ## Built with
 

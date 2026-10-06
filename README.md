@@ -53,4 +53,6 @@ Then ask your agent for a game. Starting from an empty folder instead? `npx thre
 - [Commands](docs/commands.md): every command and flag
 - [For coding agents](docs/agents.md): the skill, the MCP tools, and the other forms the commands take
 - [Example games](docs/examples.md): Pong, Breakout, Snake, Flappy, Invaders, Tetris, and Asteroids
-- [`AGENTS.md`](AGENTS.md): the full manual, including the known problems and how to work on ThreeJam itself
+- [`AGENTS.md`](AGENTS.md): the full manual, including the known problems
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): working on ThreeJam itself, and how releases go
+- [`CHANGELOG.md`](CHANGELOG.md): what changed in each release
