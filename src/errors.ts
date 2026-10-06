@@ -66,3 +66,8 @@ export function show(value: unknown): string {
 export function quote(text: string): string {
   return JSON.stringify(text.length > 60 ? `${text.slice(0, 57)}...` : text)
 }
+
+// A word of a command that a POSIX shell reads back as it is.
+export function shellWord(word: string): string {
+  return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`
+}

@@ -2,7 +2,7 @@
 import { randomInt } from 'node:crypto'
 import { basename } from 'node:path'
 import { Cli, Errors, Formatter, z } from 'incur'
-import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, quote, show, type Code } from './errors.ts'
+import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, quote, shellWord, show, type Code } from './errors.ts'
 import { exportGame, exportPath } from './export.ts'
 import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
 import { createGame } from './new.ts'
@@ -150,10 +150,6 @@ function shotCommand({ dir, ticks, inputs }: { dir: string; ticks: number; input
   const seed = inputs.seed === undefined ? '' : ` --seed ${inputs.seed}`
   const keys = `${flag('press', inputs.press)}${flag('hold', inputs.hold)}${flag('pointer', inputs.pointer)}`
   return `shot ${shellWord(dir)} --at ${ticks}${keys}${driver}${flag('set', inputs.set)}${seed}`
-}
-
-function shellWord(word: string): string {
-  return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`
 }
 
 function shown(entities: readonly EntityState[], { fields, exact }: { fields: string | undefined; exact: boolean }): EntityState[] {
