@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
 import { real, within } from '../src/confine.ts'
+import { sandboxEnv } from '../src/load.ts'
 import { PORTABLE } from '../src/math.ts'
 import { ROOT } from '../src/package.ts'
 import { PROBE, checkProbe } from './probe.ts'
@@ -458,6 +459,23 @@ test("review blocker 1: a defineDriver factory that keeps Date's own constructor
   const driven = threejam(['sim', dir, '--ticks', '2', '--driver', join(dir, 'driver.ts')])
   assert.equal(driven.code, 1, driven.out)
   assert.match(String(driven.json.message), /driver\.ts:4: Date\.now\(\) would make runs differ/)
+})
+
+test("sim's sandbox runs in UTC and en-US and takes nothing else from our environment, whatever ours is set to", () => {
+  const names = ['TZ', 'LANG', 'LC_ALL', 'LC_TIME', 'THREEJAM_TEST_TOKEN'] as const
+  const saved = names.map((name) => process.env[name])
+  Object.assign(process.env, { TZ: 'Europe/Istanbul', LANG: 'tr_TR.UTF-8', LC_ALL: 'tr_TR.UTF-8', LC_TIME: 'fr_FR.UTF-8', THREEJAM_TEST_TOKEN: 'secret' })
+  try {
+    const { SystemRoot, ...env } = sandboxEnv()
+    assert.deepEqual(env, { TZ: 'UTC', LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' })
+    assert.equal(SystemRoot, process.platform === 'win32' ? process.env.SystemRoot : undefined)
+  } finally {
+    names.forEach((name, i) => {
+      const value = saved[i]
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    })
+  }
 })
 
 // The sandbox fixes the realm's globals before a game's module loads, and still keeps runs deterministic.

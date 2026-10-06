@@ -214,12 +214,9 @@ function inChild({ code, request, timeout }: { code: string; request: string; ti
   })
 }
 
-// The child gets no secrets from the environment, only what sets its locale and time zone, which games could already read through Intl and Date.
-function sandboxEnv(): Record<string, string> {
-  const env: Record<string, string> = {}
-  for (const [name, value] of Object.entries(process.env)) {
-    if (value !== undefined && /^(TZ|LANG|LANGUAGE|LC_[A-Z]+)$/.test(name)) env[name] = value
-  }
+// The child gets none of our environment, and runs in UTC and en-US, which the guard gives game code anyway, so sim reads no machine's time zone or language even where the guard might miss one.
+export function sandboxEnv(): Record<string, string> {
+  const env: Record<string, string> = { TZ: 'UTC', LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' }
   if (process.platform === 'win32' && process.env.SystemRoot !== undefined) env.SystemRoot = process.env.SystemRoot
   return env
 }
