@@ -451,6 +451,38 @@ test('audit 48: shot repeats a frame byte for byte on one machine, images and te
   }
 })
 
+test("a run page whose game or view.ts fails as it loads says why on the page instead of staying blank", { skip: !chrome && 'needs Chrome' }, async () => {
+  const game = "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n"
+  const cases: ReadonlyArray<readonly [Record<string, string>, string]> = [
+    [{ 'game.ts': game, 'view.ts': 'export const init = 5\n' }, 'view.ts: init must be a function'],
+    [{ 'game.ts': game, 'view.ts': "throw new Error('no view today')\n" }, 'view.ts: no view today (as it loaded)'],
+    [{ 'game.ts': `${game}export const started = Date.now()\n` }, 'Date.now() would make runs differ'],
+  ]
+  const token = 'session-token'
+  const browser = await launch()
+  try {
+    for (const [files, reason] of cases) {
+      const dir = mkdtempSync(join(TMP, 'notice-'))
+      made.push(dir)
+      for (const [name, source] of Object.entries(files)) writeFileSync(join(dir, name), source)
+      const page = await buildPage({ dir, config: { mode: 'run', seed: 0, token } })
+      const server = await serve({ page, token })
+      try {
+        const tab = await browser.newPage()
+        await openPage(tab, server.url)
+        await tab.waitForSelector('pre')
+        const shown = await tab.$eval('pre', (box) => box.textContent ?? '')
+        assert.ok(shown.startsWith(reason) && shown.endsWith('\n\nFix the game and save; the page reloads.'), shown)
+      } finally {
+        server.close()
+        await page.dispose()
+      }
+    }
+  } finally {
+    await browser.close()
+  }
+})
+
 test("a page that fails in shot is the game's failure, told in one line without the page's stack or the server's address", { skip: !chrome && 'needs Chrome' }, async () => {
   const dir = mkdtempSync(join(TMP, 'broken-'))
   made.push(dir)

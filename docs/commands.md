@@ -8,7 +8,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 | `npx threejam check <dir>` | Type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks that the images entities name are in the folder, then runs `start` and the first tick |
 | `npx threejam sim <dir> --ticks N` | Runs N ticks, 60 to a second, without a window and prints the entities |
 | `npx threejam shot <dir> --at T,T,...` | Saves an 800x600 PNG at each tick, drawn by the same page players see |
-| `npx threejam run <dir>` | Opens the game in a window for a person to play, with sound after the first key press or click; Esc quits |
+| `npx threejam run <dir>` | Checks that the game starts, then opens it in a window for a person to play, with sound after the first key press or click; Esc quits |
 | `npx threejam export <dir> -o <file>.html` | Writes one HTML file that plays the game offline, with its images and sounds inside; `--seed N` fixes the seed, which is otherwise new each time the page loads |
 
 ## Input

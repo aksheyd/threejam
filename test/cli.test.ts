@@ -171,6 +171,12 @@ test('a number on the command line is digits, so hex, exponents, and an empty st
   assert.deepEqual([ticks.type, ticks.minimum, every.minimum, seed.type, options.required], ['integer', 0, 1, 'integer', ['ticks']])
 })
 
+test("run checks the game before it serves a page, so one that can't start fails in the terminal instead of showing a blank page", () => {
+  const { code, out } = threejam('run', folder({ 'game.ts': 'export default {}\n' }), '--serve-only')
+  assert.equal(code, 1, out)
+  assert.match(out, /^Error \(GAME_ERROR\): [^\n]+\n$/)
+})
+
 test("run reports a page that doesn't build with its code instead of a bare error", () => {
   const dir = folder({ 'game.ts': game({ update: 'world.ball.x += 1' }), 'view.ts': 'export function draw( {\n' })
   const { code, out } = threejam('run', dir, '--serve-only')

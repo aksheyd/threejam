@@ -1,11 +1,11 @@
 import { Session, parseGame, pick } from '../engine.ts'
 import { guarded, loading, throughout } from '../guard.ts'
 import { CENTER, keyFromCode, pointerMoves, schedule } from '../input.ts'
-import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Key, type Point, type SoundEntry } from '../types.ts'
-import { loadImages, parseAssets } from './assets.ts'
+import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Game, type Key, type Point, type SoundEntry } from '../types.ts'
+import { loadImages, parseAssets, type Assets } from './assets.ts'
 import { barePage } from './bare.ts'
 import { Speaker } from './sound.ts'
-import { View, parseView } from './view.ts'
+import { View, parseView, type ViewModule } from './view.ts'
 
 // run is served by threejam run, whose server takes the token with /events and /quit, shot by threejam shot, and export is one file opened from disk, with no server behind it.
 export type Config =
@@ -61,27 +61,37 @@ export interface PageModules {
   readonly driver: (() => unknown) | undefined
 }
 
+const FIX_GAME = 'Fix the game and save; the page reloads.'
+
 // realm names the globals sim's realm has, which game code keeps while the page around it is bared.
 export async function play(page: PageModules & { assets: unknown; config: unknown; realm: readonly string[] }): Promise<void> {
   const bare = barePage(page.realm)
-  // The game's and driver's modules load with the guard up, as in the sandbox, so what their top level keeps is guarded too.
-  const game = parseGame(defaultOf(bare(() => loading(page.game))))
   const config = parseConfig(page.config)
-  const driver = page.driver
-  const drive = driver === undefined ? undefined : parseDrive(defaultOf(bare(() => loading(driver))))
-  const assets = parseAssets(page.assets)
+  const reloads = config.mode === 'run'
+  // First, so the page of a game that fails below still reloads when a fix is saved.
+  if (config.mode === 'run') new EventSource(`/events?token=${encodeURIComponent(config.token)}`).onmessage = () => location.reload()
+  // Before the game runs, a failure shows on the page too, except in shot, which reads the page's error instead.
+  const reported = (error: unknown, fix?: string): unknown => {
+    if (config.mode !== 'shot') notice(`${error instanceof Error ? error.message : String(error)}${reloads && fix ? `\n\n${fix}` : ''}`)
+    return error
+  }
+  const settingUp = <T>(step: () => T, fix?: string): T => {
+    try {
+      return step()
+    } catch (error) {
+      throw reported(error, fix)
+    }
+  }
+  const { game, drive, assets } = settingUp(() => partsOf(page, bare), FIX_GAME)
   const canvas = document.querySelector('canvas')
   if (!canvas) throw new Error('the page needs a <canvas>')
   if (game.title) document.title = game.title
-  const reloads = config.mode === 'run'
-  if (config.mode === 'run') new EventSource(`/events?token=${encodeURIComponent(config.token)}`).onmessage = () => location.reload()
   // Every image is ready before the first frame, so no frame shows one half loaded.
   const images = await loadImages(assets).catch((error: unknown) => {
-    const fix = reloads ? '\n\nFix the file and save; the page reloads.' : ''
-    if (config.mode !== 'shot') notice(`${error instanceof Error ? error.message : String(error)}${fix}`)
-    throw error
+    throw reported(error, 'Fix the file and save; the page reloads.')
   })
-  const view = new View({ canvas, game, custom: parseView(page.view()), images })
+  const custom = settingUp(() => viewOf(page.view), FIX_GAME)
+  const view = settingUp(() => new View({ canvas, game, custom, images }))
   const speaker = config.mode === 'shot' ? undefined : new Speaker(assets)
   const seed = config.mode === 'shot' ? 0 : (config.seed ?? Math.floor(Math.random() * 2 ** 31))
   const down = new Set<Key>()
@@ -265,6 +275,31 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     requestAnimationFrame(frame)
   }
   requestAnimationFrame(frame)
+}
+
+interface Parts {
+  readonly game: Game
+  readonly drive: Drive | undefined
+  readonly assets: Assets
+}
+
+function partsOf(page: PageModules & { assets: unknown }, bare: <T>(run: () => T) => T): Parts {
+  // The game's and driver's modules load with the guard up, as in the sandbox, so what their top level keeps is guarded too.
+  const game = parseGame(defaultOf(bare(() => loading(page.game))))
+  const driver = page.driver
+  const drive = driver === undefined ? undefined : parseDrive(defaultOf(bare(() => loading(driver))))
+  return { game, drive, assets: parseAssets(page.assets) }
+}
+
+// view.ts names itself in what its init or draw throws, but not in what its top level throws as it loads.
+function viewOf(load: () => unknown): ViewModule {
+  let module: unknown
+  try {
+    module = load()
+  } catch (error) {
+    throw new Error(`view.ts: ${error instanceof Error ? error.message : String(error)} (as it loaded)`, { cause: error })
+  }
+  return parseView(module)
 }
 
 function inputSource(options: ResetOptions, drive: Drive | undefined): Source {

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomInt } from 'node:crypto'
 import { basename } from 'node:path'
 import { Cli, Errors, z } from 'incur'
 import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, show, type Code } from './errors.ts'
@@ -333,9 +334,11 @@ const cli = Cli.create('threejam', {
     }),
     mcp: false,
     async *run(c) {
+      const seed = c.options.seed ?? randomInt(2 ** 31)
       try {
-        gameFiles(c.args.dir)
-        yield* play({ dir: c.args.dir, seed: c.options.seed, window: !c.options.serveOnly })
+        // A game that can't start would otherwise give its player a page with nothing on it.
+        await runGame(c.args.dir, { ticks: 1, seed })
+        yield* play({ dir: c.args.dir, seed, window: !c.options.serveOnly })
       } catch (error) {
         return c.error(failure(error))
       }
