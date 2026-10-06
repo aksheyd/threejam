@@ -2,7 +2,7 @@
 import { randomInt } from 'node:crypto'
 import { basename } from 'node:path'
 import { Cli, Errors, Formatter, z } from 'incur'
-import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, show, type Code } from './errors.ts'
+import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, quote, show, type Code } from './errors.ts'
 import { exportGame, exportPath } from './export.ts'
 import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
 import { createGame } from './new.ts'
@@ -368,24 +368,34 @@ const cli = Cli.create('threejam', {
     },
   })
 
-// incur's global flags that take a value, which it reads wherever they stand.
+// incur's global flags, which it reads wherever they stand; the valued ones take the next word when there is one.
+const GLOBAL = new Set(['--full-output', '--llms', '--llms-full', '--mcp', '--help', '-h', '--update', '--incur-update-check', '--version', '--schema', '--json', '--token-count'])
 const VALUED = new Set(['--format', '--filter-output', '--token-limit', '--token-offset'])
 
-// incur's mcp add reads --agent NAME from the command line itself, and skips an --agent with no name, or one written --agent=NAME, so it registers ThreeJam with every agent it finds.
-export function agentRefusal(argv: readonly string[]): string | undefined {
-  const words = argv.filter((word, i) => !VALUED.has(word) && !(i > 0 && VALUED.has(argv[i - 1])))
-  const first = words.findIndex((word) => !word.startsWith('-'))
-  const at = words[first] === NAME ? first + 1 : first
-  if (first === -1 || words[at] !== 'mcp' || words[at + 1] !== 'add') return undefined
+// What mcp add's own flags take after them, as its help shows them.
+const MCP_ADD_VALUES: ReadonlyMap<string, string> = new Map([
+  ['--agent', "an agent's name, like --agent claude-code"],
+  ['--command', 'the command agents will run, like --command "npx threejam --mcp"'],
+  ['-c', 'the command agents will run, like -c "npx threejam --mcp"'],
+])
+
+// incur's mcp add reads its flags from the command line itself and skips any word it doesn't know, or a flag that lacks its value, so it could register ThreeJam with every agent it finds; it takes only what its help shows.
+function mcpAddRefusal(argv: readonly string[]): string | undefined {
+  const words: string[] = []
+  for (let i = 0; i < argv.length; i++) {
+    if (VALUED.has(argv[i]) && argv[i + 1]) i++
+    else if (!GLOBAL.has(argv[i])) words.push(argv[i])
+  }
+  const at = words[0] === NAME ? 1 : 0
+  if (words[at] !== 'mcp' || words[at + 1] !== 'add') return undefined
   const rest = words.slice(at + 2)
-  for (const [i, word] of rest.entries()) {
-    if (word.startsWith('--agent=')) {
-      return `write --agent and the agent's name apart, like --agent ${word.slice('--agent='.length) || 'claude-code'}; mcp add reads no other form, and would register ThreeJam with every agent it finds`
-    }
-    const name = rest[i + 1]
-    if (word === '--agent' && (name === undefined || name === '' || name.startsWith('-'))) {
-      return "--agent needs an agent's name, like --agent claude-code; without one, mcp add would register ThreeJam with every agent it finds"
-    }
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '--no-global') continue
+    const needs = MCP_ADD_VALUES.get(rest[i])
+    if (needs === undefined) return `mcp add takes --agent NAME, --command CMD or -c CMD, and --no-global, not ${quote(rest[i])}`
+    const value = rest[i + 1]
+    if (value === undefined || value === '' || value.startsWith('-')) return `${rest[i]} needs ${needs}`
+    i++
   }
   return undefined
 }
@@ -399,7 +409,7 @@ function formatIn(argv: readonly string[]): Formatter.Format {
 }
 
 const commandLine = process.argv.slice(2)
-const refused = agentRefusal(commandLine)
+const refused = mcpAddRefusal(commandLine)
 if (refused === undefined) cli.serve()
 else {
   process.stdout.write(`${Formatter.format({ code: 'USAGE', message: refused }, formatIn(commandLine))}\n`)

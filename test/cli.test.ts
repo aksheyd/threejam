@@ -424,25 +424,31 @@ test('mcp add registers node with this CLI from a clone or an install, and npx f
   assert.equal(mcpCommand(), mcpCommand({ cli: CLI, version: VERSION }))
 })
 
-test("mcp add refuses an --agent with no name, which incur would read as every agent, while one with a name reaches incur", () => {
+test("mcp add takes only the forms its help shows, refusing any other word, or a flag without its value, that incur would skip and so register with every agent", () => {
   const home = mkdtempSync(join(TMP, 'home-'))
   const bin = mkdtempSync(join(TMP, 'bin-'))
   made.push(home, bin)
   // Were the check to fail, PATH has no npx for incur to register through, and Amp's settings would land in this home.
   const env = { HOME: home, USERPROFILE: home, APPDATA: home, XDG_CONFIG_HOME: home, PATH: bin }
-  const nameless = "--agent needs an agent's name, like --agent claude-code; without one, mcp add would register ThreeJam with every agent it finds"
+  const not = (word: string) => `mcp add takes --agent NAME, --command CMD or -c CMD, and --no-global, not "${word}"`
+  const nameless = "--agent needs an agent's name, like --agent claude-code"
   const refused = [
+    [['mcp', 'add', '-a', 'cursor'], not('-a')],
+    [['mcp', 'add', '--agents', 'cursor'], not('--agents')],
+    [['mcp', 'add', '--agnet', 'cursor'], not('--agnet')],
+    [['mcp', 'add', '--agent=cursor'], not('--agent=cursor')],
     [['mcp', 'add', '--agent'], nameless],
     [['mcp', 'add', '--agent', '', '--no-global'], nameless],
     [['mcp', 'add', '--agent', '--no-global'], nameless],
-    [['mcp', 'add', '--agent=cursor'], "write --agent and the agent's name apart, like --agent cursor; mcp add reads no other form, and would register ThreeJam with every agent it finds"],
+    [['mcp', 'add', '--agent', 'cursor', '-c'], '-c needs the command agents will run, like -c "npx threejam --mcp"'],
   ] as const
   for (const [args, message] of refused) {
     const { code, out } = threejamWith(env, '--format', 'json', ...args)
     assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'USAGE', message } }, args.join(' '))
   }
-  const named = threejamWith(env, 'mcp', 'add', '--agent', 'cursor')
-  assert.match(named.out, /MCP_ADD_FAILED/)
+  for (const args of [['--agent', 'cursor', '--format', 'json'], ['--agent', 'cursor', '--command', 'node cli.ts --mcp', '--no-global'], ['-c', 'node cli.ts --mcp']]) {
+    assert.match(threejamWith(env, 'mcp', 'add', ...args).out, /MCP_ADD_FAILED/, args.join(' '))
+  }
   assert.deepEqual(readdirSync(home), [])
 })
 
