@@ -40,12 +40,12 @@ export function framePaths(out: string, at: readonly number[]): string[] {
 }
 
 // Chrome on Windows sometimes aborts a new tab's first navigation, so an aborted one gets one more try.
-export async function openPage(tab: Page, url: string): Promise<void> {
+export async function openPage(tab: Page, url: string, { timeout }: { timeout?: number } = {}): Promise<void> {
   try {
-    await tab.goto(url, { waitUntil: 'load' })
+    await tab.goto(url, { waitUntil: 'load', timeout })
   } catch (error) {
     if (!(error instanceof Error && error.message.startsWith('net::ERR_ABORTED'))) throw error
-    await tab.goto(url, { waitUntil: 'load' })
+    await tab.goto(url, { waitUntil: 'load', timeout })
   }
 }
 
@@ -93,34 +93,40 @@ export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, 
     const tab = await browser.newPage()
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const crashed = pageFailure(tab)
-    const until = <T>(work: Promise<T>) => Promise.race([work, crashed])
-    await until(openPage(tab, server.url))
-    await until(tab.waitForFunction('window.engine !== undefined', { timeout: 15000 }))
-    // The page runs the game's start, update, and view.ts here, within one time limit for them all, and what they throw is the game's, while Puppeteer's own errors mean Chrome failed.
-    const deadline = Date.now() + timeout * 1000
-    const inPage = async <T>(tick: number, work: Promise<T>): Promise<T> => {
+    // The game and its view.ts run as the page loads and in reset and advanceTo, which share one time limit; screenshots and saving them don't count.
+    let spent = 0
+    const limited = async <T>(when: string, work: Promise<T>): Promise<T> => {
+      const started = Date.now()
       let timer: ReturnType<typeof setTimeout> | undefined
       const late = new Promise<never>((_, reject) => {
-        const message = `the page ran past the ${timeout} s time limit drawing tick ${tick}; look for a loop that never ends in view.ts, or allow more time with --timeout`
+        const message = `the page ran past the ${timeout} s time limit ${when}; look for a loop that never ends in view.ts, or allow more time with --timeout`
         timer = setTimeout(() => {
           stuck = true
           reject(new LimitError('TIMEOUT', message))
-        }, Math.max(0, deadline - Date.now()))
-      })
-      const ran = work.catch((error: unknown) => {
-        throw error instanceof PuppeteerError ? error : gameFailure(firstLine(error))
+        }, Math.max(0, timeout * 1000 - spent))
       })
       try {
-        return await until(Promise.race([ran, late]))
+        return await Promise.race([work, crashed, late])
       } finally {
         clearTimeout(timer)
+        spent += Date.now() - started
       }
     }
+    // What the page's code throws is the game's, while Puppeteer's own errors mean Chrome failed.
+    const inPage = <T>(when: string, work: Promise<T>) =>
+      limited(
+        when,
+        work.catch((error: unknown) => {
+          throw error instanceof PuppeteerError ? error : gameFailure(firstLine(error))
+        }),
+      )
+    await limited('as it loaded', openPage(tab, server.url, { timeout: 0 }))
+    await limited('as it loaded', tab.waitForFunction('window.engine !== undefined', { timeout: 0 }))
     const reset: ResetOptions = { seed: seed ?? 0, ticks: Math.max(...at), press, hold, pointer, set, drive: driver !== undefined }
-    await inPage(0, tab.evaluate((options) => window.engine.reset(options), reset))
+    await inPage('drawing tick 0', tab.evaluate((options) => window.engine.reset(options), reset))
     for (const path of paths) makeFolder(dirname(path))
     for (const [i, tick] of at.entries()) {
-      await inPage(tick, tab.evaluate((t) => window.engine.advanceTo(t), tick))
+      await inPage(`drawing tick ${tick}`, tab.evaluate((t) => window.engine.advanceTo(t), tick))
       saveFile(paths[i], await tab.screenshot({ type: 'png', clip: { x: 0, y: 0, width: 800, height: 600 } }))
     }
     return paths

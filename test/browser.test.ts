@@ -494,17 +494,24 @@ test("a page that fails in shot is the game's failure, told in one line without 
   })
 })
 
-test("shot's page gets --timeout too, so a view.ts that never returns fails with TIMEOUT instead of holding Chrome", { skip: !chrome && 'needs Chrome' }, async () => {
-  const dir = mkdtempSync(join(TMP, 'stuck-'))
-  made.push(dir)
-  writeFileSync(join(dir, 'game.ts'), "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n")
-  writeFileSync(join(dir, 'view.ts'), "import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick === 2) for (;;) {}\n}\n")
-  const started = Date.now()
-  await assert.rejects(shoot({ dir, at: [1, 2], out: join(dir, 'frame.png'), timeout: 2 }), {
-    name: 'LimitError',
-    message: 'the page ran past the 2 s time limit drawing tick 2; look for a loop that never ends in view.ts, or allow more time with --timeout',
-  })
-  assert.ok(Date.now() - started < 30_000, 'shot waited for Chrome to close a stuck page')
+test("shot's page gets --timeout too, from the moment it loads, so a view.ts that never returns fails with TIMEOUT and Chrome is killed", { skip: !chrome && 'needs Chrome' }, async () => {
+  const stuck = async (view: string, when: string) => {
+    const dir = mkdtempSync(join(TMP, 'stuck-'))
+    made.push(dir)
+    writeFileSync(join(dir, 'game.ts'), "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n")
+    writeFileSync(join(dir, 'view.ts'), view)
+    const started = Date.now()
+    await assert.rejects(shoot({ dir, at: [1, 2], out: join(dir, 'frame.png'), timeout: 5 }), {
+      name: 'LimitError',
+      message: `the page ran past the 5 s time limit ${when}; look for a loop that never ends in view.ts, or allow more time with --timeout`,
+    })
+    // Waiting out the 10 s that a graceful close gets would take longer than this.
+    assert.ok(Date.now() - started < 14_000, `shot took ${Date.now() - started} ms with a page stuck ${when}`)
+  }
+  await Promise.all([
+    stuck('for (;;) {}\n', 'as it loaded'),
+    stuck("import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick === 2) for (;;) {}\n}\n", 'drawing tick 2'),
+  ])
 })
 
 test('shot writes one PNG per tick into a folder it creates', { skip: !chrome && 'needs Chrome' }, async () => {
