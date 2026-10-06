@@ -4,7 +4,7 @@ import { once } from 'node:events'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, request, type IncomingHttpHeaders } from 'node:http'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { exportGame } from '../src/export.ts'
@@ -313,6 +313,35 @@ test("a Chrome that shot kills for a page that never returns leaves nothing in t
   const left = readdirSync(temp).filter((name) => process.platform !== 'win32' || !name.startsWith('threejam-chrome-'))
   const printed = 'TIMEOUT: the page ran past the 2 s time limit as it loaded; look for a loop that never ends in view.ts, or allow more time with --timeout'
   assert.deepEqual({ status: result.status, printed: result.stdout.trim(), left }, { status: 0, printed, left: [] }, result.stderr)
+})
+
+test('on Windows, Chrome keeps its temporary files in its profile, so those a killed Chrome leaves go with the profile', { skip: (!chrome && 'needs Chrome') || (process.platform !== 'win32' && "elsewhere they stay in TMPDIR, beside Chrome's socket"), timeout: 60_000 }, async () => {
+  // A temporary folder of the test's own in place of the system's, which Chrome would use without a profile to keep its files in.
+  const temp = mkdtempSync(join(tmpdir(), 'threejam-temp-'))
+  made.push(temp)
+  const { TEMP, TMP } = process.env
+  Object.assign(process.env, { TEMP: temp, TMP: temp })
+  const profile = mkdtempSync(join(temp, 'threejam-chrome-'))
+  const killer = new AbortController()
+  try {
+    const browser = await launchChrome(chrome ?? 'no Chrome', { profile, signal: killer.signal })
+    const tab = await browser.newPage()
+    void tab.evaluate('for (;;) {}').catch(() => {})
+    // Chrome writes a snapshot to a temporary file it removes once the page has saved itself there, which a stuck page never does.
+    void (await tab.createCDPSession()).send('Page.captureSnapshot').catch(() => {})
+    const kept = join(profile, 'temp')
+    await until("Chrome to make the snapshot's temporary file", () => readdirSync(temp).length > 1 || (existsSync(kept) && readdirSync(kept).length > 0))
+    await closeChrome(browser, killer, { stuck: true })
+  } finally {
+    killer.abort()
+    for (const [name, value] of Object.entries({ TEMP, TMP })) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+    removeProfile(profile)
+  }
+  // Chrome's helpers can hold a file in its profile a moment after Chrome is killed, and shot leaves those for the OS.
+  assert.deepEqual(readdirSync(temp).filter((name) => name !== basename(profile)), [])
 })
 
 test('closing a Chrome that crashed waits for the processes it started, which outlive it a moment and can still write to its profile', { skip: !chrome && 'needs Chrome', timeout: 60_000 }, async () => {

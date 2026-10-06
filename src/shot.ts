@@ -52,8 +52,8 @@ export async function openPage(tab: Page, url: string, { timeout }: { timeout?: 
   }
 }
 
-// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs; profile, when given, holds its profile, temp its temporary files in place of TMPDIR, switches go before ThreeJam's own, which they can't override, and signal kills it with every process it started.
-export async function launchChrome(chrome: string, { protocolTimeout, profile, temp, switches = [], signal }: { protocolTimeout?: number; profile?: string; temp?: string; switches?: readonly string[]; signal?: AbortSignal } = {}): Promise<Browser> {
+// Headless Chrome, driven over a pipe instead of a DevTools port, with only the environment it needs; profile, when given, holds its profile, temp its temporary files in place of TMPDIR, by default on Windows a folder in the profile, switches go before ThreeJam's own, which they can't override, and signal kills it with every process it started.
+export async function launchChrome(chrome: string, { protocolTimeout, profile, temp = profileTemp(profile), switches = [], signal }: { protocolTimeout?: number; profile?: string; temp?: string; switches?: readonly string[]; signal?: AbortSignal } = {}): Promise<Browser> {
   const where = chrome.replaceAll(sep, '/')
   const found = statSync(chrome, { throwIfNoEntry: false })
   if (found === undefined) throw new BrowserError(`there's no Chrome at ${where}; set CHROME_PATH to the executable of Chrome or Chromium, or Edge on Windows`)
@@ -68,6 +68,7 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
     return `--disable-features=${features.filter((feature) => feature !== 'IsolateSandboxedIframes').join(',')}`
   })
   const env = temp === undefined ? chromeEnv() : { ...chromeEnv(), TMPDIR: temp, TMP: temp, TEMP: temp }
+  if (temp !== undefined) makeFolder(temp)
   try {
     return await puppeteer.launch({
       executablePath: chrome,
@@ -85,6 +86,11 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
     const hint = tmpdirHint(env.TMPDIR)
     throw new BrowserError(`Chrome at ${where} didn't start: it exited as soon as it started${hint === undefined ? '; set CHROME_PATH to a working Chrome or Chromium' : `, ${hint}`}`)
   }
+}
+
+// On Windows, where Chrome keeps no socket in its temporary folder, one in its profile holds its temporary files, so those a killed Chrome leaves go with the profile.
+function profileTemp(profile: string | undefined): string | undefined {
+  return process.platform === 'win32' && profile !== undefined ? join(profile, 'temp') : undefined
 }
 
 export async function shoot({ dir, at, out, seed, press, hold, pointer, driver, set, timeout: given }: ShotOptions): Promise<string[]> {

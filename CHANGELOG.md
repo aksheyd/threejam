@@ -20,6 +20,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - Closing the terminal that `run` is in closes its window and removes the window's profile, as Ctrl-C does. Before, `run` stopped at once and left the profile and Chrome's socket folder in the temporary folder.
 - An image or sound that `run` or `shot` can't read, like one without read permission, gets an error response, which the page reports, and `run` goes on serving. Before, `run` stopped, and `shot` printed a stack trace instead of one line. `run` also no longer rebuilds the page over and over while the folder holds such a file.
 - `run` prints a failure once when the page keeps failing to build the same way, as it does over and over for a game file that `run` can't read. Before, it printed the same failure several times a second.
+- On Windows, `shot`'s Chrome keeps its temporary files in its profile, which `shot` removes with it, instead of in `TEMP`, where a Chrome that `shot` killed could leave them.
 - When Chrome crashes during `shot`, `shot` waits for the processes Chrome started to exit before it removes Chrome's profile, since they can still write to it.
 
 ## [0.0.4](https://github.com/aksheyd/threejam/compare/v0.0.3...v0.0.4) - 2026-10-06
