@@ -392,7 +392,7 @@ test('audit 1 and 2: a looping game does not block other MCP calls, even after a
     // Another tool call still answers while that one is stuck.
     const answered = await Promise.race([
       server.request('tools/call', { name: 'check', arguments: { dir: 'games/pong' } }).then(() => 'answered'),
-      new Promise((resolve) => setTimeout(() => resolve('blocked'), 8000)),
+      new Promise((resolve) => setTimeout(() => resolve('blocked'), 8000).unref()),
     ])
     assert.equal(answered, 'answered')
     // A reply that would be too large for a client's context is refused, with how to narrow it.
