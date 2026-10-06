@@ -12,6 +12,7 @@ import { runGame } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { buildPage, findChrome, serve } from '../src/serve.ts'
 import { launchChrome, openPage, shoot } from '../src/shot.ts'
+import { PROBE, checkProbe } from './probe.ts'
 
 const chrome = findChrome()
 // A page call that hangs fails within a minute, well inside CI's job timeout, so the report says why.
@@ -162,6 +163,42 @@ test("in another locale and time zone, the page computes what sim does and refus
     })
     assert.deepEqual(actual.page, ['1.234.567,5', true])
     assert.deepEqual(actual.state, expected)
+  } finally {
+    await browser.close()
+    server.close()
+    await page.dispose()
+  }
+})
+
+test("review blockers 1 to 4 in a page set to de-DE and Asia/Kolkata: game code finds no frame, no host global, and no path to the platform's clock, zone, or locale, a promise can't write after its tick, and every reset gives sim's state", { skip: !chrome && 'needs Chrome' }, async () => {
+  const dir = mkdtempSync(join(TMP, 'probe-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), PROBE)
+  const expected = (await runGame(dir, { ticks: 2 })).snapshots[0].entities
+  checkProbe(expected[0].out, { bare: true })
+  const page = await buildPage({ dir, config: { mode: 'shot' } })
+  const server = await serve({ page })
+  const browser = await launch()
+  try {
+    const tab = await browser.newPage()
+    const { errors } = watch(tab)
+    await tab.emulateTimezone('Asia/Kolkata')
+    await (await tab.createCDPSession()).send('Emulation.setLocaleOverride', { locale: 'de-DE' })
+    await openPage(tab, server.url)
+    await tab.waitForFunction('window.engine !== undefined')
+    for (const round of [1, 2]) {
+      const ran = await tab.evaluate(() => {
+        window.engine.reset({ seed: 0 })
+        window.engine.advanceTo(2)
+        return window.engine.state()
+      })
+      // The promise's write comes after the evaluate that ran its tick.
+      const after = await tab.evaluate(() => window.engine.state())
+      assert.deepEqual({ ran, after }, { ran: expected, after: expected }, `round ${round}`)
+    }
+    const host = await tab.evaluate(() => [window.length, typeof navigator.language, new Intl.NumberFormat().format(1234567.5)])
+    assert.deepEqual(host, [0, 'string', '1.234.567,5'])
+    assert.deepEqual(errors, ['entity "probe" is read-only here; only start and update change the game', 'entity "probe" is read-only here; only start and update change the game'])
   } finally {
     await browser.close()
     server.close()

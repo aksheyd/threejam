@@ -1,6 +1,6 @@
 // The side of the sandbox that runs inside the realm each game gets: it fixes the realm's globals, then loads the game and its driver with the guard up and runs one simulation.
 import { parseGame, pick, simulate, untilCondition } from './engine.ts'
-import { GameError, RunError, UsageError, type Phase } from './errors.ts'
+import { RunError, UsageError, type Phase } from './errors.ts'
 import { loading, withStandIns } from './guard.ts'
 import { defineDriver, driverFor, isDrive, type Drive, type Game, type LogEntry, type Snapshot, type SoundEntry } from './types.ts'
 
@@ -69,22 +69,6 @@ export function sandbox(modules: Modules): void {
 // The realm has the language's built-ins and nothing else; this is where its globals get fixed before a game can capture them.
 function prepareRealm(): void {
   withStandIns()
-  if (Reflect.get(globalThis, 'structuredClone') === undefined) Reflect.set(globalThis, 'structuredClone', clonePlain)
-}
-
-// The engine copies only plain data, which game code may copy too; anything else would copy differently than a browser's structuredClone does.
-export function clonePlain(value: unknown): unknown {
-  if (typeof value !== 'object' || value === null) return value
-  const prototype: unknown = Object.getPrototypeOf(value)
-  const array = Array.isArray(value)
-  if (!array && prototype !== Object.prototype && prototype !== null) {
-    throw new GameError('structuredClone copies only numbers, strings, booleans, null, arrays, and plain objects in game code')
-  }
-  const copy: object = array ? new Array<unknown>(value.length) : {}
-  for (const key of Object.keys(value)) {
-    Object.defineProperty(copy, key, { value: clonePlain(Reflect.get(value, key)), writable: true, enumerable: true, configurable: true })
-  }
-  return copy
 }
 
 // Concatenated from a fixed word and a count, so reading it after a timeout runs none of the game's code.

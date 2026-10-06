@@ -5,10 +5,12 @@ import { rm } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
+import { constants as vmConstants, createContext } from 'node:vm'
 import * as esbuild from 'esbuild'
 import { mediaType } from './assets.ts'
 import { confinePlugin, confineRoots } from './confine.ts'
 import { UsageError } from './errors.ts'
+import { STAND_INS } from './guard.ts'
 import { assetsIn, gameFiles, type GameFiles } from './load.ts'
 import { NAME, engineFile } from './package.ts'
 import type { Config } from './browser/client.ts'
@@ -80,7 +82,7 @@ export function pageBuild({ files, driver, address }: { files: GameFiles; driver
     `import { play } from ${JSON.stringify(engineFile(join('browser', 'client')))}`,
     `const view = ${files.view ? load(files.view) : '() => ({})'}`,
     `const driver = ${driverFile ? load(driverFile) : 'undefined'}`,
-    `play({ game: ${load(files.game)}, view, driver, assets, config: window.THREEJAM })`,
+    `play({ game: ${load(files.game)}, view, driver, assets, config: window.THREEJAM, realm: ${JSON.stringify(realmGlobals())} })`,
   ].join('\n')
   // A module in no folder, unlike stdin, which esbuild places in its resolveDir, so the import rule judges what the entry pulls in as the engine's.
   const page: esbuild.Plugin = {
@@ -117,6 +119,11 @@ export function pageBuild({ files, driver, address }: { files: GameFiles; driver
     // The shared import rule claims every import the other plugins leave, so it comes last.
     plugins: [page, assets, confinePlugin({ roots, seeds })],
   } satisfies esbuild.BuildOptions
+}
+
+// The globals game code finds in sim's realm, which a page keeps while it bares the rest: the language's, as this Node gives them to a realm of its own, and the guard's stand-ins.
+function realmGlobals(): string[] {
+  return [...Object.getOwnPropertyNames(createContext(vmConstants.DONT_CONTEXTIFY)), ...STAND_INS]
 }
 
 // The page that run, shot, and export build, bundled in memory only, so check refuses what they would.

@@ -439,10 +439,11 @@ test("review blockers 1 to 3 in sim: on three machines' settings, and once more 
     { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', TZ: 'UTC' },
   ]
   const outs = settings.map((env) => {
-    const run = threejam(['sim', dir, '--ticks', '2', '--fields', 'out'], env)
+    const run = threejam(['sim', dir, '--ticks', '2', '--fields', 'out,n'], env)
     assert.equal(run.code, 0, run.out)
-    const [probe] = run.json.entities as Array<{ out: unknown }>
-    checkProbe(probe.out)
+    const [probe] = run.json.entities as Array<{ out: unknown; n: number }>
+    checkProbe(probe.out, { bare: true })
+    assert.equal(probe.n, 0)
     return probe.out
   })
   for (const out of outs.slice(1)) assert.deepEqual(out, outs[0])

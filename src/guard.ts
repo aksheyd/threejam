@@ -38,15 +38,33 @@ function blocked(name: string, instead: string): () => never {
   }
 }
 
-// What game code finds instead of performance and crypto while the guard is up, as in sim's realm, which has neither: sim and a page agree on what's there.
+// What game code finds instead of performance, crypto, and structuredClone while the guard is up, as in sim's realm, which lacks them: sim and a page agree on what's there.
 const PERFORMANCE = Object.freeze({ now: blocked('performance.now()', CLOCK) })
 const CRYPTO = Object.freeze({ getRandomValues: blocked('crypto.getRandomValues()', SEEDED), randomUUID: blocked('crypto.randomUUID()', SEEDED) })
 
-// A realm with no clock, timers, or crypto, like the one sim runs a game in, keeps the stand-ins game code finds in their place, so the guard swaps plain properties there.
+// The globals sim's realm has beyond the language: the stand-ins, which a page's own give way to while the guard is up.
+export const STAND_INS = ['performance', 'crypto', 'structuredClone', ...TIMERS] as const
+
+// A realm with no clock, timers, crypto, or structuredClone, like the one sim runs a game in, keeps the stand-ins game code finds in their place; the engine copies with structuredClone even while the guard is down.
 export function withStandIns(): void {
-  const missing: Record<string, unknown> = { performance: PERFORMANCE, crypto: CRYPTO }
+  const missing: Record<string, unknown> = { performance: PERFORMANCE, crypto: CRYPTO, structuredClone: clonePlain }
   for (const key of TIMERS) missing[key] = blocked(`${key}()`, CLOCK)
   for (const [key, value] of Object.entries(missing)) if (Reflect.get(globalThis, key) === undefined) Reflect.set(globalThis, key, value)
+}
+
+// The engine copies only plain data, which game code may copy too; anything else would copy differently than a browser's structuredClone does.
+export function clonePlain(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) return value
+  const prototype: unknown = Object.getPrototypeOf(value)
+  const array = Array.isArray(value)
+  if (!array && prototype !== Object.prototype && prototype !== null) {
+    throw new GameError('structuredClone copies only numbers, strings, booleans, null, arrays, and plain objects in game code')
+  }
+  const copy: object = array ? new Array<unknown>(value.length) : {}
+  for (const key of Object.keys(value)) {
+    Object.defineProperty(copy, key, { value: clonePlain(Reflect.get(value, key)), writable: true, enumerable: true, configurable: true })
+  }
+  return copy
 }
 
 // A property the guard replaces while it's up: with a value, or with a getter for an accessor like Intl.DateTimeFormat.prototype.format.
@@ -153,6 +171,7 @@ function host(): Change[] {
   return [
     { owner: globalThis, key: 'performance', value: PERFORMANCE },
     { owner: globalThis, key: 'crypto', value: CRYPTO },
+    { owner: globalThis, key: 'structuredClone', value: clonePlain },
     ...TIMERS.map((key) => ({ owner: globalThis, key, value: blocked(`${key}()`, CLOCK) })),
     ...['WeakRef', 'FinalizationRegistry'].map((key) => ({ owner: globalThis, key, value: blocked(`new ${key}()`, COLLECTED) })),
   ]

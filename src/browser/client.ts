@@ -3,6 +3,7 @@ import { guarded, loading, throughout } from '../guard.ts'
 import { CENTER, keyFromCode, pointerMoves, schedule } from '../input.ts'
 import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Key, type Point, type SoundEntry } from '../types.ts'
 import { loadImages, parseAssets } from './assets.ts'
+import { barePage } from './bare.ts'
 import { Speaker } from './sound.ts'
 import { View, parseView } from './view.ts'
 
@@ -60,11 +61,14 @@ export interface PageModules {
   readonly driver: (() => unknown) | undefined
 }
 
-export async function play(page: PageModules & { assets: unknown; config: unknown }): Promise<void> {
+// realm names the globals sim's realm has, which game code keeps while the page around it is bared.
+export async function play(page: PageModules & { assets: unknown; config: unknown; realm: readonly string[] }): Promise<void> {
+  const bare = barePage(page.realm)
   // The game's and driver's modules load with the guard up, as in the sandbox, so what their top level keeps is guarded too.
-  const game = parseGame(defaultOf(loading(page.game)))
+  const game = parseGame(defaultOf(bare(() => loading(page.game))))
   const config = parseConfig(page.config)
-  const drive = page.driver === undefined ? undefined : parseDrive(defaultOf(loading(page.driver)))
+  const driver = page.driver
+  const drive = driver === undefined ? undefined : parseDrive(defaultOf(bare(() => loading(driver))))
   const assets = parseAssets(page.assets)
   const canvas = document.querySelector('canvas')
   if (!canvas) throw new Error('the page needs a <canvas>')
@@ -99,6 +103,8 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     const s = current()
     view.draw({ drawables: s.drawables(), world: s.world, tick: s.tick })
   }
+  // Runs of ticks happen in a bared page with the guard held up throughout, since doing either on each tick costs more than the tick.
+  const ticking = (run: () => void) => bare(() => throughout(run))
   const stepOnce = () => {
     const s = current()
     switch (source.kind) {
@@ -123,7 +129,7 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     const next = new Session(game, { seed: options.seed ?? seed, set: options.set, assets: Object.keys(assets) })
     session = next
     heard = 0
-    throughout(() => {
+    ticking(() => {
       source = inputSource(options, drive)
       next.start()
     })
@@ -134,14 +140,14 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   window.engine = {
     reset,
     step(count = 1) {
-      throughout(() => {
+      ticking(() => {
         for (let i = 0; i < count; i++) stepOnce()
       })
       draw()
       return current().tick
     },
     advanceTo(tick) {
-      throughout(() => {
+      ticking(() => {
         while (current().tick < tick) stepOnce()
       })
       draw()
@@ -243,7 +249,7 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
       if (!paused && !document.hidden) {
         owed = Math.min(owed + (now - last), 250)
         if (owed >= TICK_MS) {
-          throughout(() => {
+          ticking(() => {
             for (; owed >= TICK_MS; owed -= TICK_MS) stepOnce()
           })
         }

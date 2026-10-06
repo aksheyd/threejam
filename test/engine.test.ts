@@ -183,7 +183,11 @@ test("review blockers 1 to 3: in a process set to another language and time zone
   const dir = mkdtempSync(join(TMP, 'probe-'))
   made.push(dir)
   writeFileSync(join(dir, 'game.ts'), PROBE)
-  writeFileSync(join(dir, 'run.ts'), "import { simulate } from 'threejam'\nimport game from './game.ts'\n\nprocess.stdout.write(JSON.stringify(simulate(game, { ticks: 1 }).world.probe.out))\n")
+  // The probe's promise writes after the tick, and the refusal would end this process as it does no page or sim.
+  writeFileSync(
+    join(dir, 'run.ts'),
+    "import { simulate } from 'threejam'\nimport game from './game.ts'\n\nprocess.on('unhandledRejection', () => {})\nprocess.stdout.write(JSON.stringify(simulate(game, { ticks: 1 }).world.probe.out))\n",
+  )
   const settings = [
     { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', TZ: 'UTC' },
     { LANG: 'tr_TR.UTF-8', LC_ALL: 'tr_TR.UTF-8', TZ: 'Europe/Istanbul' },
@@ -193,7 +197,7 @@ test("review blockers 1 to 3: in a process set to another language and time zone
     const run = spawnSync(process.execPath, [join(dir, 'run.ts')], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, ...env } })
     assert.equal(run.status, 0, run.stderr)
     const out: unknown = JSON.parse(run.stdout)
-    checkProbe(out)
+    checkProbe(out, { bare: false })
     return out
   })
   assert.deepEqual(outs[1], outs[0])
