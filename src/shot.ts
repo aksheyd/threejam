@@ -159,14 +159,13 @@ export function callLimit(seconds: number): number {
 
 // Chrome can't close a tab whose page is stuck in the game's loop, so then, or when closing takes too long, it's killed instead.
 async function closeChrome(browser: Browser | undefined, stuck: boolean, killer: AbortController): Promise<void> {
-  if (browser === undefined) return
-  if (!stuck && (await within(10_000, browser.close().catch(() => {})))) return
-  const chrome = browser.process()
-  if (chrome === null || chrome.exitCode !== null || chrome.signalCode !== null) return
-  const exited = new Promise<void>((done) => chrome.once('exit', () => done()))
-  // Puppeteer then kills every process Chrome started, since one left running, like its network service, can write to the profile after it's removed.
-  killer.abort()
-  await within(10_000, exited)
+  const chrome = browser?.process()
+  if (browser === undefined || !chrome || chrome.exitCode !== null || chrome.signalCode !== null) return
+  // Every process Chrome starts shares its stdio, so close comes once none is left to write to the profile.
+  const gone = new Promise<void>((done) => chrome.once('close', () => done()))
+  // Aborting has Puppeteer kill every process Chrome started, not only Chrome's own.
+  if (stuck || !(await within(10_000, browser.close().catch(() => {})))) killer.abort()
+  await within(10_000, gone)
 }
 
 // Whether work settled within ms milliseconds.
