@@ -474,6 +474,77 @@ test('exported Asteroids draws its SVG rocks and plays sounds with nothing but t
   }
 })
 
+// Each tick, the keys held, in KEYS's order, and where the pointer is.
+const INPUT = [
+  "import { KEYS, defineGame, listOf } from 'threejam'",
+  '',
+  'export default defineGame({',
+  "  entities: { input: { ticks: listOf('') } },",
+  '  update({ input }, ctx) {',
+  '    const { x, y } = ctx.input.pointer',
+  "    input.ticks.push(`${KEYS.filter((key) => ctx.input.held(key)).join(' ')} @ ${x} ${y}`)",
+  '  },',
+  '})',
+  '',
+].join('\n')
+
+test("a played page takes keys by where they sit, holds a tap shorter than a tick for one tick, drops what's held when it loses focus, and puts the pointer where the mouse is in world units, kept on the screen", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'input-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), INPUT)
+  const file = join(dir, 'input.html')
+  await exportGame({ dir, out: file })
+  const tab = await newTab(t)
+  // The 800 by 600 canvas sits in the middle, from x 100 to 900.
+  await tab.setViewport({ width: 1000, height: 600, deviceScaleFactor: 1 })
+  await openPage(tab, pathToFileURL(file).href)
+  await tab.waitForFunction('window.engine !== undefined')
+  await tab.evaluate(() => {
+    window.engine.pause()
+    window.engine.reset({ seed: 0 })
+  })
+  const step = () => tab.evaluate(() => window.engine.step())
+  await tab.keyboard.press('KeyW')
+  await step()
+  await step()
+  await tab.keyboard.down('ArrowUp')
+  await step()
+  await step()
+  await tab.evaluate(() => window.dispatchEvent(new Event('blur')))
+  await step()
+  await tab.keyboard.up('ArrowUp')
+  for (const key of ['Digit3', 'Numpad7', 'NumpadEnter', 'ShiftRight', 'ControlLeft', 'AltRight', 'Tab', 'Backspace', 'Space', 'ArrowLeft', 'KeyZ'] as const) await tab.keyboard.press(key)
+  await step()
+  await tab.keyboard.down('Meta')
+  await tab.keyboard.press('KeyQ')
+  await tab.keyboard.up('Meta')
+  await tab.keyboard.press('F1')
+  await tab.keyboard.press('Escape')
+  await step()
+  await tab.mouse.click(500, 150)
+  await step()
+  await tab.mouse.move(700, 450)
+  await tab.mouse.down({ button: 'right' })
+  await step()
+  await tab.mouse.move(980, 300)
+  await step()
+  await tab.mouse.up({ button: 'right' })
+  await step()
+  assert.deepEqual(await tab.evaluate(() => window.engine.state('input')[0].ticks), [
+    'W @ 0 0',
+    ' @ 0 0',
+    'Up @ 0 0',
+    'Up @ 0 0',
+    ' @ 0 0',
+    'Z 3 7 Space Enter Tab Backspace Shift Ctrl Alt Left @ 0 0',
+    ' @ 0 0',
+    'Mouse @ 0 0.75',
+    'MouseRight @ 1 -0.75',
+    'MouseRight @ 2 0',
+    ' @ 2 0',
+  ])
+})
+
 async function until(what: string, check: () => boolean): Promise<void> {
   for (const deadline = Date.now() + 10_000; !check(); await new Promise((wait) => setTimeout(wait, 20))) {
     if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}`)
