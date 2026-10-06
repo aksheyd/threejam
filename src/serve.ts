@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
-import { accessSync, constants, existsSync, mkdtempSync, readFileSync, readlinkSync, rmSync, rmdirSync } from 'node:fs'
+import { accessSync, constants, existsSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, rmdirSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
@@ -330,7 +330,8 @@ export function chromeEnv(): Record<string, string> {
 }
 
 // Chrome on Linux binds its socket at TMPDIR/org.chromium.Chromium.XXXXXX/SingletonSocket, or in com.google.Chrome.XXXXXX for Google Chrome, and exits as it starts when that path passes the 107 bytes Linux allows a socket's.
-const LONGEST_TMPDIR = 107 - '/org.chromium.Chromium.XXXXXX/SingletonSocket'.length
+const LONGEST_SOCKET = 107
+const LONGEST_TMPDIR = LONGEST_SOCKET - '/org.chromium.Chromium.XXXXXX/SingletonSocket'.length
 
 // Why a Chrome that exited as it started did, and what to do, when its TMPDIR leaves its socket no room.
 export function tmpdirHint(tmpdir: string | undefined): string | undefined {
@@ -338,6 +339,38 @@ export function tmpdirHint(tmpdir: string | undefined): string | undefined {
   const bytes = Buffer.byteLength(tmpdir.replace(/\/+$/, ''))
   if (bytes <= LONGEST_TMPDIR) return undefined
   return `as Chrome on Linux does in a TMPDIR over ${LONGEST_TMPDIR} bytes, where its socket goes, and ${tmpdir} is ${bytes}; set TMPDIR to a shorter folder, like /tmp`
+}
+
+// Chromium names the temporary folders it makes org.chromium.Chromium.XXXXXX, or com.google.Chrome.XXXXXX in Google Chrome, and its socket's folder is one of them.
+const CHROMIUM_FOLDER = /^(com\.google\.Chrome|org\.chromium\.Chromium)\.\w{6}$/
+
+// The Chromium folders in a TMPDIR too long for Chrome's socket, listed before Chrome starts there, so that the socket's folder it leaves can be told from other programs' folders of the same name.
+export function socketFolders(tmpdir: string | undefined): string[] {
+  return tmpdirHint(tmpdir) === undefined ? [] : entries(tmpdir).filter((name) => CHROMIUM_FOLDER.test(name))
+}
+
+// Chrome makes its socket's folder before it finds the socket's path too long, and exits leaving the folder empty; of the empty Chromium folders, one that wasn't there before goes if its socket wouldn't fit, so another program's stays, and so does one a Chrome whose socket fits is about to use.
+export function removeSocketFolders(tmpdir: string | undefined, before: readonly string[]): void {
+  if (tmpdir === undefined) return
+  for (const name of entries(tmpdir)) {
+    const folder = join(tmpdir, name)
+    if (before.includes(name) || !CHROMIUM_FOLDER.test(name) || Buffer.byteLength(join(folder, 'SingletonSocket')) <= LONGEST_SOCKET) continue
+    try {
+      rmdirSync(folder)
+    } catch {
+      // A folder that holds anything stays.
+    }
+  }
+}
+
+// What a folder holds, or nothing when it can't be read.
+function entries(folder: string | undefined): string[] {
+  if (folder === undefined) return []
+  try {
+    return readdirSync(folder)
+  } catch {
+    return []
+  }
 }
 
 // Chrome keeps the last of a switch it's given twice, and a wrapper script puts its own first, so this comes after them: Chrome opens no DevTools port at -1.
@@ -387,13 +420,16 @@ export function openWindow(url: string): AppWindow | undefined {
   const profile = mkdtempSync(join(tmpdir(), 'threejam-profile-'))
   const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628', NO_DEVTOOLS_PORT]
   const env = chromeEnv()
+  const before = socketFolders(env.TMPDIR)
   // Every process Chrome starts shares its stderr, so close comes once none is left to write to the profile.
   const child = spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'], env })
   child.stderr?.resume()
   let closing = false
   child.once('exit', (code, signal) => {
     const hint = closing || (code === 0 && signal === null) ? undefined : tmpdirHint(env.TMPDIR)
-    if (hint !== undefined) process.stderr.write(`Chrome at ${chrome} exited as soon as it started, ${hint}.\n`)
+    if (hint === undefined) return
+    removeSocketFolders(env.TMPDIR, before)
+    process.stderr.write(`Chrome at ${chrome} exited as soon as it started, ${hint}.\n`)
   })
   const exited = new Promise<void>((done) => child.once('exit', () => done()))
   child.once('error', (error) => {

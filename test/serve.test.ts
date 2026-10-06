@@ -9,7 +9,7 @@ import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { exportGame } from '../src/export.ts'
 import { ROOT } from '../src/package.ts'
-import { NO_DEVTOOLS_PORT, buildPage, openWindow, removeProfile, serve } from '../src/serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, openWindow, removeProfile, removeSocketFolders, serve, socketFolders } from '../src/serve.ts'
 import { closeChrome, launchChrome, openPage } from '../src/shot.ts'
 import { CHROME as chrome, testChrome } from './chrome.ts'
 import { spawnCli } from './children.ts'
@@ -394,10 +394,10 @@ test("a Chrome that doesn't close in the time it's given is killed, with every p
   }
 })
 
-// The system's temporary folder can hold a 50-byte TMPDIR, of threejam- and mkdtemp's 6 characters at the least.
-const roomFor50 = join(tmpdir(), 'threejam-XXXXXX').length <= 50
+// Whether the system's temporary folder can hold a TMPDIR of this many bytes, of threejam- and mkdtemp's 6 characters at the least.
+const roomFor = (bytes: number) => join(tmpdir(), 'threejam-XXXXXX').length <= bytes
 
-test("shot's Chrome starts in a TMPDIR with no room for a folder of shot's, since its socket goes there and Linux caps a socket's path at 107 bytes", { skip: (!chrome && 'needs Chrome') || (process.platform !== 'linux' && "the cap is Linux's") || (!roomFor50 && "the system's temporary folder is too long to hold a 50-byte TMPDIR"), timeout: 60_000 }, () => {
+test("shot's Chrome starts in a TMPDIR with no room for a folder of shot's, since its socket goes there and Linux caps a socket's path at 107 bytes", { skip: (!chrome && 'needs Chrome') || (process.platform !== 'linux' && "the cap is Linux's") || (!roomFor(50) && "the system's temporary folder is too long to hold a 50-byte TMPDIR"), timeout: 60_000 }, () => {
   // Chrome's socket lands 41 to 45 bytes past TMPDIR, depending on its build, so at 50 it fits with too little room for a folder like threejam-chrome-XXXXXX in between.
   const temp = mkdtempSync(join(tmpdir(), 'threejam-'.padEnd(50 - tmpdir().length - 7, 'x')))
   made.push(temp)
@@ -409,29 +409,43 @@ test("shot's Chrome starts in a TMPDIR with no room for a folder of shot's, sinc
   assert.deepEqual({ length: temp.length, status: result.status, printed: result.stdout.trim(), left: readdirSync(temp) }, { length: 50, status: 0, printed: 'ok', left: [] }, result.stderr)
 })
 
-test("on Linux, a TMPDIR too long for Chrome's socket gets shot and run's window to say to set a shorter one, and to remove their own folders from it", { skip: (!chrome && 'needs Chrome') || (process.platform !== 'linux' && "the cap is Linux's"), timeout: 60_000 }, () => {
+test("on Linux, a TMPDIR too long for Chrome's socket gets shot and run's window to say to set a shorter one, and to remove the folders they made there, but no other program's", { skip: (!chrome && 'needs Chrome') || (process.platform !== 'linux' && "the cap is Linux's"), timeout: 60_000 }, () => {
   // At least 70 bytes, too long for Google Chrome as well as Chromium.
   const temp = mkdtempSync(join(tmpdir(), 'threejam-'.padEnd(70 - tmpdir().length - 7, 'x')))
   made.push(temp)
+  // An empty folder of another Chromium program's, which has the name Chrome's socket folder could have.
+  mkdirSync(join(temp, 'org.chromium.Chromium.others'))
   const dir = mkdtempSync(join(TMP, 'long-'))
   made.push(dir)
   // Headless, so the window needs no display.
   const window = wrapper(dir, ['--headless=new'])
+  // What shot leaves is printed before the window starts, which would otherwise remove it too.
   const script = [
+    "import { readdirSync } from 'node:fs'",
     `import { shoot } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'shot.ts')).href)}`,
     `import { openWindow } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'serve.ts')).href)}`,
     `await shoot(${JSON.stringify({ dir: 'games/pong', at: [1], out: join(dir, 'frame.png') })}).catch((error) => console.log(error.message))`,
+    `console.log(JSON.stringify(readdirSync(${JSON.stringify(temp)})))`,
     "await openWindow('http://127.0.0.1:9/')?.exited",
   ].join('\n')
   const env = { ...process.env, TMPDIR: temp, TEMP: temp, TMP: temp, CHROME_PATH: window }
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: ROOT, env, encoding: 'utf8', timeout: 45_000, killSignal: 'SIGKILL' })
   const hint = `as Chrome on Linux does in a TMPDIR over 62 bytes, where its socket goes, and ${temp} is ${Buffer.byteLength(temp)}; set TMPDIR to a shorter folder, like /tmp`
-  // Chrome makes its socket's folder before it finds the path too long, and stops before its profile names the folder.
-  const left = readdirSync(temp).filter((name) => !/^(com\.google\.Chrome|org\.chromium\.Chromium)\.\w{6}$/.test(name))
+  const [shot, leftByShot] = result.stdout.trim().split('\n')
   assert.deepEqual(
-    { status: result.status, shot: result.stdout.trim(), run: result.stderr.trim(), left },
-    { status: 0, shot: `Chrome at ${window} didn't start: it exited as soon as it started, ${hint}`, run: `Chrome at ${window} exited as soon as it started, ${hint}.`, left: [] },
+    { status: result.status, shot, leftByShot: JSON.parse(leftByShot ?? 'null'), run: result.stderr.trim(), left: readdirSync(temp) },
+    { status: 0, shot: `Chrome at ${window} didn't start: it exited as soon as it started, ${hint}`, leftByShot: ['org.chromium.Chromium.others'], run: `Chrome at ${window} exited as soon as it started, ${hint}.`, left: ['org.chromium.Chromium.others'] },
   )
+})
+
+test("a new socket folder goes only when its socket's path would pass the 107 bytes Linux allows, so one whose socket fits exactly stays", { skip: (process.platform !== 'linux' && "the cap is Linux's") || (!roomFor(66) && "the system's temporary folder is too long to hold a 66-byte TMPDIR") }, () => {
+  // At 66 bytes, a socket in Google Chrome's folder takes exactly 107, and one in Chromium's, whose name is 5 bytes longer, 111.
+  const temp = mkdtempSync(join(tmpdir(), 'threejam-'.padEnd(66 - tmpdir().length - 7, 'x')))
+  made.push(temp)
+  const before = socketFolders(temp)
+  for (const name of ['com.google.Chrome.abc123', 'org.chromium.Chromium.abc123']) mkdirSync(join(temp, name))
+  removeSocketFolders(temp, before)
+  assert.deepEqual({ length: temp.length, left: readdirSync(temp) }, { length: 66, left: ['com.google.Chrome.abc123'] })
 })
 
 test('a Chrome that exits as it starts fails with one line naming it, though over a pipe its own output is lost, and a folder or a file that runs nothing says so', { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {

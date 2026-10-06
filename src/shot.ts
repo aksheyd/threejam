@@ -7,7 +7,7 @@ import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { LimitError, gameFailure, isSystemError, timeLimit } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
-import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, removeProfile, serve, tmpdirHint, type Server } from './serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, removeProfile, removeSocketFolders, serve, socketFolders, tmpdirHint, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
 export interface ShotOptions {
@@ -69,6 +69,7 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
   })
   const env = temp === undefined ? chromeEnv() : { ...chromeEnv(), TMPDIR: temp, TMP: temp, TEMP: temp }
   if (temp !== undefined) makeFolder(temp)
+  const before = socketFolders(env.TMPDIR)
   try {
     return await puppeteer.launch({
       executablePath: chrome,
@@ -84,6 +85,7 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
     // Over a pipe, a Chrome that exits as it starts only closes the connection, which Puppeteer reports with a TargetCloseError its types don't export.
     if (!(error instanceof Error && error.name === 'TargetCloseError')) throw new BrowserError(`Chrome at ${where} didn't start: ${firstLine(error)}; set CHROME_PATH to a working Chrome or Chromium`)
     const hint = tmpdirHint(env.TMPDIR)
+    if (hint !== undefined) removeSocketFolders(env.TMPDIR, before)
     throw new BrowserError(`Chrome at ${where} didn't start: it exited as soon as it started${hint === undefined ? '; set CHROME_PATH to a working Chrome or Chromium' : `, ${hint}`}`)
   }
 }
