@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 import { pathToFileURL } from 'node:url'
-import type { Page } from 'puppeteer-core'
+import type { HTTPRequest, Page } from 'puppeteer-core'
 import pong from '../games/pong/game.ts'
 import { parseGame, simulate } from '../src/engine.ts'
 import { exportGame } from '../src/export.ts'
@@ -751,6 +751,75 @@ test("run serves the game at its seed, says on the page why a save doesn't build
   // The page's notice of why comes first, then the one Esc adds.
   const ended = await tab.$$eval('pre', (boxes) => boxes.at(-1)?.textContent)
   assert.deepEqual({ code: await exited, out, ended }, { code: 0, out: `Playing ${shown} with seed 5 at ${url}\nStopped.\n`, ended: 'Session ended.' })
+})
+
+test("run's page ends on the newest save even when that save builds while the page is still reloading for the one before, whether it builds or not", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'run-'))
+  made.push(dir)
+  const file = join(dir, 'game.ts')
+  const save = (n: number) => `import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1, save: ${n} } }, update() {} })\n`
+  writeFileSync(file, save(1))
+  const run = spawnCli(['run', dir, '--serve-only'], t.signal)
+  let [out, errors] = ['', '']
+  run.stdout.on('data', (chunk) => (out += chunk))
+  run.stderr.on('data', (chunk) => (errors += chunk))
+  await until('run to serve the page', () => out.includes('\n'))
+  const url = out.slice(out.lastIndexOf(' ') + 1, -1)
+  const tab = await newTab(t)
+  // Each page notes when it starts to hear of reloads.
+  await tab.evaluateOnNewDocument(() => {
+    const Events = EventSource
+    window.EventSource = class extends Events {
+      constructor(...args: ConstructorParameters<typeof EventSource>) {
+        super(...args)
+        this.addEventListener('open', () => Reflect.set(window, 'listening', true))
+      }
+    }
+  })
+  // A page asks to hear of reloads only once its script runs, so holding that request back stands in for a page that a busy machine is slow to reload.
+  const asked: HTTPRequest[] = []
+  let holding = false
+  let loads = 0
+  await tab.setRequestInterception(true)
+  tab.on('request', (request) => {
+    const listens = request.url().includes('/events?')
+    if (listens) asked.push(request)
+    if (request.isNavigationRequest()) loads += 1
+    if (!(listens && holding)) request.continue().catch(() => {})
+  })
+  // The page reloads for the first save, and asks to hear of reloads only once run has built the second.
+  const late = async (first: string, second: string, built: () => Promise<void>) => {
+    await tab.waitForFunction(() => Reflect.get(window, 'listening') === true, { timeout: 10_000 })
+    holding = true
+    const reloaded = tab.waitForNavigation()
+    const before = asked.length
+    writeFileSync(file, first)
+    await reloaded
+    await until('the reloaded page to ask to hear of reloads', () => asked.length > before)
+    writeFileSync(file, second)
+    await built()
+    holding = false
+    await asked.at(-1)?.continue()
+  }
+  await openPage(tab, url)
+
+  await late(save(2), save(2).replace('update() {}', 'update() {'), () => until("run to print the save that doesn't build", () => errors.includes('\n')))
+  const notice = await tab.waitForSelector('pre', { timeout: 10_000 })
+  assert.equal(await notice?.evaluate((box) => box.textContent), `${errors.trim()}\n\nFix the game and save; the page reloads.`)
+
+  // The script run serves changes once a save that builds has built, as run reloads its pages for it.
+  const served = async (text: string) => {
+    for (const deadline = Date.now() + 10_000; !(await (await fetch(new URL('bundle.js', url))).text()).includes(text); await new Promise((wait) => setTimeout(wait, 20))) {
+      if (Date.now() > deadline) throw new Error(`gave up waiting for run to build ${text}`)
+    }
+  }
+  await late(save(3), save(4), () => served('save: 4'))
+  await tab.waitForFunction(() => window.engine?.state('dot')[0].save === 4, { timeout: 10_000 })
+  // Then the page stays: told to reload once more, it would ask for its document again within moments of listening, and then to hear of reloads.
+  await tab.waitForFunction(() => Reflect.get(window, 'listening') === true, { timeout: 10_000 })
+  const settled = { loads, listens: asked.length }
+  await new Promise((wait) => setTimeout(wait, 500))
+  assert.deepEqual({ loads, listens: asked.length }, settled, 'the page that plays save 4 went on reloading')
 })
 
 test("a played page that fails as it runs, or whose image won't load, stops and says why on the page, and in run what to fix", { skip: !chrome && 'needs Chrome' }, async (t) => {

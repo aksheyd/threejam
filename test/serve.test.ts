@@ -272,7 +272,7 @@ test("a page that follows saves rebuilds once when an image stops being readable
   }
 })
 
-test("a page that follows saves reports a game file it can't read once, not on each of esbuild's polls of it", unreadable, async () => {
+test("a page that follows saves reports a game file it can't read once, and counts it as one build, not on each of esbuild's polls of it, so a page that loads meanwhile isn't told to reload again and again", unreadable, async () => {
   const dir = folder({ 'game.ts': GAME })
   const reports: string[][] = []
   const page = await buildPage({ dir, config: { mode: 'run', seed: 0, token: 'session-token' }, onRebuild: (errors) => reports.push(errors) })
@@ -280,7 +280,8 @@ test("a page that follows saves reports a game file it can't read once, not on e
     chmodSync(join(dir, 'game.ts'), 0)
     await until('the page to rebuild', () => reports.length > 0)
     await new Promise((wait) => setTimeout(wait, 1000))
-    assert.deepEqual(reports.map((errors) => errors.length > 0), [true])
+    // The first build, then the one that couldn't read the file.
+    assert.deepEqual({ reports: reports.map((errors) => errors.length > 0), build: page.build }, { reports: [true], build: 2 })
   } finally {
     await page.dispose()
   }

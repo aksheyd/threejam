@@ -20,12 +20,15 @@ export interface Page {
   // The page as the latest build left it, which says why when that build failed, and the script of the last build that didn't.
   readonly index: string
   readonly bundle: Uint8Array
+  // Counts the builds that changed the page; a run page gives the count it came with when it listens for reloads.
+  readonly build: number
   dispose(): Promise<void>
 }
 
 export interface PageOptions {
   readonly dir: string
-  readonly config: Config
+  // A run page's config also gets the build the page comes from, and why that build failed, if it did.
+  readonly config: { readonly mode: 'run'; readonly seed: number; readonly token: string } | { readonly mode: 'shot' }
   readonly driver?: string
   readonly onRebuild?: (errors: string[]) => void
 }
@@ -35,6 +38,7 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
   const page = pageBuild({ files, driver, address: (name) => `assets/${encodeURIComponent(name)}` })
   let bundle: Uint8Array = new Uint8Array()
   let failure: string | undefined
+  let builds = 0
   let firstEnded: ((errors: esbuild.Message[]) => void) | undefined
   const first = new Promise<esbuild.Message[]>((ended) => (firstEnded = ended))
   const context = await esbuild.context({
@@ -50,12 +54,13 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
           void build.onEnd((result) => {
             const errors = result.errors.map(formatMessage)
             const why = errors.length === 0 ? undefined : errors.join('\n')
-            // esbuild rebuilds over and over while a file it reads can't be, failing the same way each time, so a repeat isn't reported.
-            const repeated = why !== undefined && why === failure
+            // esbuild rebuilds over and over while a file it reads can't be, failing the same way each time, and a repeat leaves the page as it was.
+            if (why !== undefined && why === failure) return
             if (why === undefined && result.outputFiles) bundle = result.outputFiles[0].contents
             failure = why
+            builds += 1
             if (firstEnded !== undefined) firstEnded(result.errors)
-            else if (!repeated) onRebuild?.(errors)
+            else onRebuild?.(errors)
             firstEnded = undefined
           }),
       },
@@ -70,10 +75,13 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
   return {
     folder: files.folder,
     get index() {
-      return html({ title: basename(files.folder), config: failure !== undefined && config.mode === 'run' ? { ...config, failure } : config, script: { kind: 'file', src: '/bundle.js' } })
+      return html({ title: basename(files.folder), config: config.mode === 'run' ? { ...config, build: builds, failure } : config, script: { kind: 'file', src: '/bundle.js' } })
     },
     get bundle() {
       return bundle
+    },
+    get build() {
+      return builds
     },
     dispose: () => context.dispose(),
   }
@@ -252,7 +260,8 @@ export function serve({ page, token, onQuit = () => {} }: { page: Page; token?: 
     }
     if (path === '/events') {
       response.writeHead(200, { ...HEADERS, 'content-type': 'text/event-stream' })
-      response.write(':\n\n')
+      // A page from before the latest build missed that build's reload while it loaded, so it reloads now.
+      response.write(query.get('build') === String(page.build) ? ':\n\n' : 'data: reload\n\n')
       listeners.add(response)
       request.on('close', () => listeners.delete(response))
       return

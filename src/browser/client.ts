@@ -7,9 +7,9 @@ import { barePage } from './bare.ts'
 import { Speaker } from './sound.ts'
 import { View, parseView, type ViewModule } from './view.ts'
 
-// run is served by threejam run, whose server takes the token with /events and /quit and gives the failure when the latest save didn't build, shot by threejam shot, and export is one file opened from disk, with no server behind it.
+// run is served by threejam run, whose server takes the token with /events and /quit, and the build the page comes from with /events, and gives the failure when the latest save didn't build, shot by threejam shot, and export is one file opened from disk, with no server behind it.
 export type Config =
-  | { readonly mode: 'run'; readonly seed: number; readonly token: string; readonly failure?: string }
+  | { readonly mode: 'run'; readonly seed: number; readonly token: string; readonly build: number; readonly failure?: string }
   | { readonly mode: 'shot' }
   | { readonly mode: 'export'; readonly seed?: number }
 
@@ -71,7 +71,7 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   let stopped = false
   // First, so the page of a game that fails below still reloads when a fix is saved, and still quits with Esc.
   if (config.mode === 'run') {
-    new EventSource(`/events?token=${encodeURIComponent(config.token)}`).onmessage = () => location.reload()
+    new EventSource(`/events?token=${encodeURIComponent(config.token)}&build=${config.build}`).onmessage = () => location.reload()
     addEventListener('keydown', (event) => {
       if (event.code !== 'Escape') return
       stopped = true
@@ -326,9 +326,10 @@ function parseConfig(value: unknown): Config {
   switch (value.mode) {
     case 'run': {
       const token = 'token' in value && typeof value.token === 'string' ? value.token : undefined
-      if (seed === undefined || token === undefined) throw new Error('the run page has no seed or token')
+      const build = 'build' in value && typeof value.build === 'number' ? value.build : undefined
+      if (seed === undefined || token === undefined || build === undefined) throw new Error('the run page has no seed, token, or build')
       const failure = 'failure' in value && typeof value.failure === 'string' ? value.failure : undefined
-      return { mode: 'run', seed, token, failure }
+      return { mode: 'run', seed, token, build, failure }
     }
     case 'shot':
       return { mode: 'shot' }
