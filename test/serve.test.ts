@@ -250,7 +250,10 @@ test("a Chrome that shot kills for a page that never returns leaves nothing in t
   const script = `import { shoot } from ${JSON.stringify(shot)}\nawait shoot(${options}).catch((error) => console.log(error.code))`
   const env = { ...process.env, TMPDIR: temp, TEMP: temp, TMP: temp }
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: ROOT, env, encoding: 'utf8', timeout: 45_000, killSignal: 'SIGKILL' })
-  assert.deepEqual({ status: result.status, printed: result.stdout.trim(), left: readdirSync(temp) }, { status: 0, printed: 'TIMEOUT', left: [] }, result.stderr)
+  // On Windows, Chrome's helpers can hold a file in shot's or Puppeteer's folder a moment after Chrome is killed, and shot leaves those for the OS.
+  const held = /^(threejam-chrome-|puppeteer_dev_chrome_profile-)/
+  const left = readdirSync(temp).filter((name) => process.platform !== 'win32' || !held.test(name))
+  assert.deepEqual({ status: result.status, printed: result.stdout.trim(), left }, { status: 0, printed: 'TIMEOUT', left: [] }, result.stderr)
 })
 
 test('a Chrome that exits as it starts fails with one line naming it, though over a pipe its own output is lost, and a folder or a file that runs nothing says so', { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {
