@@ -21,6 +21,8 @@ export interface Request {
   readonly assets: readonly string[]
   // The driver as the command line named it, for messages; its code is in the bundle.
   readonly driver?: string
+  // Only the tick and reached go back, for sim --seeds, which prints no entities, log, or sounds.
+  readonly outcome?: boolean
 }
 
 export type Reply =
@@ -97,6 +99,7 @@ function simulated(modules: Modules, request: Request): Omit<Extract<Reply, { ok
   const { ticks, press, hold, pointer, set, seed, every, clip, assets, only } = request
   const run = simulate(game, { ticks, press, hold, pointer, set, seed, every, clip, assets, drive, until, only })
   stage = 'end'
+  if (request.outcome) return { snapshots: [], logs: [], sounds: [], tick: run.tick, reached: run.reached }
   const { snapshots } = run
   return { snapshots, logs: run.logs, sounds: run.sounds, tick: run.tick, reached: run.reached }
 }

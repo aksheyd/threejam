@@ -23,6 +23,18 @@ Saved the playtest, 1834 ticks with seed 5, to games/pong/playtest.ts; replay it
 
 The file's first line names the same ticks and seed, so a playtest the person saved in their own terminal needs nothing they saw there. The last tick is where they stopped, so `shot --at 1834` with the same `--driver` and `--seed` shows that moment, and `sim` prints the state there. Once it's fixed, keep the playtest as a test that pins what the game does now: import it with `import playtest from './playtest.ts'`, and run `simulate(game, { ticks: 1834, seed: 5, drive: playtest })`. A replay with another seed fails at its first tick, since the game would play out otherwise.
 
+## Balance across seeds
+
+One seed is one game, and a game that plays fair on seed 0 can be lopsided on others. `sim --seeds` runs the same flags once for each seed and says how often and how soon a condition held, so balance is checked with numbers rather than one run: how often the first player scores, how long a level takes, or how often a bot dies.
+
+```bash
+npx threejam sim games/pong --ticks 3600 --press Space@1 --until 'match.left=1' --seeds 0-99
+```
+
+Read the `summary` first. `reached` out of `seeds` is how often, `min`, `median`, and `max` are how soon, in ticks, and `failed` counts the seeds whose game threw or ran past `--timeout`, each with its error in its row. Each seed's row is what `--seed N` gives with the same flags, unless that run would print past its 64 MB cap, so a seed that stands out reruns alone with `--seed N`, which prints its entities; `sim` suggests that command for the first seed that failed, or else the first that didn't reach `--until`. A `--driver`'s `random` follows the seed too.
+
+Seeds share the machine, so give `--timeout` some room over what one seed needs alone, but not much more: a call can take up to its seeds × `--timeout` ÷ the number running at once, and cancelling an MCP call doesn't stop its seeds, which keep their turns in the pool. Over MCP, give the `sim` tool `seeds`; calls at once share one pool of seeds, so a call waits its turn while another's seeds fill it, a reply holds rows for about 1,400 seeds, a list whose rows couldn't fit is refused before any seed runs, and a call stops with `OUTPUT_TOO_LARGE` as soon as its rows pass that, as long error messages can make them.
+
 ## MCP tools and other forms
 
 ```bash

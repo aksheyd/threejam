@@ -6,14 +6,14 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 | --- | --- |
 | `npx threejam new <dir>` | Writes a small playable game and its test into a new folder, plus a `package.json` and `tsconfig.json` outside a project |
 | `npx threejam check <dir>` | Type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks that the images entities name are in the folder, then runs `start` and the first tick |
-| `npx threejam sim <dir> --ticks N` | Runs N ticks, 60 to a second, without a window and prints the entities |
+| `npx threejam sim <dir> --ticks N` | Runs N ticks, 60 to a second, without a window and prints the entities, or with `--seeds`, runs them once for each seed and sums up how often and how soon `--until` held |
 | `npx threejam shot <dir> --at T,T,...` | Saves an 800x600 PNG at each tick, drawn by the same page players see, to the `.png` file `-o` or `--out` names |
 | `npx threejam run <dir>` | Checks that the game starts, then opens it in a window for a person to play, with sound after the first key press or click; Esc quits, `--serve-only` serves the page and prints its address without opening a window, and `--record FILE` saves what the person plays, as a driver that replays it exactly |
 | `npx threejam export <dir> -o <file>.html` | Writes one HTML file that plays the game offline, with its images and sounds inside; `--seed N` fixes the seed, which is otherwise new each time the page loads, and `--script URL` adds a script for the page to load from the network, like the widget a game jam requires on every entry, while without one the page loads nothing from the network |
 
 ## Input
 
-`sim` and `shot` share their input flags, and every `sim` run suggests the matching `shot` command:
+`sim` and `shot` share their input flags, and every `sim` run suggests the matching `shot` command, or with `--seeds`, the `sim` command that reruns one seed:
 
 - `--press KEY@T[,T...]` presses a key on those ticks, and `--hold KEY[@SPANS]` holds one on every tick or on spans like `30-90,120-`; the mouse buttons are the keys `Mouse` and `MouseRight`.
 - `--pointer X,Y@T` moves the mouse pointer to X,Y in world units on tick T, where it stays until the next move.
@@ -29,6 +29,30 @@ Ticks and other whole numbers in flags are plain digits, so `--ticks 1e2` or `--
 `sim` also takes `--until` to stop after the first tick a condition holds, like `--until 'match.state=over'` or `--until 'ball.x>1.9'`, `--only` and `--fields` to choose what it prints, and `--every N` to print every N ticks. Along with the entities it prints the game's log and the sounds it played, each with its tick.
 
 It rounds numbers to 4 decimal places, while `--until` compares exact values, so stop on a moving number with `<` or `>`, or copy the value from `--exact`, which prints numbers as they are.
+
+One seed is one game. To see how often and how soon something happens over many, `--seeds 0-99` runs the same flags once for each seed, from seeds and spans like `7`, `-10--1`, or `0-99,200-299`, at most 10000. Each seed's run is the one `--seed N` gives it, in a sandbox of its own with its own `--timeout`, and seeds run side by side, in one pool that every call in a process shares: as many at once as the machine has threads, and as fit in half its memory at 1 GB each. So a call can take up to its seeds × `--timeout` ÷ the pool's size, a seed close to its `--timeout` can run past it among the others when it wouldn't alone, and a call can't be cancelled, but by ending `sim` or, over MCP, the server, so a cancelled call's seeds keep their turns in the pool. A row prints no entities, log, or sounds, so a seed whose one run would print past the 64 MB cap, and fail there, still gets its row. `sim` prints a row for each seed, with the tick it stopped at and whether `--until` held, or the code and message of a seed whose game threw or ran past `--timeout`, then a summary:
+
+```console
+$ npx threejam sim games/pong --ticks 3600 --press Space@1 --until 'match.left=1' --seeds 0-3
+seeds[4]{seed,tick,reached,code,message}:
+  0,131,true,null,null
+  1,130,true,null,null
+  2,124,true,null,null
+  3,124,true,null,null
+summary:
+  seeds: 4
+  reached: 4
+  failed: 0
+  min: 124
+  median: 127
+  max: 131
+cta:
+  description: "Suggested command:"
+  commands[1]{command,description}:
+    threejam sim games/pong --ticks 3600 --press Space@1 --until match.left=1 --seed 0,Rerun seed 0 alone to print its entities
+```
+
+The `min`, `median`, and `max` are over the seeds that reached `--until`. A seed whose game failed counts in `failed`, and `sim` still exits 0, since that failure is what the run found; a script that should fail on one reads the summary, as in `--format json | jq -e '.summary.failed == 0'`. Flags that are wrong for every seed fail the call with `USAGE`, as they would for one run. `--seeds` takes no `--seed`, nor `--only`, `--fields`, `--every`, or `--exact`: to see a seed's entities, rerun it alone with `--seed`, as the suggested command does.
 
 ## The page and Chrome
 

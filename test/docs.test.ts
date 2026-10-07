@@ -172,8 +172,8 @@ function flagsIn(text: string): Set<string> {
   return new Set(text.match(/(?<![\w-])--?[a-z][a-z-]*/g) ?? [])
 }
 
-// What the docs write like flags that no command defines: incur's own and mcp add's, -o for --out, flags of Chrome, add-mcp, node, and docker, and two mistakes mcp add refuses.
-const NOT_OPTIONS = new Set(['--format', '--filter-output', '--help', '--schema', '--mcp', '--llms', '--agent', '--command', '-c', '--no-global', '-o', '--no-sandbox', '--args', '--name', '-g', '-y', '--test', '--init', '-a', '--agnet'])
+// What the docs write like flags that no command defines: incur's own and mcp add's, -o for --out, flags of Chrome, add-mcp, node, docker, and jq, and two mistakes mcp add refuses.
+const NOT_OPTIONS = new Set(['--format', '--filter-output', '--help', '--schema', '--mcp', '--llms', '--agent', '--command', '-c', '--no-global', '-o', '--no-sandbox', '--args', '--name', '-g', '-y', '--test', '--init', '-e', '-a', '--agnet'])
 
 test('AGENTS.md and the commands guide show every command and name each of its flags, and no flag that ThreeJam lacks', () => {
   const listed = commands()

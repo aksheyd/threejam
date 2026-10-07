@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { setMaxListeners } from 'node:events'
 import { accessSync, constants, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { SourceMap } from 'node:module'
-import { constants as osConstants, tmpdir } from 'node:os'
+import { availableParallelism, constants as osConstants, tmpdir, totalmem } from 'node:os'
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getSystemErrorMap } from 'node:util'
@@ -108,22 +109,126 @@ export async function runGame(dir: string, options: RunOptions): Promise<Run> {
   return run(options.seed)
 }
 
-type Runner = (seed: number | undefined) => Promise<Run>
+type Runner = (seed: number | undefined, cancel?: AbortSignal) => Promise<Run>
 
 // Reads and bundles a game and its driver once, for runs that differ only in their seed, each in a sandbox of its own.
-async function loadGame(dir: string, options: RunOptions): Promise<Runner> {
+async function loadGame(dir: string, options: RunOptions & { readonly outcome?: boolean }): Promise<Runner> {
   const files = gameFiles(dir)
   const driver = options.driver === undefined ? undefined : driverFile(options.driver)
   const seconds = timeLimit(options.timeout)
   const { code, map } = await bundle(files, driver)
-  const { ticks, press, hold, pointer, set, every, until, only, clip } = options
+  const { ticks, press, hold, pointer, set, every, until, only, clip, outcome } = options
   const timeout = Math.min(Math.ceil(seconds * 1000), 2 ** 32 - 1)
-  return async (seed) => {
-    const request: Request = { ticks, press, hold, pointer, set, seed, every, until, only, clip, assets: files.assets, driver: options.driver }
-    const reply = parseReply(await inChild({ code, request: JSON.stringify(request), timeout }))
+  return async (seed, cancel) => {
+    const request: Request = { ticks, press, hold, pointer, set, seed, every, until, only, clip, outcome, assets: files.assets, driver: options.driver }
+    const reply = parseReply(await inChild({ code, request: JSON.stringify(request), timeout, cancel }))
     if (reply.ok) return reply
     throw failed(reply.failure, map, seconds)
   }
+}
+
+export type SeedRun = { readonly seed: number; readonly tick: number; readonly reached: boolean } | { readonly seed: number; readonly failure: RunError | GameError | LimitError }
+
+// The memory this process may use: its cgroup's limit when that's below the machine's memory, since Node gives 0, or more than any machine has, when there's none.
+export function usableMemory(total: number, constrained: number): number {
+  return constrained > 0 && constrained < total ? constrained : total
+}
+
+// As many seeds run at once as the machine has threads, so each has about a thread to itself, as one run does, and as fit in half its memory when each grows to its heap limit; one at least.
+export function poolSize({ threads, memory, heap }: { readonly threads: number; readonly memory: number; readonly heap: number }): number {
+  return Math.max(1, Math.min(threads, Math.floor(memory / 2 / heap)))
+}
+
+// A pool's free places, and the runners waiting for one, in the order they asked.
+export class Slots {
+  #free: number
+  readonly #waiting = new Set<() => void>()
+
+  constructor(size: number) {
+    this.#free = size
+  }
+
+  // True once a place is the caller's, or false if cancel aborts first, when the caller leaves the queue.
+  take(cancel: AbortSignal): Promise<boolean> {
+    if (cancel.aborted) return Promise.resolve(false)
+    if (this.#free > 0) {
+      this.#free -= 1
+      return Promise.resolve(true)
+    }
+    return new Promise((done) => {
+      const granted = () => {
+        cancel.removeEventListener('abort', cancelled)
+        done(true)
+      }
+      const cancelled = () => {
+        this.#waiting.delete(granted)
+        done(false)
+      }
+      this.#waiting.add(granted)
+      cancel.addEventListener('abort', cancelled, { once: true })
+    })
+  }
+
+  give(): void {
+    const [next] = this.#waiting
+    if (next === undefined) this.#free += 1
+    else {
+      this.#waiting.delete(next)
+      next()
+    }
+  }
+}
+
+// One pool for every sim --seeds call in this process, so calls that run at once share the machine's threads and memory instead of each taking all of them.
+export const SEEDS_AT_ONCE = poolSize({ threads: availableParallelism(), memory: usableMemory(totalmem(), process.constrainedMemory()), heap: HEAP_MB * 2 ** 20 })
+const seedSlots = new Slots(SEEDS_AT_ONCE)
+
+// Runs a game once for each seed from one bundle, so each seed's run is the run sim --seed gives it, with its own time limit. As each seed ends, keep turns its run into what the call keeps, in the order of the seeds, so a failed seed's error is dropped once it's been read. A game that fails on a seed is that seed's outcome. Any other failure, like flags that are wrong for every seed, or one that keep throws, ends the runs still going and fails the whole call.
+export async function runSeeds<T>(dir: string, options: Omit<RunOptions, 'seed'>, seeds: readonly number[], keep: (run: SeedRun) => T): Promise<T[]> {
+  const run = await loadGame(dir, { ...options, outcome: true })
+  const kept = new Array<T>(seeds.length)
+  const stop = new AbortController()
+  // A runner listens to stop while its seed runs, or to drained while it waits for a place, and drained listens to stop.
+  const runners = Math.min(SEEDS_AT_ONCE, seeds.length)
+  setMaxListeners(runners + 1, stop.signal)
+  // Aborts once the last seed is handed out, or the call stops, so runners still waiting for a place leave the queue.
+  const drained = new AbortController()
+  setMaxListeners(runners, drained.signal)
+  stop.signal.addEventListener('abort', () => drained.abort(), { once: true })
+  let fatal: unknown
+  let next = 0
+  const outcome = async (seed: number): Promise<SeedRun> => {
+    try {
+      const { tick, reached } = await run(seed, stop.signal)
+      return { seed, tick, reached }
+    } catch (error) {
+      if (error instanceof RunError || error instanceof GameError || error instanceof LimitError) return { seed, failure: error }
+      throw error
+    }
+  }
+  // A runner takes a place in the pool for each seed and gives it back after, so another call's runner waiting for one gets its turn.
+  const runner = async () => {
+    while (next < seeds.length && (await seedSlots.take(drained.signal))) {
+      try {
+        // The last seed may have gone to another runner, or the call may have stopped, while this one waited.
+        if (next >= seeds.length || stop.signal.aborted) return
+        const at = next++
+        if (next === seeds.length) drained.abort()
+        const ended = await outcome(seeds[at])
+        if (!stop.signal.aborted) kept[at] = keep(ended)
+      } catch (error) {
+        if (!stop.signal.aborted) {
+          fatal = error
+          stop.abort()
+        }
+      } finally {
+        seedSlots.give()
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: runners }, runner))
+  if (stop.signal.aborted) throw fatal
+  return kept
 }
 
 function driverFile(path: string): string {
@@ -256,17 +361,20 @@ function runnable(file: string): boolean {
   }
 }
 
-function inChild({ code, request, timeout }: { code: string; request: string; timeout: number }): Promise<string> {
+function inChild({ code, request, timeout, cancel }: { code: string; request: string; timeout: number; cancel?: AbortSignal }): Promise<string> {
   return new Promise((done, fail) => {
+    if (cancel?.aborted) return fail(new Error('the run was cancelled'))
     const runner = spawnTied(process.execPath, [...SANDBOX_FLAGS, '-e', CHILD], { env: sandboxEnv() })
     const out: Buffer[] = []
     const errors: Buffer[] = []
     let bytes = 0
-    let stopped: LimitError | undefined
-    const stop = (error: LimitError) => {
+    let stopped: Error | undefined
+    const stop = (error: Error) => {
       stopped ??= error
       runner.kill('SIGKILL')
     }
+    const cancelled = () => stop(new Error('the run was cancelled'))
+    cancel?.addEventListener('abort', cancelled)
     const timer = setTimeout(() => stop(new LimitError('TIMEOUT', `the game ran past the ${timeout / 1000} s time limit and had to be stopped; ${MORE_TIME}`)), timeout + GRACE_MS)
     runner.stdout.on('data', (chunk: Buffer) => {
       bytes += chunk.length
@@ -277,10 +385,12 @@ function inChild({ code, request, timeout }: { code: string; request: string; ti
     runner.stdin.on('error', () => {})
     runner.once('error', (error) => {
       clearTimeout(timer)
+      cancel?.removeEventListener('abort', cancelled)
       fail(new Error(`couldn't start the sandbox: ${error.message}`))
     })
     runner.once('close', (status, signal) => {
       clearTimeout(timer)
+      cancel?.removeEventListener('abort', cancelled)
       if (stopped !== undefined) fail(stopped)
       else if (status === 0 && bytes > 0) done(Buffer.concat(out).toString('utf8'))
       else fail(crashed(Buffer.concat(errors).toString('utf8'), signal ?? `exit code ${status}`))

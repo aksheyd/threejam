@@ -4,6 +4,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 
 ## Unreleased
 
+- `sim --seeds 0-99` runs the same flags once for each seed and prints a row for each, with the tick it stopped at and whether `--until` held, or the error of a seed whose game failed, then a summary: how many seeds reached the condition, how many failed, and the min, median, and max tick it held at, so an agent can check a game's balance over many games in one command. Each seed's run is the one `sim --seed N` gives it, in a sandbox of its own with the same `--timeout` and heap, though a row prints nothing that a single run's 64 MB cap could stop, and seeds run side by side, in one pool per process that every call shares, sized by the machine's threads and memory. The `sim` MCP tool takes `seeds` too.
 - `run --record FILE` records a playtest: the keys and pointer of every tick a person plays. When `run` stops, it saves them in FILE as a driver that `sim`, `shot`, and `simulate` replay exactly, and prints the `sim` command that does, so a moment that feels off becomes a tick to inspect and a test to keep. It never replaces a file it didn't record, and never writes through a link.
 - The manual the package ships, `AGENTS.md`, leaves out working on ThreeJam itself, which moves to `CONTRIBUTING.md` in the repo.
 - The package ships the agent skill, as `node_modules/threejam/skills/threejam/SKILL.md`, and the docs' `npx skills add` installs it from the latest release's tag instead of from `main`, so the skill describes the version npm installs.
