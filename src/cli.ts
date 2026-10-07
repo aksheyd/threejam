@@ -144,13 +144,16 @@ interface Inputs {
   readonly seed?: number
 }
 
-// incur joins repeated flags with commas, which --set, --hold, and --pointer values contain, so the command is spelled out.
-function shotCommand({ dir, ticks, inputs }: { dir: string; ticks: number; inputs: Inputs }): string {
+// incur joins repeated flags with commas, which --set, --hold, and --pointer values contain, so a command is spelled out.
+function inputFlags(inputs: Inputs): string {
   const flag = (name: string, values: readonly string[] | undefined) => (values ?? []).map((value) => ` --${name} ${shellWord(value)}`).join('')
   const driver = inputs.driver === undefined ? '' : ` --driver ${shellWord(inputs.driver)}`
+  return `${flag('press', inputs.press)}${flag('hold', inputs.hold)}${flag('pointer', inputs.pointer)}${driver}${flag('set', inputs.set)}`
+}
+
+function shotCommand({ dir, ticks, inputs }: { dir: string; ticks: number; inputs: Inputs }): string {
   const seed = inputs.seed === undefined ? '' : ` --seed ${inputs.seed}`
-  const keys = `${flag('press', inputs.press)}${flag('hold', inputs.hold)}${flag('pointer', inputs.pointer)}`
-  return `shot ${shellWord(dir)} --at ${ticks}${keys}${driver}${flag('set', inputs.set)}${seed}`
+  return `shot ${shellWord(dir)} --at ${ticks}${inputFlags(inputs)}${seed}`
 }
 
 function shown(entities: readonly EntityState[], { fields, exact }: { fields: string | undefined; exact: boolean }): EntityState[] {
