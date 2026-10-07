@@ -1,3 +1,4 @@
+import { isColor } from './colors.ts'
 import { GameError, show } from './errors.ts'
 import { SOUNDS, type SoundEntry } from './types.ts'
 
@@ -30,11 +31,104 @@ function extension(name: string): string {
   return dot > 0 ? name.slice(dot).toLowerCase() : ''
 }
 
-// files names the image and sound files in the game's folder; without it, as when a test imports a game, any name of the right type passes.
-export function imageProblem(name: string, files: readonly string[] | undefined): string | undefined {
-  if (!isImageFile(name)) return `image ${show(name)} isn't an image file; images are .png, .jpg, .jpeg, .webp, .gif, or .svg files in the game's folder`
+// What an image may name: a file in the game's folder, or a sprite the game declares, whose name has no dot.
+export interface Images {
+  // The image and sound files in the game's folder; without them, as when a test imports a game, any file name of the right type passes.
+  readonly files: readonly string[] | undefined
+  readonly sprites: readonly string[]
+}
+
+const IMAGES_ARE = "images are .png, .jpg, .jpeg, .webp, .gif, or .svg files in the game's folder, or sprites the game declares"
+
+export function imageProblem(name: string, { files, sprites }: Images): string | undefined {
+  if (!name.includes('.')) {
+    if (sprites.includes(name)) return undefined
+    const problem = sprites.length === 0 ? `image ${show(name)} isn't an image file or a sprite; ${IMAGES_ARE}` : `no sprite ${show(name)} in the game's sprites, which are ${sprites.join(', ')}`
+    const file = files?.find((file) => isImageFile(file) && file.slice(0, file.lastIndexOf('.')) === name)
+    return file === undefined ? problem : `${problem}; the folder has ${file}, which image names with its extension`
+  }
+  if (!isImageFile(name)) return `image ${show(name)} isn't an image file; ${IMAGES_ARE}`
   if (files === undefined || files.includes(name)) return undefined
   return `no image ${show(name)} in the game's folder, ${inventory('image', files.filter(isImageFile))}`
+}
+
+// The most rows a sprite may have, and the most pixels to a row.
+export const SPRITE_SIDE = 256
+// The most pixels a game's sprites may have in all, as many as 64 sprites of 256 by 256, so a page, a phone's too, holds their textures in 16 MB and makes them in a moment.
+export const SPRITE_TOTAL = 4_194_304
+// In every sprite's rows, the pixel that shows what's behind it, which no palette gives a color.
+const SEE_THROUGH = '.'
+const DEFAULT_PALETTE: Readonly<Record<string, string>> = { '#': '#ffffff' }
+
+// A sprite as the page draws it: its rows, each width pixels long, and the color of each character in them but the see-through one.
+export interface Art {
+  readonly width: number
+  readonly rows: readonly string[]
+  readonly palette: ReadonlyMap<string, string>
+}
+
+// A game's sprites, checked whole, so one the page couldn't draw fails before the first tick, in sim as in the page.
+export function parseSprites(value: unknown): ReadonlyMap<string, Art> {
+  if (value === undefined) return new Map()
+  if (!isObject(value)) throw new GameError(`sprites must be an object that maps names to sprites, like { ship: { rows: ['.#.', '###'] } }, got ${Array.isArray(value) ? 'an array' : show(value)}`)
+  const sprites = new Map<string, Art>()
+  let total = 0
+  for (const [name, sprite] of Object.entries(value)) {
+    const art = parseSprite(name, sprite)
+    total += art.width * art.rows.length
+    if (total > SPRITE_TOTAL) {
+      throw new GameError(`sprite ${show(name)} brings the game's sprites to ${total} pixels, but a game's sprites may have ${SPRITE_TOTAL} in all, as many as 64 sprites of 256 by 256`)
+    }
+    sprites.set(name, art)
+  }
+  return sprites
+}
+
+function parseSprite(name: string, sprite: unknown): Art {
+  const where = `sprite ${show(name)}`
+  if (name === '') throw new GameError('sprites can\'t have one named "", which image takes for none')
+  if (name.includes('.')) throw new GameError(`${where}: name it without a dot, like "ship", since image reads a name with a dot as a file's`)
+  if (Array.isArray(sprite)) throw new GameError(`${where} must be an object with rows, like { rows: ['.#.', '###'] }, not the rows alone`)
+  if (!isObject(sprite)) throw new GameError(`${where} must be an object with rows, like { rows: ['.#.', '###'] }, got ${show(sprite)}`)
+  const extra = Object.keys(sprite).find((field) => field !== 'rows' && field !== 'palette')
+  if (extra !== undefined) throw new GameError(`${where} has no field ${show(extra)}; a sprite's fields are rows and palette`)
+  const palette = paletteOf(where, sprite.palette)
+  const rows: unknown = sprite.rows
+  if (!Array.isArray(rows)) throw new GameError(`${where}: rows must be an array of strings, one for each row of pixels, like ['.#.', '###'], got ${show(rows)}`)
+  if (!rows.every((row): row is string => typeof row === 'string')) {
+    const odd = rows.findIndex((row) => typeof row !== 'string')
+    throw new GameError(`${where}: rows[${odd}] is ${show(rows[odd])}, but each row is a string of pixels`)
+  }
+  if (rows.length < 1 || rows.length > SPRITE_SIDE) throw new GameError(`${where} has ${rows.length} rows; a sprite has 1 to ${SPRITE_SIDE}`)
+  const width = [...rows[0]].length
+  if (width < 1 || width > SPRITE_SIDE) throw new GameError(`${where}: rows[0] has ${width} pixels; a row has 1 to ${SPRITE_SIDE}`)
+  for (const [r, row] of rows.entries()) {
+    const pixels = [...row]
+    const stray = pixels.findIndex((pixel) => pixel !== SEE_THROUGH && !palette.has(pixel))
+    if (stray !== -1) {
+      const has = palette.size === 0 ? 'none' : [...palette.keys()].map((char) => show(char)).join(', ')
+      throw new GameError(`${where}: rows[${r}][${stray}] is ${show(pixels[stray])}, which isn't "." or in its palette, which has ${has}`)
+    }
+    if (pixels.length !== width) throw new GameError(`${where}: rows[${r}] has ${pixels.length} pixels, but rows[0] has ${width}, and every row must have the same number`)
+  }
+  return { width, rows: Object.freeze([...rows]), palette }
+}
+
+function paletteOf(where: string, value: unknown): ReadonlyMap<string, string> {
+  if (value === undefined) return new Map(Object.entries(DEFAULT_PALETTE))
+  if (!isObject(value)) throw new GameError(`${where}: palette must map characters to colors, like { '#': 'white', o: 'orange' }, got ${show(value)}`)
+  const palette = new Map<string, string>()
+  for (const [char, color] of Object.entries(value)) {
+    if (char === SEE_THROUGH) throw new GameError(`${where}: palette can't give "." a color, since "." shows what's behind`)
+    if (!/^[!-~]$/.test(char)) throw new GameError(`${where}: palette has ${show(char)}, but each of its keys is one character from ! to ~`)
+    if (typeof color !== 'string' || !isColor(color)) throw new GameError(`${where}: palette[${show(char)}] must be a CSS color like "#ff8800" or "orange", got ${show(color)}`)
+    palette.set(char, color)
+  }
+  return palette
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export function soundEntry({ tick, sound, options, files }: { tick: number; sound: unknown; options: unknown; files: readonly string[] | undefined }): SoundEntry {

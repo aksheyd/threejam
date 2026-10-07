@@ -305,7 +305,7 @@ const cli = Cli.create('threejam', {
     },
   })
   .command('check', {
-    description: "Check a game: TypeScript types of game.ts and view.ts, the imports its page bundles, entities and the images they name, then start and the first tick in a sandbox",
+    description: "Check a game: TypeScript types of game.ts and view.ts, the imports its page bundles, entities, sprites, and the images they name, then start and the first tick in a sandbox",
     args,
     options: z.object({ timeout }),
     examples: [{ args: { dir: 'games/pong' }, description: 'Check Pong after an edit' }],

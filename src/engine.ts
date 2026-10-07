@@ -1,4 +1,4 @@
-import { soundEntry } from './assets.ts'
+import { parseSprites, soundEntry } from './assets.ts'
 import { isColor } from './colors.ts'
 import { createStore, drawableOf, settle, stateOf, type Store } from './entities.ts'
 import { GameError, RunError, UsageError, quote, show } from './errors.ts'
@@ -50,7 +50,7 @@ export class Session<E extends Entities = Entities> {
     this.game = game
     this.seed = checkSeed(options.seed ?? 0)
     const files = options.assets === undefined ? undefined : Object.freeze([...options.assets])
-    this.#store = createStore(game.entities, files)
+    this.#store = createStore(game.entities, { files, sprites: [...parseSprites(game.sprites).keys()] })
     const store = this.#store
     store.edit(() => {
       for (const assignment of options.set ?? []) applySet(store, assignment)

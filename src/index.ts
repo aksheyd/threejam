@@ -31,6 +31,8 @@ export type {
   Snapshot,
   Sound,
   SoundEntry,
+  Sprite,
+  Sprites,
   Value,
   World,
 } from './types.ts'

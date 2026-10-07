@@ -341,6 +341,36 @@ test('check names an image the folder lacks, and sim takes --pointer, prints the
   assert.ok(cta.commands[0].command.endsWith(' --at 3 --press Mouse@2 --pointer -1.5,0.5@2'), cta.commands[0].command)
 })
 
+test("check names a sprite with ragged rows, or sprites with more pixels than a game's may have, as it names a missing image, and a misspelled field of a sprite as a type error", () => {
+  const sprite = (fields: string) =>
+    [
+      "import { defineGame, type Sprites } from 'threejam'",
+      '',
+      `const sprites = { ship: { ${fields} } } satisfies Sprites`,
+      '',
+      "export default defineGame({ sprites, entities: { ship: { w: 0.3, h: 0.2, image: 'ship' } }, update() {} })",
+      '',
+    ].join('\n')
+  const ragged = threejam('check', folder({ 'game.ts': sprite("rows: ['.#.', '##']") }), '--format', 'json')
+  const message = 'sprite "ship": rows[1] has 2 pixels, but rows[0] has 3, and every row must have the same number'
+  assert.deepEqual({ code: ragged.code, failure: JSON.parse(ragged.out) }, { code: 1, failure: { code: 'GAME_ERROR', message } })
+  const crowded = [
+    "import { defineGame, type Sprites } from 'threejam'",
+    '',
+    "const wall = { rows: Array.from({ length: 256 }, () => '#'.repeat(256)) }",
+    "const sprites = { ...Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`wall_${i}`, wall])), ship: { rows: ['#'] } } satisfies Sprites",
+    '',
+    "export default defineGame({ sprites, entities: { ship: { w: 0.3, h: 0.2, image: 'ship' } }, update() {} })",
+    '',
+  ].join('\n')
+  const over = threejam('check', folder({ 'game.ts': crowded }), '--format', 'json')
+  const most = 'sprite "ship" brings the game\'s sprites to 4194305 pixels, but a game\'s sprites may have 4194304 in all, as many as 64 sprites of 256 by 256'
+  assert.deepEqual({ code: over.code, failure: JSON.parse(over.out) }, { code: 1, failure: { code: 'GAME_ERROR', message: most } })
+  const typo = threejam('check', folder({ 'game.ts': sprite("rows: ['.#.', '###'], pallete: { '#': 'red' }") }))
+  assert.equal(typo.code, 1)
+  assert.match(typo.out, /code: TYPE_ERROR\nmessage: "?test\/\.tmp\/game-\w+\/game\.ts:3: Object literal may only specify known properties, but 'pallete' does not exist in type 'Sprite'/)
+})
+
 test('the MCP server reports the package version, offers every command but run, and runs the code on disk after an edit', async (t) => {
   const dir = folder({ 'game.ts': game({ fields: 'x: 0, y: 0, w: 0.1, h: 0.1, speed: 1', update: 'world.ball.x += world.ball.speed' }) })
   const server = mcp(t.signal)

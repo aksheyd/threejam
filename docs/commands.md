@@ -5,7 +5,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 | Command | What it does |
 | --- | --- |
 | `npx threejam new <dir>` | Writes a small playable game and its test into a new folder, plus a `package.json` and `tsconfig.json` outside a project |
-| `npx threejam check <dir>` | Type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks that the images entities name are in the folder, then runs `start` and the first tick |
+| `npx threejam check <dir>` | Type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks the game's sprites and that the images entities name are in the folder or among its sprites, then runs `start` and the first tick |
 | `npx threejam sim <dir> --ticks N` | Runs N ticks, 60 to a second, without a window and prints the entities, or with `--seeds`, runs them once for each seed and sums up how often and how soon `--until` held |
 | `npx threejam shot <dir> --at T,T,...` | Saves an 800x600 PNG at each tick, drawn by the same page players see, to the `.png` file `-o` or `--out` names |
 | `npx threejam run <dir>` | Checks that the game starts, then opens it in a window for a person to play, with sound after the first key press or click; Esc quits, `--serve-only` serves the page and prints its address without opening a window, and `--record FILE` saves what the person plays, as a driver that replays it exactly |

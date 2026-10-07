@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
+import { crc32, deflateSync } from 'node:zlib'
 import { ROOT } from '../src/package.ts'
 import { shoot } from '../src/shot.ts'
 import { CHROME as chrome } from './chrome.ts'
@@ -23,6 +24,95 @@ test('shot repeats a frame byte for byte on one machine, images and text include
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+type Rgb = readonly [number, number, number]
+
+// An RGBA PNG with a pixel for each character of rows, in the color colors gives it, or clear for any other.
+function png(rows: readonly string[], colors: Readonly<Record<string, Rgb>>): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data])
+    const framed = Buffer.alloc(body.length + 8)
+    framed.writeUInt32BE(data.length, 0)
+    body.copy(framed, 4)
+    framed.writeUInt32BE(crc32(body), body.length + 4)
+    return framed
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(rows[0].length, 0)
+  header.writeUInt32BE(rows.length, 4)
+  header.set([8, 6], 8)
+  const lines = rows.map((row) => Buffer.from([0, ...[...row].flatMap((pixel) => (Object.hasOwn(colors, pixel) ? [...colors[pixel], 255] : [0, 0, 0, 0]))]))
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(Buffer.concat(lines))), chunk('IEND', Buffer.alloc(0))])
+}
+
+// Four entities draw the image first, plainly, tinted, cut to a circle, and turned and faded, and from tick 1 the plain one draws the image then.
+function pictures({ sprites, first, then }: { sprites: string; first: string; then: string }): string {
+  return [
+    "import { defineGame } from 'threejam'",
+    '',
+    'export default defineGame({',
+    "  background: '#336699',",
+    `  sprites: ${sprites},`,
+    '  entities: {',
+    `    plain: { x: -1.2, y: 0.7, w: 0.8, h: 0.8, image: '${first}' },`,
+    `    tinted: { x: 0, y: 0.7, w: 0.8, h: 0.8, image: '${first}', color: '#00ffff' },`,
+    `    round: { x: 1.2, y: 0.7, w: 0.8, h: 0.8, image: '${first}', shape: 'circle' },`,
+    `    turned: { x: 0, y: -0.7, w: 0.8, h: 0.8, image: '${first}', angle: 0.5, opacity: 0.5 },`,
+    '  },',
+    '  update({ plain }) {',
+    `    plain.image = '${then}'`,
+    '  },',
+    '})',
+    '',
+  ].join('\n')
+}
+
+test('shot draws a sprite as it draws a PNG of the same pixels, byte for byte, on every run', { skip: !chrome && 'needs Chrome' }, async () => {
+  const colors: Readonly<Record<string, Rgb>> = { r: [255, 0, 0], o: [255, 136, 0], g: [51, 255, 51], b: [0, 0, 255], w: [255, 255, 255] }
+  const art = ['r.oo.b', '.r..b.', 'g.wb.g', 'g.bw.g', '.b..r.', 'b.oo.r']
+  const changed = [art[0].replace('.', 'g'), ...art.slice(1)]
+  const hex = (rgb: Rgb) => `#${rgb.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
+  const palette = Object.fromEntries(Object.entries(colors).map(([pixel, rgb]) => [pixel, hex(rgb)]))
+  const sprites = folder({ 'game.ts': pictures({ sprites: JSON.stringify({ art: { rows: art, palette }, changed: { rows: changed, palette } }), first: 'art', then: 'changed' }) })
+  const files = folder({ 'game.ts': pictures({ sprites: 'undefined', first: 'art.png', then: 'changed.png' }), 'art.png': png(art, colors), 'changed.png': png(changed, colors) })
+  const out = folder({})
+  const shots = await Promise.all([sprites, sprites, files].map((dir, i) => shoot({ dir, at: [0, 1], out: join(out, String(i), 'frame.png') })))
+  const [first, again, drawn] = shots.map((paths) => paths.map((path) => readFileSync(path)))
+  assert.ok(first[0].equals(again[0]) && first[1].equals(again[1]), 'two shots of one run differ')
+  assert.ok(first[0].equals(drawn[0]) && first[1].equals(drawn[1]), 'a sprite draws otherwise than a PNG of its pixels')
+  assert.ok(!first[0].equals(first[1]), 'a sprite with a pixel changed drew the same frame')
+})
+
+// 64 sprites of 256 by 256 with every pixel lit, as many pixels as a game's sprites may have, and more sprites besides.
+function walls(more: string): string {
+  return [
+    "import { defineGame } from 'threejam'",
+    '',
+    "const wall = { rows: Array.from({ length: 256 }, (_, row) => (row % 2 ? 'rb' : 'br').repeat(128)), palette: { r: '#ff0000', b: '#0000ff' } }",
+    'const walls = Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`wall_${i}`, wall]))',
+    '',
+    `export default defineGame({ sprites: { ...walls, ${more} }, entities: { wall: { w: 2, h: 2, image: 'wall_63' } }, update() {} })`,
+    '',
+  ].join('\n')
+}
+
+test("a game whose sprites have as many pixels as a game's may draws well within shot's time limit, and the page refuses one with a pixel more", { skip: !chrome && 'needs Chrome' }, async () => {
+  const out = folder({})
+  const [most, over] = await Promise.allSettled([
+    shoot({ dir: folder({ 'game.ts': walls('') }), at: [0], out: join(out, 'most.png') }),
+    shoot({ dir: folder({ 'game.ts': walls("dot: { rows: ['#'] }") }), at: [0], out: join(out, 'over.png') }),
+  ])
+  assert.deepEqual(most, { status: 'fulfilled', value: [join(out, 'most.png')] })
+  const message = 'the page failed: sprite "dot" brings the game\'s sprites to 4194305 pixels, but a game\'s sprites may have 4194304 in all, as many as 64 sprites of 256 by 256'
+  assert.deepEqual(over.status === 'rejected' && [over.reason.name, over.reason.message], ['GameError', message])
+})
+
+function folder(files: Record<string, string | Buffer>): string {
+  const dir = mkdtempSync(join(TMP, 'pictures-'))
+  made.push(dir)
+  for (const [name, data] of Object.entries(files)) writeFileSync(join(dir, name), data)
+  return dir
+}
 
 test("a page that fails in shot is the game's failure, told in one line without the page's stack or the server's address", { skip: !chrome && 'needs Chrome' }, async () => {
   const dir = mkdtempSync(join(TMP, 'broken-'))

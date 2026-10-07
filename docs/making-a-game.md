@@ -73,6 +73,40 @@ npx threejam export games/catch -o catch.html
 
 All three build the same page, which holds only files from the game's folder and ThreeJam's own, so a game that imports a file from outside its folder fails there with that import's line. On a phone, the page shows a key next to the game for each key the game reads, so the game of catch gets Space, Left, Right, A, and D, and `sim` replays a finger on one as it does the key. For a game jam that requires its widget on every entry, like Vibe Jam, `--script` adds the widget's script, as in `npx threejam export games/catch -o catch.html --script https://jam.pieter.com/2026/widget.js`; without it, the file loads nothing from the network.
 
+## Draw it in pixels
+
+A game can have pixel art without image files or the tools to make them. `sprites` in `defineGame` declares each sprite as rows of characters, and `image` names one as it names a file. In each row, `.` shows what's behind and every other character is the color the sprite's `palette` gives it; without a palette, `#` is white, so `color` tints it as it tints text. This gives the game of catch a ball with a shine on it:
+
+```ts
+import { defineGame, oneOf, type Context, type Entities, type Sprites, type World } from 'threejam'
+
+const sprites = {
+  ball: { rows: ['.oo.', 'oyoo', 'oooo', '.oo.'], palette: { o: 'orange', y: 'yellow' } },
+} satisfies Sprites
+
+const entities = {
+  ball: { x: 0, y: 1.2, w: 0.12, h: 0.12, image: 'ball', visible: false, speed: 1.5 },
+  // ...the paddle, the text, and game, as before
+} satisfies Entities
+
+export default defineGame({
+  title: 'catch',
+  sprites,
+  entities,
+  // ...update, as before
+})
+```
+
+`check` refuses a sprite the page couldn't draw as it refuses an image the folder lacks, like this ball, whose third row is a pixel short:
+
+```console
+$ npx threejam check games/catch
+code: GAME_ERROR
+message: "sprite \"ball\": rows[2] has 3 pixels, but rows[0] has 4, and every row must have the same number"
+```
+
+With `satisfies Sprites`, a misspelled field, like `pallete`, is a `TYPE_ERROR` instead. `sim` sees only a sprite's name, so the game plays as it did, and the page draws a sprite as it would a PNG of its pixels, the same in every `shot`. To animate one, assign another sprite's name to `image`.
+
 ## Test it
 
 `new` also wrote `game.test.ts`, which pins what the game does, and `node --test` runs it, or `npm test` in a project `new` made:
@@ -95,4 +129,4 @@ test('holding Right catches the first ball with a sound, and a paddle that stays
 
 ## Going further
 
-[`AGENTS.md`](../AGENTS.md) covers the rest: groups, grids, and `spawn`, parts, `oneOf`, `listOf`, and `maybe`, text, turning, images, sounds, the mouse, `view.ts`, drivers, and every rule the engine checks. It ships in the package too, as `node_modules/threejam/AGENTS.md`. The [example games](examples.md) show each of these in a full game.
+[`AGENTS.md`](../AGENTS.md) covers the rest: groups, grids, and `spawn`, parts, `oneOf`, `listOf`, and `maybe`, text, turning, images and sprites, sounds, the mouse, `view.ts`, drivers, and every rule the engine checks. It ships in the package too, as `node_modules/threejam/AGENTS.md`. The [example games](examples.md) show each of these in a full game.

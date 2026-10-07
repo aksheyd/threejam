@@ -1,9 +1,10 @@
+import { parseSprites } from '../assets.ts'
 import { Session, parseGame, pick } from '../engine.ts'
 import { show } from '../errors.ts'
 import { guarded, loading, throughout } from '../guard.ts'
 import { CENTER, keyFromCode, pointerMoves, schedule } from '../input.ts'
 import { driverFor, isDrive, type Drive, type Driver, type EntityState, type Game, type Key, type Point, type SoundEntry } from '../types.ts'
-import { loadImages, parseAssets, type Assets } from './assets.ts'
+import { loadImages, parseAssets, spriteImages, type Assets } from './assets.ts'
 import { barePage } from './bare.ts'
 import { Recorder } from './playtest.ts'
 import { Speaker } from './sound.ts'
@@ -108,15 +109,17 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   // After a save that doesn't build, the page comes with the last script that did, so it says why instead of playing that game.
   if (config.mode === 'run' && config.failure !== undefined) throw reported(new Error(config.failure), FIX_GAME)
   const { game, drive, assets } = settingUp(() => partsOf(page, bare), FIX_GAME)
+  const sprites = settingUp(() => parseSprites(game.sprites), FIX_GAME)
   const canvas = document.querySelector('canvas')
   if (!canvas) throw new Error('the page needs a <canvas>')
   if (game.title) document.title = game.title
   // Every image is ready before the first frame, so no frame shows one half loaded.
-  const images = await loadImages(assets).catch((error: unknown) => {
+  const files = await loadImages(assets).catch((error: unknown) => {
     throw reported(error, 'Fix the file and save; the page reloads.')
   })
   const custom = settingUp(() => viewOf(page.view), FIX_GAME)
-  const view = settingUp(() => new View({ canvas, game, custom, images }))
+  // A sprite's name has no dot and a file's has one, so neither takes the other's place.
+  const view = settingUp(() => new View({ canvas, game, custom, images: new Map([...files, ...spriteImages(sprites)]) }))
   const speaker = config.mode === 'shot' ? undefined : new Speaker(assets)
   const seed = config.mode === 'shot' ? 0 : (config.seed ?? Math.floor(Math.random() * 2 ** 31))
   const down = new Set<Key>()

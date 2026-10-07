@@ -86,6 +86,15 @@ export interface Grid<I extends EntityInit> {
 
 export type Entities = Record<string, EntityInit | Group<EntityInit> | Grid<EntityInit>>
 
+// Pixel art as text: each of rows is a row of pixels, top to bottom, where . shows what's behind and every other character is the color palette gives it.
+export interface Sprite {
+  readonly rows: readonly string[]
+  readonly palette?: { readonly [char: string]: string }
+}
+
+// The sprites a game draws, by the names an entity's image gives them.
+export type Sprites = { readonly [name: string]: Sprite }
+
 // Inference instantiates this with all of Example before it knows T, which would otherwise recurse forever.
 type Shaped<T> = [Example] extends [T] ? Value : ShapedEach<T>
 
@@ -177,6 +186,7 @@ export interface Context {
 export interface Game<E extends Entities = Entities> {
   title?: string
   background?: string
+  sprites?: Sprites
   entities: E
   start?(world: World<E>, ctx: Context): void
   update(world: World<E>, ctx: Context): void

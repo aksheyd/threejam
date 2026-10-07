@@ -15,14 +15,14 @@ A ThreeJam game is a folder with a `game.ts`: entity data plus an `update` funct
    - In a project, install it with `npm install -D threejam`.
    - With no project yet, start one: `npx threejam new my-game`, then run `npm install` in `my-game`. `new` writes a small playable game, its test, a `package.json`, and a `tsconfig.json`.
 
-2. Read the manual in full before writing code: `node_modules/threejam/AGENTS.md` in the project, or `AGENTS.md` at github.com/aksheyd/threejam. It covers entity fields, groups and grids, `oneOf`, images, `ctx` with its input, pointer, and sounds, `view.ts`, drivers, and testing. Start from the game `new` writes, or from the shape of a game in the repo's `games/` folder; Pong is the smallest, and Asteroids uses images, sounds, the mouse, and `spawn`.
+2. Read the manual in full before writing code: `node_modules/threejam/AGENTS.md` in the project, or `AGENTS.md` at github.com/aksheyd/threejam. It covers entity fields, groups and grids, `oneOf`, images and sprites, `ctx` with its input, pointer, and sounds, `view.ts`, drivers, and testing. Start from the game `new` writes, or from the shape of a game in the repo's `games/` folder; Pong is the smallest, and Asteroids uses images, sounds, the mouse, and `spawn`.
 
 ## Working loop
 
 Run these from the project's root, with the game in `<dir>`.
 
 1. Start a game with `npx threejam new <dir>`, which refuses a folder that has anything in it, or edit `<dir>/game.ts`, and `view.ts` for decoration only.
-2. Run `npx threejam check <dir>` until it prints `ok: true`. It type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks that the images entities name are in the folder, then runs `start` and the first tick.
+2. Run `npx threejam check <dir>` until it prints `ok: true`. It type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks the game's sprites and that the images entities name are in the folder or among its sprites, then runs `start` and the first tick.
 3. Prove each behavior with numbers from `npx threejam sim <dir> --ticks N`:
    - `--press Space@60` presses a key on one tick, and `--hold Left@30-90` holds it on a range of ticks. The mouse buttons are the keys `Mouse` and `MouseRight`, and `--pointer 0.5,-0.2@30` moves the pointer on tick 30, where it stays until the next move.
    - `--driver bot.ts` picks the input each tick with code that reads the game, for input that has to react. It also gets the keys it held and the pointer from the tick before, so it can tap a key, and it can return `{ keys, pointer }` to move the pointer.
@@ -46,6 +46,7 @@ Run these from the project's root, with the game in `<dir>`.
 - Declare lists with `listOf(example)`, and values that start as `null` with `maybe(example)`, instead of `[]` and `null`, so what they hold is typed and checked.
 - Give an entity `parts` when it's made of several shapes or text that move and turn together, like a pipe pair or a ship and its flame. A part's `x` and `y` are offsets from its entity, turned by its `angle`, and it hides with it.
 - `image: 'rock.png'` draws a PNG, JPEG, WebP, GIF, or SVG file from the game's folder over a shape's `w` by `h`; a name the folder lacks is an error.
+- To make pixel art without image tools, declare `sprites` in `defineGame`, like `sprites: { ship: { rows: ['..#..', '.###.', '#####'] } } satisfies Sprites`, and draw one with `image: 'ship'`, a name with no dot. In `rows`, `.` shows what's behind and every other character is a color from the sprite's `palette`, which defaults to a white `#` that `color` tints. Rows of different lengths, a character the palette lacks, more than 256 rows or pixels to a row, and sprites with more than 4,194,304 pixels in all, as in 64 sprites of 256 by 256, are errors. Assigning another sprite's name to `image` animates one.
 - `update(world, ctx)` runs 60 times a second with `ctx.dt` of 1/60. Use `ctx.input` (keys, `Mouse`, and `ctx.input.pointer`), `ctx.random()`, `ctx.print()`, `ctx.play('explode')` for a built-in sound or a sound file in the folder, and `ctx.tick`, all read-only; the clock, `Math.random()`, `crypto`, timers, and `async` are errors, even through a function kept at a file's top level or taken from `Date.prototype`, and text and dates format as in `en-US` and UTC whatever the machine's settings. Only `start` and `update` change the world, and in a page game code sees none of the page, as in `sim`.
 - Shuffle with Fisher–Yates on `ctx.random()`, as in `for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(ctx.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]] }`, never with `sort(() => ctx.random() - 0.5)`, whose order differs between browsers, and keep promises out of game code, since their callbacks run after the tick, when the world refuses their writes.
 - Text uses a 5x7 pixel font with capitals, digits, and a little punctuation; `size` is the letter height.

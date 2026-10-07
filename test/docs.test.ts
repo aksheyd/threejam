@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, wr
 import { join, relative } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
-import { isImageFile, isSoundFile } from '../src/assets.ts'
+import { SPRITE_SIDE, SPRITE_TOTAL, isImageFile, isSoundFile } from '../src/assets.ts'
 import { parseGame, simulate } from '../src/engine.ts'
 import type { Code } from '../src/errors.ts'
 import { glyph } from '../src/font.ts'
@@ -124,6 +124,15 @@ test('AGENTS.md names exactly the keys, the built-in sounds, and the image and s
   })
   same(images, taken.images, 'image file extensions')
   same(items(between(MANUAL, 'so a game needs no files, or a ', ' file next to `game.ts`, by its file name')), taken.sounds, 'sound file extensions')
+})
+
+test("AGENTS.md and the skill give the most rows, and pixels to a row, that a sprite may have, and the most pixels a game's sprites may have in all", () => {
+  const skill = readFileSync(join(ROOT, 'skills', 'threejam', 'SKILL.md'), 'utf8')
+  const total = SPRITE_TOTAL.toLocaleString('en-US')
+  for (const [doc, text] of [['AGENTS.md', MANUAL], ['the skill', skill]]) {
+    assert.ok(text.includes(`more than ${SPRITE_SIDE} rows or pixels to a row`), `${doc} should say a sprite has at most ${SPRITE_SIDE} rows, and pixels to a row`)
+    assert.ok(text.includes(`more than ${total} pixels in all`), `${doc} should say a game's sprites have at most ${total} pixels in all`)
+  }
 })
 
 // A Record over a type fails the typecheck once the type gains or loses a member, so these lists change with the code.

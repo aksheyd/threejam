@@ -1,4 +1,4 @@
-import { imageProblem } from './assets.ts'
+import { imageProblem, type Images } from './assets.ts'
 import { isColor } from './colors.ts'
 import { GameError, show } from './errors.ts'
 import { undrawable } from './font.ts'
@@ -83,8 +83,8 @@ interface Base {
   readonly declared: readonly string[]
   readonly initial: Readonly<Fields>
   readonly schemas: ReadonlyMap<string, Schema>
-  // The image and sound files in the game's folder, when the game came from one.
-  readonly files: readonly string[] | undefined
+  // The files in the game's folder, when the game came from one, and the game's sprites, which image may name.
+  readonly images: Images
   readonly gate: Gate
 }
 
@@ -125,11 +125,11 @@ export interface Store<E extends Entities> {
   edit<T>(change: () => T): T
 }
 
-export function createStore<E extends Entities>(entities: E, files: readonly string[] | undefined): Store<E> {
+export function createStore<E extends Entities>(entities: E, images: Images): Store<E> {
   const all: Stored[] = []
   const gate: Gate = { open: false }
   const add = (name: string, init: unknown): Stored => {
-    const entity = createEntity(name, all.length, init, { owner: undefined, files, gate })
+    const entity = createEntity(name, all.length, init, { owner: undefined, images, gate })
     all.push(entity, ...(entity.parts ?? []))
     return entity
   }
@@ -227,7 +227,7 @@ export function spawn<T extends Common>(group: readonly T[], fields: Spawn<T> = 
 // The fields spawn can set on a member: any of its own but its name and parts.
 export type Spawn<T> = { -readonly [F in keyof T as F extends 'name' | 'parts' ? never : F]?: T[F] }
 
-function createEntity(name: string, order: number, init: unknown, { owner, files, gate }: { owner: Base | undefined; files: readonly string[] | undefined; gate: Gate }): Stored {
+function createEntity(name: string, order: number, init: unknown, { owner, images, gate }: { owner: Base | undefined; images: Images; gate: Gate }): Stored {
   const where = `entity "${name}"`
   if (!isPlain(init)) throw new GameError(`${where} must be an object of fields, got ${show(init)}`)
   if ('name' in init) throw new GameError(`${where}: name is set by the engine, so it can't be declared`)
@@ -239,7 +239,7 @@ function createEntity(name: string, order: number, init: unknown, { owner, files
   const custom: Fields = {}
   const initial: Fields = {}
   const schemas = new Map<string, Schema>()
-  const base: Base = { name, kind, order, engine: { ...DEFAULTS }, custom, declared: fields.map(([field]) => field), initial, schemas, files, gate }
+  const base: Base = { name, kind, order, engine: { ...DEFAULTS }, custom, declared: fields.map(([field]) => field), initial, schemas, images, gate }
   for (const [field, raw] of fields) {
     if (raw === undefined) throw new GameError(`${where}: ${field} is undefined; give it a starting value`)
     const schema = declaredSchema(where, field, raw)
@@ -259,7 +259,7 @@ function createEntity(name: string, order: number, init: unknown, { owner, files
 
 function createParts(entity: Base, init: unknown): Parts {
   const part = (suffix: string, index: number, fields: unknown) =>
-    createEntity(`${entity.name}.parts${suffix}`, entity.order + 1 + index, fields, { owner: entity, files: entity.files, gate: entity.gate })
+    createEntity(`${entity.name}.parts${suffix}`, entity.order + 1 + index, fields, { owner: entity, images: entity.images, gate: entity.gate })
   if (Array.isArray(init)) {
     const all = init.map((fields: unknown, i) => part(`[${i}]`, i, fields))
     return { all, live: Object.freeze(all.map((p) => p.live)), frozen: Object.freeze(all.map((p) => p.frozen)) }
@@ -354,8 +354,8 @@ function setEngine(entity: Base, field: EngineField, value: unknown): void {
       fields.color = value
       return
     case 'image': {
-      if (typeof value !== 'string') throw new GameError(`${where}: image must be the name of an image file, like "rock.png", or "" for none, got ${show(value)}`)
-      const problem = value === '' ? undefined : imageProblem(value, entity.files)
+      if (typeof value !== 'string') throw new GameError(`${where}: image must be the name of an image file, like "rock.png", or of a sprite, like "rock", or "" for none, got ${show(value)}`)
+      const problem = value === '' ? undefined : imageProblem(value, entity.images)
       if (problem !== undefined) throw new GameError(`${where}: ${problem}`)
       fields.image = value
       return

@@ -14,7 +14,7 @@ ThreeJam starts Chrome with no DevTools port, talks to `shot`'s headless Chrome 
 
 ```bash
 npx threejam new games/catch         # a small playable game and its test, in a new folder
-npx threejam check games/pong        # types and imports of game.ts and view.ts, entities and their images, start, and the first tick
+npx threejam check games/pong        # types and imports of game.ts and view.ts, entities, sprites, and images, start, and the first tick
 npx threejam sim games/pong --ticks 120 --press Space@1 --hold W@1-60 --only ball --fields x,y
 npx threejam sim games/pong --ticks 3600 --press Space@1 --until 'match.left=1' --seeds 0-99   # how often and how soon, over 100 seeds
 npx threejam shot games/pong --at 1,120,600 --press Space@1 -o frame.png
@@ -59,7 +59,11 @@ The 800x600 window shows x from -2 to 2 and y from -1.5 to 1.5, with (0, 0) at t
 ## game.ts
 
 ```ts
-import { KEYS, defineGame, grid, group, listOf, maybe, oneOf, spawn, type Context, type Entities, type World } from 'threejam'
+import { KEYS, defineGame, grid, group, listOf, maybe, oneOf, spawn, type Context, type Entities, type Sprites, type World } from 'threejam'
+
+const sprites = {
+  heart: { rows: ['.#.#.', '#####', '#####', '.###.', '..#..'] },
+} satisfies Sprites
 
 const entities = {
   paddle: {
@@ -70,6 +74,7 @@ const entities = {
   bricks: grid(4, 10, ({ row, col }) => ({ x: col * 0.4 - 1.8, y: 1.2 - row * 0.15, w: 0.36, h: 0.1, hits: 0 })),
   sparks: group(8, () => ({ x: 0, y: 0, w: 0.02, h: 0.02, visible: false, vx: 0 })),
   logo: { x: 1.6, y: -1.2, w: 0.4, h: 0.4, image: 'logo.png', angle: 0 },
+  life: { x: -1.8, y: 1.4, w: 0.15, h: 0.15, image: 'heart', color: 'red' },
   score: { x: 0, y: 1.4, text: '0' },
   match: { state: oneOf(['ready', 'play', 'over']), points: 0, broken: listOf([0, 0]), last: maybe({ row: 0, col: 0 }) },
 } satisfies Entities
@@ -83,6 +88,7 @@ function move(paddle: Breakout['paddle'], ctx: Context): void {
 export default defineGame({
   title: 'Example',
   background: '#08080d',
+  sprites,
   entities,
   start(world, ctx) {},
   update(world, ctx) {
@@ -102,6 +108,7 @@ export default defineGame({
 - Every entity has `x` and `y` (default 0), `angle` (default 0), `visible` (default true), and a read-only `name`. Shapes have `w` and `h` (default 1), `shape` (`"square"`, `"circle"`, or `"triangle"`), `color` (a CSS color name, `#rgb`, or `#rrggbb`; default white), `opacity` (default 1), and `image` (default `""`, none). Text has `text`, `size` (the letter height, default 0.14), `align` (`"center"`, `"left"`, or `"right"`), `color`, and `opacity`.
 - `angle` turns a shape about its center and text about its `x` and `y`, counterclockwise in radians, so a triangle, which points up, points left at `Math.PI / 2`. Level text is snapped to screen pixels to keep its letters sharp; turned text can't be, so it looks rougher.
 - `image` names an image file next to `game.ts`, like `'logo.png'`: a PNG, JPEG, WebP, GIF, or SVG, named exactly as the file is, including case. The image is stretched over the shape's `w` by `h` and cut to its shape, so a square shows all of it; `color` tints it, with white leaving it as it is, and `opacity` fades it. Drawn larger than its file, a raster image keeps square pixels, which suits pixel art, while an SVG is drawn from a raster 1024 pixels on its longer side, and a GIF shows its first frame. An image the folder doesn't have is an error where it's declared or assigned, and `""` shows none. The page loads every image in the folder before it draws its first frame.
+- `sprites` in `defineGame` declares pixel art as text, so a game can have art without image files or the tools to make them. Each sprite has a name with no dot and `rows`, a string of pixels for each row from the top, each as long as the first, where `.` shows what's behind and every other character is the color the sprite's `palette` gives it. The palette defaults to `{ '#': 'white' }`, so a sprite of `#` and `.` takes its color from `color`, as text does, and a sprite with colors of its own names them, like `coin: { rows: ['.oo.', 'oyyo', 'oyyo', '.oo.'], palette: { o: 'orange', y: 'yellow' } }`, each key one character from `!` to `~` and each color one that `color` takes. `image` names a sprite as it names a file, like `image: 'heart'`, since a name with no dot is a sprite's, and the page draws it as it would draw a PNG of its pixels, so `shot` draws it the same on every run. To animate a sprite, assign another one's name to `image`. A sprite whose rows differ in length, that has a character its palette lacks, or that has fewer than 1 or more than 256 rows or pixels to a row is an error when the game starts, and so are sprites with more than 4,194,304 pixels in all, as many as 64 sprites of 256 by 256 have, so that a page, a phone's too, makes them in a moment. An `image` that names a sprite the game lacks is an error where it's declared or assigned. Declare `sprites` with `satisfies Sprites`, so `check` catches a misspelled field as a type error.
 - Text uses a 5x7 pixel font with A-Z, 0-9, space, and `. , : ; ! ? - + / ( ) % ' "`; lowercase draws as capitals, and any other character is an error. Each character is `size * 6 / 7` wide, and `y` is the middle of the letters.
 - Other fields are yours, but give each one a starting value in `entities`: assigning a field that wasn't declared is an error. Values can be numbers, strings, booleans, null, arrays, and plain objects, and a field keeps the kind it started with, so a number stays a number and an array stays an array. A field that starts as `null` or `[]` can hold anything, so declare it with `maybe` or `listOf` instead, and its type and contents are checked.
 - `group(count, (index) => fields)` declares a list of entities and `grid(rows, cols, ({ row, col }) => fields)` a grid; `world.sparks[3]` and `world.bricks[row][col]` are typed, and members are named `sparks[3]` and `bricks[2][5]`. Neither can grow or shrink during a run, so park unused members with `visible = false`.
@@ -111,7 +118,7 @@ export default defineGame({
 - `maybe(example)` declares a field that starts as `null` and can later hold a value shaped like the example, typed as that value or `null`.
 - `parts` gives an entity, including a group or grid member, shapes and text that move and turn with it: an object of named parts, like `parts: { grip: { y: -0.2, w: 0.14, h: 0.06 } }`, or an array of them. A part's `x` and `y` are offsets from its entity, turned by its entity's `angle`, and its own `angle` adds to its entity's. It's hidden whenever its entity is, and it keeps its own `opacity`. Parts draw right after their entity, in the order they're declared. An entity with only data fields and parts is a container that isn't drawn itself, and turning a container turns everything in it, like a ship made of several shapes.
 - Parts are read and written like entities, with the same checks: `world.pipes[0].parts.top.h = 1.2`, or `world.bunkers[2].parts[13].visible = false` for an array. Each part must be a shape or text and can have fields of its own, and its name is its path, like `pipes[0].parts.top`. `parts` can't be replaced or resized, and parts can't have parts. Game code that needs a part's place on the screen adds its entity's, `pipe.x + pipe.parts.top.x`, after turning the offset by the entity's `angle` if it has one.
-- Assignments are checked where they happen, and the error names the file and line: undeclared fields, `NaN` and `Infinity` anywhere, including inside arrays (`list.push(NaN)`), sizes of 0 or less, unknown colors, images the folder lacks, characters the font lacks, values outside `oneOf`, items and values that don't fit a `listOf` or `maybe` example (`cells.push([1])`), and missing entities and parts like `world.bal`.
+- Assignments are checked where they happen, and the error names the file and line: undeclared fields, `NaN` and `Infinity` anywhere, including inside arrays (`list.push(NaN)`), sizes of 0 or less, unknown colors, images the folder lacks, sprites the game lacks, characters the font lacks, values outside `oneOf`, items and values that don't fit a `listOf` or `maybe` example (`cells.push([1])`), and missing entities and parts like `world.bal`.
 - Declare `entities` with `satisfies Entities` and type helper functions with `World<typeof entities>`, so `check` catches typos before anything runs.
 - Keep every value that changes during play on an entity. Variables at the top of `game.ts` survive from one run to the next when tests run the game repeatedly in one process.
 - Reading an array field goes through the engine's checks, so in a loop over a big array, like a board of rows, read it into a local once per tick.
@@ -180,7 +187,7 @@ export default follow
 Tests use the library, as in `games/*/game.test.ts` and the `game.test.ts` that `new` writes, and `node --test` runs them:
 
 - `simulate(game, { ticks, press, hold, pointer, drive, set, seed, every, until, only })` returns `{ snapshots, logs, sounds, world, tick, reached }`: `world` is the final state, typed and read-only, `sounds` lists `{ tick, name, volume, pitch }` for every `ctx.play`, `only`, like `--only`, keeps only the entities it names in each snapshot as it's taken, and `pick(entities, 'ball,cells')` filters a snapshot's entities. `until` is a check like `({ world, tick }) => world.match.state === 'over'` that runs after each tick and stops the run after the first one it returns true; `tick` is the last tick that ran, and `reached` says whether `until` returned true.
-- A test that imports a game has no folder to look in, so `simulate` only checks that image and sound names are files of the right type; `sim` and `check` also check that the folder has them, and so does a test that passes the folder's file names, like `assets: ['rock.svg']`.
+- A test that imports a game has no folder to look in, so `simulate` only checks that image and sound names are files of the right type; `sim` and `check` also check that the folder has them, and so does a test that passes the folder's file names, like `assets: ['rock.svg']`. A sprite comes with its game, so its name is checked everywhere.
 - Build a variant of a game by spreading it: `simulate({ ...game, entities: { ...game.entities, ball: { ...game.entities.ball, vx: 3 } } }, { ticks: 60 })`. A grid's cells are in `game.entities.bricks.rows` and a group's in `.members`, so `grid(1, 1, () => game.entities.bricks.rows[7][2])` keeps one brick.
 - Pass a bot as `drive`, or step a `Session` yourself: `const s = new Session(game, { seed: 0 }); s.start(); s.step(['Space'])`, or `s.step({ keys: ['Mouse'], pointer: { x: 1, y: 0 } })`, then read `s.world` (typed and read-only), `s.state()`, `s.sounds`, or `s.keysRead`, the keys game code has asked `ctx.input` about so far, `Mouse` and `MouseRight` among them; the rest are the keys a touch screen shows.
 
