@@ -173,6 +173,7 @@ export function html({ title, config, script }: { title: string; config: Config;
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title.replace(/[<&]/g, '')}</title>
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{position:absolute;inset:0;margin:auto;display:block;touch-action:none}</style>
 </head>

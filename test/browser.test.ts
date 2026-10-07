@@ -548,6 +548,28 @@ test('exported Asteroids draws its SVG rocks and plays sounds with nothing but t
   }
 })
 
+test("an exported page lays out at a phone's own width, so the game spans the width of a phone held upright", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'threejam-export-'))
+  try {
+    const file = join(dir, 'pong.html')
+    await exportGame({ dir: 'games/pong', out: file })
+    const tab = await newTab(t)
+    // A phone lays a page out 980 pixels wide unless the page says to use the phone's own width.
+    await tab.setViewport({ width: 393, height: 851, deviceScaleFactor: 2.75, isMobile: true, hasTouch: true })
+    await openPage(tab, pathToFileURL(file).href)
+    await tab.waitForFunction('window.engine !== undefined')
+    const layout = await tab.evaluate(() => {
+      const canvas = document.querySelector('canvas')
+      if (!canvas) throw new Error('the page has no canvas')
+      const { left, right, top, bottom } = canvas.getBoundingClientRect()
+      return { width: innerWidth, left, right, onScreen: top >= 0 && bottom <= innerHeight }
+    })
+    assert.deepEqual(layout, { width: 393, left: 0, right: 393, onScreen: true })
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 // Each tick, the keys held, in KEYS's order, and where the pointer is.
 const INPUT = [
   "import { KEYS, defineGame, listOf } from 'threejam'",

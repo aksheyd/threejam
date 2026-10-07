@@ -11,6 +11,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - `AGENTS.md` and the commands guide name `run --serve-only`, which serves the page without opening a window, and `--out`, the long form of `-o`.
 - The example games play in the browser at https://aksheyd.github.io/threejam/, and the README and the guides link to them.
 - On Linux, when Chrome exits as it starts because `TMPDIR` is too long for the socket it makes there, `shot` and `run` say to set a shorter one, like `/tmp`, and remove the empty folder Chrome made there for the socket.
+- Exported games and `run`'s page lay out at a phone's own width, so a message the page shows, like why the game stopped, is readable, and the game draws only the pixels the screen has: a sixth as many on a phone held upright. Before, a phone laid the page out 980 pixels wide and shrank it to fit.
 - `run`'s page and exported games answer `window.advanceTime(ms)` and `window.render_game_to_text()`, the hooks OpenAI's `develop-web-game` skill has a game add for its Playwright client, so that client can play and read a ThreeJam game with nothing added to it. `advanceTime` takes over the page's clock, starting the run over from tick 0 if the page was playing on its own, and steps the ticks its milliseconds cover, 60 a second; `render_game_to_text()` gives the tick and the entities as `sim --exact --format json` prints them.
 
 ### Fixed
