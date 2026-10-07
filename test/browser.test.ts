@@ -27,7 +27,7 @@ mkdirSync(TMP, { recursive: true })
 const made: string[] = []
 // The one Chrome the tests here share. The first page test starts it, since when a name pattern matches no test here, Node runs after without waiting for before.
 let shared: Promise<TestChrome> | undefined
-// shot's stuck pages, which use up their whole time limits, 10 s, so they run beside the other tests here rather than in shot.test.ts, which the runner starts last. They start once the first page test ends, so they don't compete with its start of the Chrome.
+// shot's stuck pages, which use up their whole time limits, 10 s or more, so they run beside the other tests here rather than in shot.test.ts, which the runner starts last. They start once the first page test ends, so they don't compete with its start of the Chrome.
 let stuck: Promise<string[]> | undefined
 after(async () => {
   await stuck?.catch(() => {})
@@ -1659,11 +1659,15 @@ test("a run page whose game or view.ts fails as it loads says why on the page, i
 
 // How long shot took with each stuck page, and how it ended the page's Chrome.
 async function stuckPages(): Promise<string[]> {
-  const stuckAt = async (view: string, timeout: number, when: string) => {
+  const game = (view: string) => {
     const dir = mkdtempSync(join(TMP, 'stuck-'))
     made.push(dir)
     writeFileSync(join(dir, 'game.ts'), "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n")
     writeFileSync(join(dir, 'view.ts'), view)
+    return dir
+  }
+  const stuckAt = async (view: string, timeout: number, when: string) => {
+    const dir = game(view)
     // The Chrome that shot starts, as Node's child_process channel shows it.
     const spawned: ChildProcess[] = []
     const spot = (message: unknown) => {
@@ -1692,8 +1696,15 @@ async function stuckPages(): Promise<string[]> {
   }
   // The page never finishes loading, so the limit runs out as it loads however fast the machine is.
   const loading = await stuckAt('for (;;) {}\n', 2, 'as it loaded')
-  // Loading and drawing tick 1 take well under this even on a slow machine, so the limit runs out at tick 2.
-  return [loading, await stuckAt("import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick === 2) for (;;) {}\n}\n", 8, 'drawing tick 2')]
+  // The limit counts from the load, so it must outlast loading and tick 1 for the page to get stuck at tick 2, and a slow machine can take more than 8 s for those. It's half as much again as a whole shot of tick 1 takes here, which starts and closes Chrome as well, and at least 8 s.
+  const atTick2 = "import type { ViewFrame } from 'threejam'\n\nexport function draw({ tick }: ViewFrame): void {\n  if (tick === 2) for (;;) {}\n}\n"
+  const started = Date.now()
+  const dir = game(atTick2)
+  // Tick 1 never gets stuck, so this limit only keeps a broken page from hanging the test.
+  await shoot({ dir, at: [1], out: join(dir, 'frame.png'), timeout: 120 })
+  const whole = Date.now() - started
+  const limit = Math.max(8, Math.ceil((whole * 1.5) / 1000))
+  return [loading, `a whole shot of tick 1 took ${whole} ms, so the page stuck at tick 2 gets a time limit of ${limit} s`, await stuckAt(atTick2, limit, 'drawing tick 2')]
 }
 
 // The stuck pages run beside the page tests before this one, so its own duration leaves their time out, and it reports it instead.
