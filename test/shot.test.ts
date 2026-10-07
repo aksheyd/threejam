@@ -16,9 +16,10 @@ after(() => made.forEach((dir) => rmSync(dir, { recursive: true, force: true }))
 test('shot repeats a frame byte for byte on one machine, images and text included, and from a view that draws the game in 3D with lights and shadows', { skip: !chrome && 'needs Chrome' }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'threejam-shot-'))
   try {
+    // A slow macOS runner took about 26 s for two shots of Racer's lit, shadowed page at once, near the 30 s shot gives a page by default; this test is about frames that repeat, not how fast they draw.
     for (const [game, tick] of [['asteroids', 120], ['racer', 600]] as const) {
       const driver = join('games', game, 'autopilot.ts')
-      const shots = await Promise.all(['one', 'two'].map((name) => shoot({ dir: `games/${game}`, at: [tick], driver, out: join(dir, game, name, 'frame.png') })))
+      const shots = await Promise.all(['one', 'two'].map((name) => shoot({ dir: `games/${game}`, at: [tick], driver, out: join(dir, game, name, 'frame.png'), timeout: 90 })))
       const [first, second] = shots.map(([file]) => readFileSync(file))
       assert.ok(first.equals(second), `two shots of one run of ${game} differ`)
     }
