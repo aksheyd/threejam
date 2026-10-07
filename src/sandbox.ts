@@ -1,5 +1,5 @@
 // The side of the sandbox that runs inside the realm each game gets: it fixes the realm's globals, then loads the game and its driver with the guard up and runs one simulation.
-import { parseGame, pick, simulate, untilCondition } from './engine.ts'
+import { parseGame, simulate, untilCondition } from './engine.ts'
 import { RunError, UsageError, type Phase } from './errors.ts'
 import { loading, withStandIns } from './guard.ts'
 import { defineDriver, driverFor, isDrive, type Drive, type Game, type LogEntry, type Snapshot, type SoundEntry } from './types.ts'
@@ -94,10 +94,10 @@ function simulated(modules: Modules, request: Request): Omit<Extract<Reply, { ok
   const game = tracked(parseGame(defaultExport(loading(modules.game))))
   const drive = modules.driver === undefined ? undefined : trackedDriver(driverIn(loading(modules.driver), request.driver))
   const until = request.until === undefined ? undefined : untilCondition(request.until)
-  const { ticks, press, hold, pointer, set, seed, every, clip, assets } = request
-  const run = simulate(game, { ticks, press, hold, pointer, set, seed, every, clip, assets, drive, until })
+  const { ticks, press, hold, pointer, set, seed, every, clip, assets, only } = request
+  const run = simulate(game, { ticks, press, hold, pointer, set, seed, every, clip, assets, drive, until, only })
   stage = 'end'
-  const snapshots = run.snapshots.map((snapshot) => ({ tick: snapshot.tick, entities: pick(snapshot.entities, request.only) }))
+  const { snapshots } = run
   return { snapshots, logs: run.logs, sounds: run.sounds, tick: run.tick, reached: run.reached }
 }
 

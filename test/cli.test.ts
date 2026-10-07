@@ -321,6 +321,12 @@ test('sim --until prints the tick the condition first held and suggests a shot o
   assert.equal(cta.commands[0].command, 'threejam shot games/pong --at 131 --press Space@1')
 })
 
+test('with --every, sim keeps only the entities --only names in each snapshot as it takes it, so a wrong --only fails at tick 0, before a game error at tick 2', () => {
+  const dir = folder({ 'game.ts': game({ update: "world.ball.x = ctx.tick\n    if (ctx.tick === 2) throw new Error('boom')" }) })
+  const { code, out } = threejam('sim', dir, '--ticks', '5', '--every', '1', '--only', 'nope', '--format', 'json')
+  assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'USAGE', message: '--only "nope" matches no entity' } })
+})
+
 test('check names an image the folder lacks, and sim takes --pointer, prints the sounds played, and suggests a shot with the same input', () => {
   const clicks = "if (ctx.input.pressed('Mouse')) { world.ball.x = ctx.input.pointer.x; ctx.play('blip') }"
   const missing = threejam('check', folder({ 'game.ts': game({ fields: "x: 0, y: 0, w: 0.1, h: 0.1, image: 'rok.png'", update: clicks }), 'rock.png': '' }))

@@ -18,6 +18,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 
 ### Fixed
 
+- `sim --every` keeps only the entities `--only` names in each snapshot, as it takes it, so a long run holds no more than it prints. Before, it kept every entity of every tick until the run ended, so a 10-minute run of Snake with `--every 1 --only game` grew its sandbox to 2 GB to print 31 MB. A wrong `--only` with `--every` now fails at tick 0. `simulate` takes `only` too.
 - `run` reloads the page only when a file is saved. Before, it could also reload once by itself a moment after it started, restarting the game a player had just begun.
 - `run` keeps serving after a save that doesn't build. Before, reloading the page then stopped `run` with an `ENOENT` error and left its folder in the temporary folder. `run` and `shot` now keep the page in memory, so they leave no folder of it there, even when they're killed.
 - `run` and `shot` now refuse a game that imports a CSS file, as `check` and `export` already did. Before, they bundled it into a file the page never loaded.

@@ -147,6 +147,8 @@ export interface SimOptions<E extends Entities = Entities> extends SessionOption
   // Stops the run after the first tick this returns true, so ticks becomes the most it runs.
   readonly until?: (frame: { readonly world: ReadonlyDeep<World<E>>; readonly tick: number }) => boolean
   readonly every?: number
+  // Each snapshot keeps only the entities this picks, as it's taken, so a long run with every holds no more than it prints.
+  readonly only?: string
   readonly clip?: boolean
 }
 
@@ -173,7 +175,7 @@ export function simulate<E extends Entities>(game: Game<E>, options: SimOptions<
   const pointerAt = pointerMoves({ pointer, ticks, clip })
   const session = new Session(game, options)
   const snapshots: Snapshot[] = []
-  const take = () => snapshots.push({ tick: session.tick, entities: session.state() })
+  const take = () => snapshots.push({ tick: session.tick, entities: pick(session.state(), options.only) })
   const reached = throughout(() => {
     // A defineDriver factory is driver code too.
     const driver = drive === undefined ? undefined : guarded(() => driverFor(drive))
