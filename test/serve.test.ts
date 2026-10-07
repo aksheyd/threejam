@@ -32,9 +32,9 @@ const GAME = "import { defineGame } from 'threejam'\n\nexport default defineGame
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwHwyBNBgAAEnICff5q7YNAAAAAElFTkSuQmCC', 'base64')
 
 // Fails after 10 s, naming what it waited for, so a page that never gets there fails the test instead of hanging it.
-async function until(what: string, check: () => boolean): Promise<void> {
+async function until(what: string | (() => string), check: () => boolean): Promise<void> {
   for (const deadline = Date.now() + 10_000; !check(); await new Promise((wait) => setTimeout(wait, 20))) {
-    if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}`)
+    if (Date.now() > deadline) throw new Error(`gave up waiting for ${typeof what === 'string' ? what : what()}`)
   }
 }
 
@@ -297,12 +297,17 @@ test('run keeps its page in memory, so even killed while it serves, it leaves no
   const temp = mkdtempSync(join(TMP, 'temp-'))
   made.push(temp)
   const run = spawnCli(['run', folder({ 'game.ts': GAME }), '--serve-only'], t.signal, ROOT, { ...process.env, TMPDIR: temp, TEMP: temp, TMP: temp })
-  let out = ''
+  let [out, errors] = ['', '']
   run.stdout.on('data', (chunk) => (out += chunk))
-  const exited = new Promise((done) => run.once('close', done))
-  await until('run to serve the page', () => out.includes('\n'))
+  run.stderr.on('data', (chunk) => (errors += chunk))
+  // run's own exit, not the end of its output: esbuild's service shares run's stderr, and once watching it outlives a run killed while one of its pings is unanswered, until a file it watches changes.
+  let ended: string | undefined
+  run.once('exit', (code, signal) => (ended = signal ?? `exit code ${code}`))
+  const saw = () => `stdout ${JSON.stringify(out)}, stderr ${JSON.stringify(errors)}, ${ended === undefined ? 'still running' : `ended by ${ended}`}`
+  await until(() => `run to serve the page: ${saw()}`, () => out.includes('\n') || ended !== undefined)
+  assert.equal(ended, undefined, `run ended before it served the page: ${saw()}`)
   run.kill('SIGKILL')
-  await exited
+  await until(() => `run to end once killed: ${saw()}`, () => ended !== undefined)
   assert.deepEqual(readdirSync(temp), [])
 })
 
