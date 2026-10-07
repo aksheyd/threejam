@@ -154,10 +154,9 @@ test('each row of traffic is a gap apart, more after a row of two, keeps free th
 
 test('a car held anywhere across the road, from one edge to the other, runs into the traffic', () => {
   // The racer and the traffic are 0.64 wide together, so they touch closer than 0.32, more than the 0.3 from a line between lanes to the middle of either.
-  for (let seed = 0; seed < 3; seed++) {
-    for (let x = -75; x <= 75; x++) {
-      const { reached } = simulate(racer, { ticks: 3600, seed, set: ['race.state=play', `car.x=${x / 100}`], until: ({ world }) => world.race.crashes > 0 })
-      assert.ok(reached, `seed ${seed}: a car held at x ${x / 100} never crashed`)
-    }
+  // Widths too narrow for that leave the same places clear of the traffic on every seed, so one seed finds them.
+  for (let x = -75; x <= 75; x++) {
+    const { reached } = simulate(racer, { ticks: 3600, set: ['race.state=play', `car.x=${x / 100}`], until: ({ world }) => world.race.crashes > 0 })
+    assert.ok(reached, `a car held at x ${x / 100} never crashed`)
   }
 })
