@@ -1049,7 +1049,11 @@ test("run serves the game at its seed, says on the page why a save doesn't build
   writeFileSync(join(dir, 'game.ts'), version(2).replace('update() {}', 'update() {'))
   await tab.waitForSelector('pre')
   await tab.keyboard.press('Escape')
-  await until('Esc on the page that says why to end the session', () => run.exitCode !== null)
+  // Giving up says what run printed and what the page shows, which tells an Esc that never reached run from a run slow to stop.
+  await until('Esc on the page that says why to end the session', () => run.exitCode !== null).catch(async (error: Error) => {
+    const shown = await tab.$$eval('pre', (boxes) => boxes.map((box) => box.textContent)).catch(() => 'nothing, since the tab is gone')
+    throw new Error(`${error.message}; run printed ${JSON.stringify(out)}, and the page shows ${JSON.stringify(shown)}`)
+  })
   // The page's notice of why comes first, then the one Esc adds.
   const ended = await tab.$$eval('pre', (boxes) => boxes.at(-1)?.textContent)
   assert.deepEqual({ code: await exited, out, ended }, { code: 0, out: `Playing ${shown} with seed 5 at ${url}\nStopped.\n`, ended: 'Session ended.' })
