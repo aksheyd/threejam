@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { sep } from 'node:path'
+import { ChildProcess, spawn } from 'node:child_process'
+import { subscribe, unsubscribe } from 'node:diagnostics_channel'
+import { join, sep } from 'node:path'
 import { test } from 'node:test'
 import { UsageError } from '../src/errors.ts'
-import { SEEDS_AT_ONCE, Slots, poolSize, usableMemory } from '../src/load.ts'
+import { SEEDS_AT_ONCE, Slots, poolSize, runGame, runSeeds, usableMemory } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { MAX_SEEDS, parseSeeds, summarize, type SeedRow } from '../src/seeds.ts'
 import { CLI, mcp } from './children.ts'
@@ -172,13 +173,38 @@ test("a game that breaks what the sandbox sends its run back with fails that see
   assert.deepEqual(all.json.seeds.map((row: SeedRow) => row.message), [null, null, lost, null, lost, null, lost, null])
 })
 
-test('a seed whose game keeps more than the 1 GB a sandbox may grow to gets the GAME_ERROR that one run gives, since each seed has the same heap limit', async (t) => {
-  // 8 MB more every tick: 1.6 GB by tick 200, which V8's own limit would allow on a machine with 16 GB.
-  const leak = game({ update: 'world.ball.x = ctx.tick\n    kept.push(new Array(1_000_000).fill(ctx.tick + 0.5))' })
-  const dir = folder({ 'game.ts': leak.replace("from 'threejam'\n", "from 'threejam'\n\nconst kept: number[][] = []\n") })
-  const all = await threejam(t.signal, 'sim', dir, '--ticks', '200', '--seeds', '3')
-  const message = 'the game ran out of memory; look for a list or a loop that keeps growing'
-  assert.deepEqual(all.json.seeds, [{ seed: 3, tick: null, reached: null, code: 'GAME_ERROR', message }])
+test("each seed's sandbox starts with the same command and flags as one run's, so a seed gets the 1 GB heap limit a run has, and a seed whose sandbox dies fails as one run whose sandbox dies does", async () => {
+  const dir = join(ROOT, folder({ 'game.ts': game({ update: 'world.ball.x += 1' }) }))
+  const one = () => runGame(dir, { ticks: 1 })
+  const seeds = (list: number[]) => () => runSeeds(dir, { ticks: 1 }, list, (run) => run)
+  // Node publishes every process it starts, esbuild's service among them, before it has spawned it; a run's sandbox is the one that runs this Node.
+  const sandboxes = async (run: () => Promise<unknown>, { kill = false } = {}): Promise<{ args: string[][]; failure: unknown }> => {
+    const started: ChildProcess[] = []
+    const ours = (child: ChildProcess) => child.spawnargs.includes(process.execPath)
+    const spot = (message: unknown) => {
+      if (typeof message !== 'object' || message === null || !('process' in message) || !(message.process instanceof ChildProcess)) return
+      const child = message.process
+      started.push(child)
+      if (kill) child.once('spawn', () => void (ours(child) && child.kill('SIGKILL')))
+    }
+    subscribe('child_process', spot)
+    try {
+      const failure = await run().then(() => undefined, (error: unknown) => error)
+      return { args: started.filter(ours).map((child) => child.spawnargs), failure }
+    } finally {
+      unsubscribe('child_process', spot)
+    }
+  }
+  const single = await sandboxes(one)
+  assert.ok(single.args[0]?.includes('--max-old-space-size=1024'), `one run's sandbox started as ${single.args[0]?.join(' ')}`)
+  assert.deepEqual([single.failure, await sandboxes(seeds([0, 1]))], [undefined, { args: [single.args[0], single.args[0]], failure: undefined }])
+  // A sandbox that runs out of memory ends without a reply, as one killed as it starts does, and a seed must read that end as one run does for its row to get one run's GAME_ERROR.
+  const killed = async (run: () => Promise<unknown>) => {
+    const { failure } = await sandboxes(run, { kill: true })
+    assert.ok(failure instanceof Error, `a run whose sandbox was killed ended with ${String(failure)}`)
+    return [failure.name, failure.message]
+  }
+  assert.deepEqual(await killed(seeds([0])), await killed(one))
 })
 
 test('flags that are wrong for every seed fail the whole call with USAGE once a seed finds them, ending the seeds still looping instead of waiting out their time limits', async (t) => {
