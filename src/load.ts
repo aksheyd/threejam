@@ -1,8 +1,8 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { accessSync, constants, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { SourceMap } from 'node:module'
 import { constants as osConstants, tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getSystemErrorMap } from 'node:util'
 import * as esbuild from 'esbuild'
@@ -210,15 +210,37 @@ const TIED = '(read -r _ <&3; kill -KILL 0) </dev/null >/dev/null 2>&1 &\nunset 
 // bash, macOS's sh, takes exported functions, options, and a timeout for read from its environment, so a function named kill or read, SHELLOPTS=noexec, or TMOUT could change what the watcher does, or keep the child from running at all; the child needs none of them.
 const BASH_IMPORTS = /^(BASH_FUNC_.*|SHELLOPTS|BASHOPTS|TMOUT)$/
 
-// A child that ends when this process does, even by SIGKILL, which on macOS and Linux would otherwise leave it running. Windows does this already: libuv puts every child in a job object that ends with this process. A system with no /bin/sh still starts the child, untied.
-function spawnTied(command: string, args: readonly string[], options: { readonly env?: NodeJS.ProcessEnv; readonly cwd?: string }): ChildProcessWithoutNullStreams {
-  if (process.platform === 'win32' || !existsSync(SHELL)) return spawn(command, args, { ...options, stdio: 'pipe', windowsHide: true })
+type Tie = { readonly env?: NodeJS.ProcessEnv; readonly cwd?: string }
+
+// A child that ends when this process does, even by SIGKILL, which on macOS and Linux would otherwise leave it running, along with every process it starts that stays in its process group. Windows does this already: libuv puts every child in a job object that ends with this process. A system with no /bin/sh still starts the child, untied, and so does a command that names no file the child can run, so that it fails as a spawn does rather than as the shell's exec.
+export function spawnTied(command: string, args: readonly string[], options: Tie): ChildProcessWithoutNullStreams
+// A tied child whose standard streams go nowhere.
+export function spawnTied(command: string, args: readonly string[], options: Tie & { readonly stdio: 'ignore' }): ChildProcess
+export function spawnTied(command: string, args: readonly string[], { stdio = 'pipe', ...options }: Tie & { readonly stdio?: 'pipe' | 'ignore' }): ChildProcess {
+  const file = process.platform === 'win32' || !existsSync(SHELL) ? undefined : located(command, options.env ?? process.env, options.cwd)
+  if (file === undefined) return spawn(command, args, { ...options, stdio, windowsHide: true })
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter(([name]) => !BASH_IMPORTS.test(name)))
-  const tied = spawn(SHELL, ['-c', TIED, 'sh', command, ...args], { ...options, env, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], detached: true })
-  // Once the child has exited, closing the watcher's pipe ends the watcher, alone in the group by then.
+  const tied = spawn(SHELL, ['-c', TIED, 'sh', file, ...args], { ...options, env, stdio: [stdio, stdio, stdio, 'pipe'], detached: true })
+  // Once the child has exited, closing the watcher's pipe ends the watcher, and anything still left in the group with it.
   const release = () => void tied.stdio[3]?.destroy()
   tied.once('exit', release).once('error', release)
   return tied
+}
+
+// The file spawn would run for command: a name with a slash is a path from cwd, and a bare name the first file of that name the child can run in a folder on its PATH, where an empty entry is cwd.
+function located(command: string, env: NodeJS.ProcessEnv, cwd = '.'): string | undefined {
+  const places = command.includes('/') ? [command] : (env.PATH ?? '').split(delimiter).map((folder) => join(folder || '.', command))
+  return places.map((place) => resolve(cwd, place)).find(runnable)
+}
+
+// A folder passes the execute check too, but exec can't run one.
+function runnable(file: string): boolean {
+  try {
+    accessSync(file, constants.X_OK)
+    return statSync(file).isFile()
+  } catch {
+    return false
+  }
 }
 
 function inChild({ code, request, timeout }: { code: string; request: string; timeout: number }): Promise<string> {

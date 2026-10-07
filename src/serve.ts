@@ -10,7 +10,7 @@ import { mediaType } from './assets.ts'
 import { confinePlugin, confineRoots } from './confine.ts'
 import { BuildError } from './errors.ts'
 import { STAND_INS } from './guard.ts'
-import { assetsIn, gameFiles, type GameFiles } from './load.ts'
+import { assetsIn, gameFiles, spawnTied, type GameFiles } from './load.ts'
 import { NAME, engineFile } from './package.ts'
 import { Recording, savePlaytest, type Taken } from './playtest.ts'
 import type { Config } from './browser/client.ts'
@@ -458,8 +458,8 @@ export function openWindow(url: string, { grace = 2000 }: { grace?: number } = {
   const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628', NO_DEVTOOLS_PORT]
   const env = chromeEnv()
   const before = socketFolders(env.TMPDIR)
-  // On macOS and Linux, Chrome leads a process group of its own, which holds every process it starts that can write to its profile, and its output goes nowhere: its crash handlers share that output from outside the group, keeping their reports elsewhere, and on macOS something has held it open for seconds after Chrome exited. On Windows, close comes once nothing holds Chrome's stderr.
-  const child = spawn(chrome, args, { stdio: ['ignore', 'ignore', GROUPS ? 'ignore' : 'pipe'], env, detached: GROUPS })
+  // On macOS and Linux, Chrome leads a process group of its own, tied to this process so that the group ends however run does, even by SIGKILL. The group holds every process Chrome starts that can write to its profile, and Chrome's output goes nowhere: its crash handlers share that output from outside the group, keeping their reports elsewhere, and on macOS something has held it open for seconds after Chrome exited. On Windows, where libuv's job object already ends Chrome with run, close comes once nothing holds Chrome's stderr.
+  const child = GROUPS ? spawnTied(chrome, args, { env, stdio: 'ignore' }) : spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'], env })
   child.stderr?.resume()
   let closing = false
   child.once('exit', (code, signal) => {
