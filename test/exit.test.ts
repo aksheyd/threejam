@@ -136,10 +136,12 @@ test("an MCP server whose client closes stdin gives the calls still running 2 s 
   const closed = Date.now()
   server.end()
   assert.deepEqual(await Promise.race([server.exited, new Promise((done) => setTimeout(done, 10_000, 'still running').unref())]), [0, null])
-  // The calls' 2 s, by a timer the server may start a moment before this clock reads it, then at most 2 s for the shot's cleanup.
+  // The calls' 2 s, by a timer the server may start a moment before this clock reads it, then at most 2 s for the shot's cleanup, then the server's own end.
+  // On Windows, a kill of Chrome's processes or the removal of its profile, which retries while Windows holds the files, holds the server until it's done, even past those 2 s.
   const took = Date.now() - closed
   t.diagnostic(`the server exited ${took} ms after its client closed stdin`)
-  assert.ok(took >= 1900 && took < 5000, `the server took ${took} ms to exit`)
+  const end = process.platform === 'win32' ? 3000 : 1000
+  assert.ok(took >= 1900 && took < 4000 + end, `the server took ${took} ms to exit`)
   await until('the sandbox and the type check to end with their server', () => children.every(ended))
   // On Windows, Chrome's helpers can hold a file in shot's profile a moment after Chrome is killed, and shot leaves those for the OS.
   const left = readdirSync(tmp).filter((name) => process.platform !== 'win32' || !name.startsWith('threejam-chrome-'))
