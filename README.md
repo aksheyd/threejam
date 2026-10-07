@@ -12,10 +12,11 @@
 
 [Play the examples](https://aksheyd.github.io/threejam/) • [Features](#features) • [Quick start](#quick-start) • [Docs](docs/README.md)
 
-<a href="https://aksheyd.github.io/threejam/asteroids.html"><img src="docs/images/asteroids.png" alt="Asteroids, played with the mouse by its autopilot driver" width="24%"></a>
-<a href="https://aksheyd.github.io/threejam/invaders.html"><img src="docs/images/invaders.png" alt="Space Invaders, played by its autopilot driver" width="24%"></a>
-<a href="https://aksheyd.github.io/threejam/flappy.html"><img src="docs/images/flappy.png" alt="Flappy flying through the first gap" width="24%"></a>
-<a href="https://aksheyd.github.io/threejam/tetris.html"><img src="docs/images/tetris.png" alt="Tetris just before a row clears" width="24%"></a>
+<a href="https://aksheyd.github.io/threejam/racer.html"><img src="docs/images/racer.png" alt="Racer, its 2D rules drawn in 3D, played by its autopilot driver" width="19%"></a>
+<a href="https://aksheyd.github.io/threejam/asteroids.html"><img src="docs/images/asteroids.png" alt="Asteroids, played with the mouse by its autopilot driver" width="19%"></a>
+<a href="https://aksheyd.github.io/threejam/invaders.html"><img src="docs/images/invaders.png" alt="Space Invaders, played by its autopilot driver" width="19%"></a>
+<a href="https://aksheyd.github.io/threejam/flappy.html"><img src="docs/images/flappy.png" alt="Flappy flying through the first gap" width="19%"></a>
+<a href="https://aksheyd.github.io/threejam/tetris.html"><img src="docs/images/tetris.png" alt="Tetris just before a row clears" width="19%"></a>
 
 </div>
 
@@ -46,7 +47,7 @@ One set of command definitions gives you a CLI, MCP tools, agent skills, and an 
 
 ## Features
 
-- **Games are plain TypeScript.** `game.ts` declares entities as data and changes them in `update(world, ctx)`, with typed lists, optional values, entities made of parts that move and turn together, and groups that work as pools with `spawn`. An optional `view.ts` adds decoration with raw Three.js that the game logic never sees.
+- **Games are plain TypeScript.** `game.ts` declares entities as data and changes them in `update(world, ctx)`, with typed lists, optional values, entities made of parts that move and turn together, and groups that work as pools with `spawn`. An optional `view.ts` adds decoration with raw Three.js that the game logic never sees, or draws the whole game in 3D, as the Racer example does.
 - **Images, sound, and the mouse.** Shapes turn and can show PNG, JPEG, WebP, GIF, or SVG files, or pixel art written as text, games play built-in synthesized sounds or their own sound files, and the mouse buttons work like keys next to a pointer in world units.
 - **Runs repeat exactly.** The engine owns the clock, input, and seeded random numbers, and swaps `Math.sin` and similar functions for portable versions, so `sim` and the page in the browser reach exactly the same state and play the same sounds.
 - **Tests without a window.** `sim` runs exact ticks with scripted keys, mouse, and pointer or a bot, and prints the state and the sounds played, and `simulate()` does the same inside a test.
@@ -74,7 +75,7 @@ A skill installed from a tag stays on that version, so after you upgrade ThreeJa
 - [Making a game](docs/making-a-game.md): the game of catch `new` writes, from checking it to sharing it as one HTML file
 - [Commands](docs/commands.md): every command and flag
 - [For coding agents](docs/agents.md): the skill, the MCP tools, and the other forms the commands take
-- [Example games](docs/examples.md): Pong, Breakout, Snake, Flappy, Invaders, Tetris, and Asteroids
+- [Example games](docs/examples.md): Pong, Breakout, Snake, Flappy, Invaders, Tetris, Asteroids, and Racer
 - [`AGENTS.md`](AGENTS.md): the full manual, including the known problems
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): working on ThreeJam itself, and how releases go
 - [`CHANGELOG.md`](CHANGELOG.md): what changed in each release

@@ -13,13 +13,15 @@ mkdirSync(TMP, { recursive: true })
 const made: string[] = []
 after(() => made.forEach((dir) => rmSync(dir, { recursive: true, force: true })))
 
-test('shot repeats a frame byte for byte on one machine, images and text included', { skip: !chrome && 'needs Chrome' }, async () => {
+test('shot repeats a frame byte for byte on one machine, images and text included, and from a view that draws the game in 3D with lights and shadows', { skip: !chrome && 'needs Chrome' }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'threejam-shot-'))
   try {
-    const driver = join('games', 'asteroids', 'autopilot.ts')
-    const shots = await Promise.all(['one', 'two'].map((name) => shoot({ dir: 'games/asteroids', at: [120], driver, out: join(dir, name, 'frame.png') })))
-    const [first, second] = shots.map(([file]) => readFileSync(file))
-    assert.ok(first.equals(second), 'two shots of one run differ')
+    for (const [game, tick] of [['asteroids', 120], ['racer', 600]] as const) {
+      const driver = join('games', game, 'autopilot.ts')
+      const shots = await Promise.all(['one', 'two'].map((name) => shoot({ dir: `games/${game}`, at: [tick], driver, out: join(dir, game, name, 'frame.png') })))
+      const [first, second] = shots.map(([file]) => readFileSync(file))
+      assert.ok(first.equals(second), `two shots of one run of ${game} differ`)
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
