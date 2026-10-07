@@ -44,7 +44,7 @@ body:
     attributes:
       label: ThreeJam version
       description: What `npx threejam --version` prints.
-      placeholder: 0.0.4
+      placeholder: 0.0.5
     validations:
       required: true
   - type: input

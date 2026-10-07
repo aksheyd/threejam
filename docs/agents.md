@@ -7,7 +7,7 @@ ThreeJam is built for agents that can't watch a screen: they start a game with `
 The hand-written [ThreeJam skill](../skills/threejam/SKILL.md) teaches that loop step by step. Install it with the [skills CLI](https://github.com/vercel-labs/skills) or the [GitHub CLI](https://cli.github.com), which both take it from the latest release, the version `npm install -D threejam` installs:
 
 ```bash
-npx skills add https://github.com/aksheyd/threejam/tree/v0.0.4/skills/threejam
+npx skills add https://github.com/aksheyd/threejam/tree/v0.0.5/skills/threejam
 gh skill install aksheyd/threejam threejam
 ```
 
