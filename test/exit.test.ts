@@ -260,6 +260,14 @@ test("a shot that a signal stops while it's stuck where killing Chrome doesn't r
   assert.deepEqual(isolated(['void interruptible(() => new Promise(() => setInterval(() => {}, 1000)), 200).finally(() => console.log("settled"))', TERM]), { ended: TERMINATED, printed: '' })
 })
 
+test("an exit waits at most its time for the shots it stops, counting a kill that holds the process meanwhile, as Puppeteer's taskkill of Chrome does on Windows", () => {
+  // The kill holds the process for 600 ms and the cleanup takes 600 ms more, against the exit's 500 ms, so the exit comes as the kill ends.
+  const shot = "void interruptible((killer) => new Promise((done) => killer.signal.addEventListener('abort', () => { for (const until = Date.now() + 600; Date.now() < until; ); setTimeout(done, 600) })))"
+  const endShots = `import { endShots } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'shot.ts')).href)}`
+  const lines = [endShots, shot, 'const started = Date.now()', 'await endShots(500)', "console.log(Date.now() - started < 900 ? 'in time' : `after ${Date.now() - started} ms`)"]
+  assert.deepEqual(isolated(lines), { ended: 0, printed: 'in time\n' })
+})
+
 test('a shot whose work throws before returning a promise fails with that error and stops catching signals', () => {
   const lines = ["await interruptible(() => { throw new Error('thrown') }).catch((error) => console.log(error.message))", "console.log(['SIGINT', 'SIGTERM', 'SIGHUP'].map((signal) => process.listenerCount(signal)).join(' '))"]
   assert.deepEqual(isolated(lines), { ended: 0, printed: 'thrown\n0 0 0\n' })
