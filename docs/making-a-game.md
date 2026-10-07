@@ -105,7 +105,7 @@ code: GAME_ERROR
 message: "sprite \"ball\": rows[2] has 3 pixels, but rows[0] has 4, and every row must have the same number"
 ```
 
-With `satisfies Sprites`, a misspelled field, like `pallete`, is a `TYPE_ERROR` instead. `sim` sees only a sprite's name, so the game plays as it did, and the page draws a sprite as it would a PNG of its pixels, the same in every `shot`. To animate one, assign another sprite's name to `image`.
+With `satisfies Sprites`, a misspelled field, like `pallete`, is a `TYPE_ERROR` instead. `sim` sees only a sprite's name, so the game plays as it did, and the page draws a sprite as it would a PNG of its pixels, the same in every `shot`. To animate one, assign another sprite's name to `image`, as [Invaders](../games/invaders) does to swap its fleet's poses as it marches.
 
 ## Test it
 

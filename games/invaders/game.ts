@@ -1,6 +1,6 @@
 // Space Invaders. Space starts the invasion; Left / Right move the cannon; Space fires, and holding it keeps firing.
 import { defineGame, grid, oneOf, type Context, type Entities, type World } from 'threejam'
-import { CANNON, boxes, type Box } from './sprites.ts'
+import { BOMB_FRAMES, POSES, boxes, sprites, type Box } from './sprites.ts'
 
 const WHITE = '#ffffff'
 const GREEN = '#33ff33'
@@ -11,7 +11,7 @@ const COLS = 11
 const POINTS = [30, 20, 20, 10, 10]
 const INVADER_W = [0.12, 0.165, 0.165, 0.18, 0.18]
 const UFO_POINTS = [50, 100, 150, 300]
-const CANNON_PARTS = boxes(CANNON)
+const CANNON_PARTS = boxes(sprites.cannon.rows)
 
 // Every bunker is this grid of cells, laid out from its top-left cell.
 const BUNKER = ['..#######..', '.#########.', '###########', '###########', '###########', '###########', '####...####', '###.....###']
@@ -32,7 +32,7 @@ function shieldCell(bunker: number, cell: number) {
 }
 
 function bomb(kind: 'aimed' | 'random') {
-  return { x: 0, y: -2.5, w: 0.045, h: 0.105, visible: false, kind: oneOf(['aimed', 'random'], kind), speed: 0.9, ground: -1.24, age: 0 }
+  return { x: 0, y: -2.5, w: 0.045, h: 0.105, image: BOMB_FRAMES[0], visible: false, kind: oneOf(['aimed', 'random'], kind), speed: 0.9, ground: -1.24, age: 0 }
 }
 
 const entities = {
@@ -41,8 +41,8 @@ const entities = {
   lives: { x: -1.78, y: -1.37, text: '3', size: 0.105, color: GREEN },
   message: { x: 0, y: 1.41, text: 'PRESS SPACE TO START', size: 0.105, color: WHITE },
   hint: { x: 0, y: 1.175, text: '', size: 0.07, color: WHITE },
-  life1: { x: -1.6, y: -1.37, w: 0.156, h: 0.096, color: GREEN },
-  life2: { x: -1.4, y: -1.37, w: 0.156, h: 0.096, color: GREEN },
+  life1: { x: -1.6, y: -1.37, w: 0.156, h: 0.096, image: 'cannon', color: GREEN },
+  life2: { x: -1.4, y: -1.37, w: 0.156, h: 0.096, image: 'cannon', color: GREEN },
   ground: { x: 0, y: -1.24, w: 4, h: 0.015, color: GREEN },
   // One row per bunker, holding its lit cells top row first.
   bunkers: grid(BUNKERS, BUNKER_CELLS.length, ({ row, col }) => shieldCell(row, col)),
@@ -55,10 +55,10 @@ const entities = {
     bomb_gap_min: 30, bomb_gap_max: 90, boom_ticks: 12,
     alive_count: ROWS * COLS, interval: 33, wait: 33, dir: 1, sx: 0, sy: 0, steps: 0, bomb_wait: 90, next_bomb: 0, boom_timer: 0,
   },
-  invaders: grid(ROWS, COLS, ({ row, col }) => ({ x: homeX(col), y: homeY(row), w: INVADER_W[row], h: 0.12, points: POINTS[row] })),
-  boom: { x: 0, y: -2.5, w: 0.195, h: 0.105, visible: false },
-  ufo: { x: -2.5, y: 1.08, w: 0.24, h: 0.105, color: RED, visible: false, speed: 0.9, edge: 2.3, first_wait: 900, every: 1500, wait: 900, dir: 1 },
-  cannon: { x: 0, y: -1.1, w: 0.195, h: 0.12, color: GREEN, speed: 1.2, left: -1.9, right: 1.9, armed: false, home_x: 0 },
+  invaders: grid(ROWS, COLS, ({ row, col }) => ({ x: homeX(col), y: homeY(row), w: INVADER_W[row], h: 0.12, image: POSES[row][0], points: POINTS[row] })),
+  boom: { x: 0, y: -2.5, w: 0.195, h: 0.105, image: 'boom', visible: false },
+  ufo: { x: -2.5, y: 1.08, w: 0.24, h: 0.105, image: 'ufo', color: RED, visible: false, speed: 0.9, edge: 2.3, first_wait: 900, every: 1500, wait: 900, dir: 1 },
+  cannon: { x: 0, y: -1.1, w: 0.195, h: 0.12, image: 'cannon', color: GREEN, speed: 1.2, left: -1.9, right: 1.9, armed: false, home_x: 0 },
   shot: { x: 0, y: -2.5, w: 0.015, h: 0.06, color: WHITE, visible: false, speed: 3.6, top: 1.17 },
   bomb1: bomb('aimed'),
   bomb2: bomb('random'),
@@ -84,6 +84,11 @@ export function frontLine<T extends { readonly visible: boolean }>(invaders: rea
 
 function overlaps(a: Box, b: Box): boolean {
   return Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.y - b.y) < (a.h + b.h) / 2
+}
+
+function age(bomb: Bomb, ticks: number): void {
+  bomb.age = ticks
+  bomb.image = BOMB_FRAMES[Math.floor(ticks / 4) % BOMB_FRAMES.length]
 }
 
 function randomInt(ctx: Context, min: number, max: number): number {
@@ -198,6 +203,7 @@ function place(world: Invaders): void {
       if (!inv.visible) continue
       inv.x = homeX(c) + fleet.sx * fleet.step_x
       inv.y = homeY(r) - fleet.sy * fleet.step_down
+      inv.image = POSES[r][fleet.steps % 2]
     }
   }
 }
@@ -257,7 +263,7 @@ function dropBomb(world: Invaders, ctx: Context): void {
     const shooter = pickShooter(world, ctx, bomb.kind)
     if (shooter) {
       bomb.visible = true
-      bomb.age = 0
+      age(bomb, 0)
       bomb.x = shooter.x
       bomb.y = shooter.y - shooter.h / 2 - bomb.h / 2
       fleet.bomb_wait = randomInt(ctx, fleet.bomb_gap_min, fleet.bomb_gap_max)
@@ -423,7 +429,7 @@ function updateBomb(world: Invaders, ctx: Context, bomb: Bomb): void {
   if (game.state !== 'play') return
 
   bomb.y -= bomb.speed * ctx.dt
-  bomb.age += 1
+  age(bomb, bomb.age + 1)
   const hit = CANNON_PARTS.some((part) =>
     overlaps(bomb, { x: cannon.x + part.x * cannon.w, y: cannon.y + part.y * cannon.h, w: part.w * cannon.w, h: part.h * cannon.h }),
   )
@@ -472,13 +478,14 @@ function reset(world: Invaders): void {
   world.shot.visible = false
   for (const bomb of bombs(world)) {
     bomb.visible = false
-    bomb.age = 0
+    age(bomb, 0)
   }
 }
 
 export default defineGame({
   title: 'Invaders',
   background: '#000000',
+  sprites,
   entities,
   start(world) {
     world.game.start_lives = world.game.lives

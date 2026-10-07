@@ -60,6 +60,26 @@ test('a bomb costs a life and pauses play, the last life ends the game, and a pr
   assert.equal(last.logs.at(-1), '[tick 207] the invasion begins with 1 life')
 })
 
+test("each visible invader shows its row's pose for the fleet's steps, each falling bomb the frame for its age, and the cannon and both lives the cannon", () => {
+  const poses = [['squid_0', 'squid_1'], ['crab_0', 'crab_1'], ['crab_0', 'crab_1'], ['octopus_0', 'octopus_1'], ['octopus_0', 'octopus_1']]
+  const frames = ['bomb_0', 'bomb_1', 'bomb_2']
+  const seen = new Set<unknown>()
+  for (const { tick, entities } of simulate(game, { ticks: 300, press: ['Space@1'], every: 1 }).snapshots) {
+    const steps = Number(entities.find((e) => e.name === 'fleet')?.steps)
+    for (const e of entities) {
+      const row = /^invaders\[(\d)\]/.exec(e.name)?.[1]
+      let shown: string
+      if (row !== undefined && e.visible) shown = poses[Number(row)][steps % 2]
+      else if (/^bomb\d$/.test(e.name) && e.visible) shown = frames[Math.floor(Number(e.age) / 4) % 3]
+      else if (/^(cannon|life\d)$/.test(e.name)) shown = 'cannon'
+      else continue
+      assert.equal(e.image, shown, `${e.name} at tick ${tick}`)
+      seen.add(e.image)
+    }
+  }
+  assert.deepEqual([...seen].sort(), ['bomb_0', 'bomb_1', 'bomb_2', 'cannon', 'crab_0', 'crab_1', 'octopus_0', 'octopus_1', 'squid_0', 'squid_1'])
+})
+
 test('the autopilot clears the wave as the fleet drops and shields erode, then plays again', () => {
   const session = new Session(game)
   const drive = autopilot()
