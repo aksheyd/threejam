@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
@@ -64,8 +64,8 @@ test("the docs install the skill from the newest release's tag, and CHANGELOG.md
   assert.ok(released.includes(VERSION), `CHANGELOG.md has no entry for ${VERSION}, the version in package.json`)
   const [root] = manifestsAbove(ROOT)
   const source = `${String(root.json.homepage)}/tree/v${released[0]}/skills/threejam`
-  for (const doc of ['README.md', join('docs', 'agents.md')]) {
-    const sources = [...readFileSync(join(ROOT, doc), 'utf8').matchAll(/npx skills add (https:\S+)/g)].map((match) => match[1])
+  for (const doc of ['README.md', join('docs', 'agents.md'), join('.github', 'pages', 'index.html')]) {
+    const sources = [...readFileSync(join(ROOT, doc), 'utf8').matchAll(/npx skills add (https:[^\s<]+)/g)].map((match) => match[1])
     assert.deepEqual(sources, [source], `${doc} should install the skill from ${source}`)
   }
 })
@@ -195,12 +195,33 @@ test('AGENTS.md, the agents guide, and the skill name the same MCP tools, which 
   assert.deepEqual(items(between(readFileSync(join(ROOT, 'skills', 'threejam', 'SKILL.md'), 'utf8'), 'registers ', ' as tools')), tools, 'the skill should name the MCP tools AGENTS.md does')
 })
 
+const GAMES = readdirSync(join(ROOT, 'games'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+const INDEX = readFileSync(join(ROOT, '.github', 'pages', 'index.html'), 'utf8')
+
 test('the Pages index links the page export writes for every example game, and no other file of the site', () => {
-  const index = readFileSync(join(ROOT, '.github', 'pages', 'index.html'), 'utf8')
   // The site is index.html, sitemap.xml, and one exported page per folder in games/, of which the index links the games.
-  const local = new Set([...index.matchAll(/\b(?:href|src)="([^"]+)"/g)].map((match) => match[1]).filter((link) => !/^[a-z][a-z\d+.-]*:/i.test(link)))
-  const pages = readdirSync(join(ROOT, 'games'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => `${entry.name}.html`)
-  assert.deepEqual([...local].toSorted(), pages.toSorted(), '.github/pages/index.html should link the page export writes for each folder in games/, and nothing else on the site')
+  const local = new Set([...INDEX.matchAll(/\b(?:href|src)="([^"]+)"/g)].map((match) => match[1]).filter((link) => !/^[a-z][a-z\d+.-]*:/i.test(link)))
+  assert.deepEqual([...local].toSorted(), GAMES.map((game) => `${game}.html`).toSorted(), '.github/pages/index.html should link the page export writes for each folder in games/, and nothing else on the site')
+})
+
+// GitHub's anchor for a Markdown heading: lowercase, without punctuation, and with hyphens for spaces.
+function anchor(heading: string): string {
+  return heading.trim().toLowerCase().replace(/[^\p{L}\p{N}\- _]/gu, '').replaceAll(' ', '-')
+}
+
+test("the Pages index's links into the repo's main branch name files, folders, and headings it has", () => {
+  const [root] = manifestsAbove(ROOT)
+  const links = [...INDEX.matchAll(/\bhref="([^"]+)"/g)].map((match) => match[1])
+  const repo = String(root.json.homepage).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const inRepo = links.map((link) => new RegExp(`^${repo}/(blob|tree)/main/([^#]+)(?:#(.+))?$`).exec(link)).filter((found) => found !== null)
+  assert.ok(inRepo.length > 0, 'the index links nothing in the repo')
+  for (const [link, kind, path, heading] of inRepo) {
+    const file = join(ROOT, ...path.split('/'))
+    assert.equal(statSync(file, { throwIfNoEntry: false })?.isDirectory(), kind === 'tree', `${link} should name a ${kind === 'tree' ? 'folder' : 'file'} the repo has`)
+    if (heading === undefined) continue
+    const headings = [...readFileSync(file, 'utf8').matchAll(/^#+ (.+)$/gm)].map((match) => anchor(match[1]))
+    assert.ok(headings.includes(heading), `${link} should name a heading of ${path}`)
+  }
 })
 
 test("the Pages sitemap names only the site's root, at the address GitHub Pages gives the repository", () => {
