@@ -5,6 +5,7 @@
 *A 2D game engine on Three.js where your coding agent proves what its game does*
 
 [![npm](https://img.shields.io/npm/v/threejam?style=flat-square)](https://www.npmjs.com/package/threejam)
+[![skills.sh](https://skills.sh/b/aksheyd/threejam?style=flat-square)](https://skills.sh/aksheyd/threejam)
 [![Node.js 22.18 or later](https://img.shields.io/badge/Node.js-%3E%3D22.18-3c873a?style=flat-square)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-blue?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Three.js](https://img.shields.io/badge/Three.js-black?style=flat-square&logo=threedotjs&logoColor=white)](https://threejs.org)
