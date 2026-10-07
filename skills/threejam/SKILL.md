@@ -15,7 +15,7 @@ A ThreeJam game is a folder with a `game.ts`: entity data plus an `update` funct
    - In a project, install it with `npm install -D threejam`.
    - With no project yet, start one: `npx threejam new my-game`, then run `npm install` in `my-game`. `new` writes a small playable game, its test, a `package.json`, and a `tsconfig.json`.
 
-2. Read the manual in full before writing code: `node_modules/threejam/AGENTS.md` in the project, or `AGENTS.md` at github.com/aksheyd/threejam. It covers entity fields, groups and grids, `oneOf`, images and sprites, `ctx` with its input, pointer, and sounds, `view.ts`, drivers, and testing. Start from the game `new` writes, or from the shape of a game in the repo's `games/` folder; Pong is the smallest, Asteroids uses images, sounds, the mouse, and `spawn`, and Invaders draws its pixel art from text.
+2. Read the manual in full before writing code: `node_modules/threejam/AGENTS.md` in the project, or `AGENTS.md` at github.com/aksheyd/threejam. It covers entity fields, groups and grids, `oneOf`, images and sprites, `ctx` with its input, pointer, and sounds, `view.ts`, drivers, and testing. Start from the game `new` writes, or from the shape of a game in the repo's `games/` folder; Pong is the smallest, Asteroids uses images, sounds, the mouse, and `spawn`, Invaders draws its pixel art from text, and Racer's `view.ts` draws its 2D rules in 3D.
 
 ## Working loop
 

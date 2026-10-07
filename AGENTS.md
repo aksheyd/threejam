@@ -139,7 +139,7 @@ The world takes writes only while `start` and `update` run, so code that runs be
 
 ## view.ts
 
-A game can add a `view.ts` for extras drawn with Three.js that the game logic never sees, like Pong's dashed net or Snake's grid:
+A game can add a `view.ts` for extras drawn with Three.js that the game logic never sees, like Pong's dashed net or Snake's grid, or to draw the whole game in 3D, as Racer's does:
 
 ```ts
 import type { ViewFrame, ViewSetup } from 'threejam'
@@ -155,6 +155,7 @@ export function draw({ world, tick, objects }: ViewFrame<typeof game>) {}
 - The default view resets each mesh's geometry, place, size, rotation, color, image, and visibility right before `draw`, so a change to one has to be made again every frame.
 - `draw` must depend only on what it's given, not on earlier frames, so `shot` shows exactly what players see.
 - `renderOrder` places a mesh among the entities: the entity declared Nth (counting group members and parts) draws at `renderOrder` N, so a view mesh at 2.5 draws between the third and fourth, and faded entities keep their places too. To fade a view mesh in place, give its material `blending: THREE.CustomBlending`; `transparent: true` moves a mesh after everything.
+- A view can draw the game in 3D while its rules stay 2D, as `games/racer/view.ts` does. `init` and `draw` also get the page's `renderer` and the orthographic `camera` it draws `scene` with. Build a scene of your own, with a `PerspectiveCamera`, lights, and meshes placed from `world`, and in `draw` render it into a `THREE.WebGLRenderTarget` as large as `renderer.getDrawingBufferSize()`, with `samples: 4` for smooth edges and `colorSpace: THREE.SRGBColorSpace` for the colors the page shows, then set the render target back to `null`. A 4 by 3 plane in `scene` shows the target's texture, at a `renderOrder` under the entities that should stay flat on top, like a score. Settings on the renderer, like `shadowMap.enabled`, hold for the page's own drawing too.
 - `check` type-checks `view.ts` with browser types, and an error thrown in it names `view.ts` and the frame.
 
 ## Testing
