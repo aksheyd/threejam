@@ -49,7 +49,7 @@ Run these from the project's root, with the game in `<dir>`.
 - Shuffle with Fisher–Yates on `ctx.random()`, as in `for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(ctx.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]] }`, never with `sort(() => ctx.random() - 0.5)`, whose order differs between browsers, and keep promises out of game code, since their callbacks run after the tick, when the world refuses their writes.
 - Text uses a 5x7 pixel font with capitals, digits, and a little punctuation; `size` is the letter height.
 - Keep all changing state on entities, never in variables at the top of `game.ts`.
-- `check`, `sim`, `shot`, and `export` run the game (and any `--driver`) in a sandbox with no files, processes, or network: a game can `import` only `threejam` and files next to it, the clock and `Math.random()` are errors, and a run that passes `--timeout` seconds (default 30) stops with a `TIMEOUT` error, so an endless loop fails instead of hanging.
+- `check`, `sim`, `shot`, and `export` run the game (and any `--driver`) in a sandbox with no files, processes, or network: a game can `import` only `threejam` and files next to it, the clock and `Math.random()` are errors, a run that passes `--timeout` seconds (default 30) stops with a `TIMEOUT` error, so an endless loop fails instead of hanging, and one whose heap grows past 1 GB fails with `GAME_ERROR`.
 - For MCP clients, `npx threejam mcp add` registers `new`, `check`, `sim`, `shot`, and `export` as tools; each call reads the game from disk.
 
 ## Conventions

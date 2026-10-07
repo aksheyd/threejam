@@ -308,6 +308,13 @@ test('an endless loop in a game fails with TIMEOUT, naming where it was, instead
   assert.ok(Date.now() - started < 8000, 'the loop was not stopped near its budget')
 })
 
+test('a game that keeps more than the 1 GB a sandbox may grow to runs out of memory with GAME_ERROR on any machine', () => {
+  // 8 MB more every tick: 1.6 GB by tick 200, which V8's own limit would allow on a machine with 16 GB.
+  const { dir } = folder({ 'game.ts': game('const kept: number[][] = []').replace('world.ball.x += 0.01', 'kept.push(new Array(1_000_000).fill(ctx.tick + 0.5))') })
+  const sim = threejam(['sim', dir, '--ticks', '200'])
+  assert.deepEqual({ code: sim.code, json: sim.json }, { code: 1, json: { code: 'GAME_ERROR', message: 'the game ran out of memory; look for a list or a loop that keeps growing' } })
+})
+
 // Each load is a short-lived process of its own, so a long run of them, as in an MCP server, keeps no temp files.
 test('repeated loads leave no growing temp files', () => {
   const tmp = mkdtempSync(join(TMP, 'tmproot-'))

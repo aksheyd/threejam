@@ -16,6 +16,10 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - `export --script URL` adds a script for the page to load from the network, like the widget Vibe Jam requires on every entry, as `<script async src="URL"></script>` at the end of the page. It takes only an `https://` address and repeats for more; without it, an exported file still loads nothing from the network.
 - `run`'s page and exported games answer `window.advanceTime(ms)` and `window.render_game_to_text()`, the hooks OpenAI's `develop-web-game` skill has a game add for its Playwright client, so that client can play and read a ThreeJam game with nothing added to it. `advanceTime` takes over the page's clock, starting the run over from tick 0 if the page was playing on its own, and steps the ticks its milliseconds cover, 60 a second; `render_game_to_text()` gives the tick and the entities as `sim --exact --format json` prints them.
 
+### Changed
+
+- Every run of a game's code in the sandbox, in `check`, `sim`, and the runs behind `shot`, `run`, and `export`, may grow its heap to 1 GB, the same on every machine, and past that it fails with `GAME_ERROR`, saying the game ran out of memory. Before, the limit was V8's default, which follows the machine's memory: about 4 GB on a machine with 16 GB or more, and less in a smaller container, so a game that kept more than 1 GB could pass on one machine and fail on another. The example games need less than 8 MB to play for 10 minutes, and 192 MB for the most snapshots one run can print.
+
 ### Fixed
 
 - `sim --every` keeps only the entities `--only` names in each snapshot, as it takes it, so a long run holds no more than it prints. Before, it kept every entity of every tick until the run ended, so a 10-minute run of Snake with `--every 1 --only game` grew its sandbox to 2 GB to print 31 MB. A wrong `--only` with `--every` now fails at tick 0. `simulate` takes `only` too.

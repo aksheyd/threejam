@@ -13,8 +13,10 @@ import { ENGINE, NAME, ROOT, TYPES, engineFile, manifestsAbove } from './package
 import { SANDBOX, type Failure, type Place, type Reply, type Request, type Stage, type Thrown } from './sandbox.ts'
 import type { LogEntry, Snapshot, SoundEntry } from './types.ts'
 
+// The heap a game's code may grow to, in MB, the same on every machine, where V8's own default follows the machine's memory. The example games need less than 8 MB to play for 10 minutes, and 192 MB for the most snapshots one run can print.
+export const HEAP_MB = 1024
 // What a game's code may do in the child process that runs it: Node's permission model grants nothing, so it can't read or write files, start processes or workers, load addons, or, from Node 25, reach the network.
-export const SANDBOX_FLAGS = ['--permission', '--disallow-code-generation-from-strings', '--input-type=commonjs'] as const
+export const SANDBOX_FLAGS = ['--permission', '--disallow-code-generation-from-strings', '--input-type=commonjs', `--max-old-space-size=${HEAP_MB}`] as const
 export const DEFAULT_TIMEOUT = 30
 // A day: Node's timers can't wait past about 24.8 days, and a longer one fires at once.
 export const MAX_TIMEOUT = 86_400
