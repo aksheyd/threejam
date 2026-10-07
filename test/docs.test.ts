@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
@@ -193,6 +193,14 @@ test('AGENTS.md, the agents guide, and the skill name the same MCP tools, which 
   same([...tools, forPeople], commands().map((command) => command.name), 'commands')
   assert.deepEqual(items(between(readFileSync(join(ROOT, 'docs', 'agents.md'), 'utf8'), '# serve ', ' as MCP tools')), tools, 'docs/agents.md should name the MCP tools AGENTS.md does')
   assert.deepEqual(items(between(readFileSync(join(ROOT, 'skills', 'threejam', 'SKILL.md'), 'utf8'), 'registers ', ' as tools')), tools, 'the skill should name the MCP tools AGENTS.md does')
+})
+
+test('the Pages index links the page export writes for every example game, and no other file of the site', () => {
+  const index = readFileSync(join(ROOT, '.github', 'pages', 'index.html'), 'utf8')
+  // The site is index.html and one exported page per folder in games/, so a link to anything else would be missing there.
+  const local = new Set([...index.matchAll(/\b(?:href|src)="([^"]+)"/g)].map((match) => match[1]).filter((link) => !/^[a-z][a-z\d+.-]*:/i.test(link)))
+  const pages = readdirSync(join(ROOT, 'games'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => `${entry.name}.html`)
+  assert.deepEqual([...local].toSorted(), pages.toSorted(), '.github/pages/index.html should link the page export writes for each folder in games/, and nothing else on the site')
 })
 
 function isRecord(value: unknown): value is Record<string, unknown> {

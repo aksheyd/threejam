@@ -1,0 +1,67 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  # A pull request builds the site without publishing it, so an export that fails shows before main.
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Runs on main deploy one at a time, and one that has started always finishes; the newest run waits for it.
+# Every other run has a group of its own, since a group keeps only its newest waiting run, so it can't cancel or hold up a deployment.
+concurrency:
+  group: ${{ github.ref == 'refs/heads/main' && 'pages' || format('pages-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build:
+    name: Export the games
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The site is public, so it's built as the npm package is: from a clean install, never a cache, with install scripts off.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26'
+          package-manager-cache: false
+
+      - run: npm ci --ignore-scripts
+
+      # A new folder outside the checkout, so the site holds the exported games and the index and nothing else.
+      - name: Export every game and add the index
+        run: |
+          site="$RUNNER_TEMP/site"
+          mkdir "$site"
+          for dir in games/*/; do
+            npx threejam export "${dir%/}" -o "$site/$(basename "$dir").html"
+          done
+          cp .github/pages/index.html "$site/"
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    # A pull request, or a manual run on another branch, builds the site without publishing it.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Longer than the 10 minutes deploy-pages waits, so it can cancel a deployment that never finishes.
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        id: deployment

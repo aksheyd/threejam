@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ThreeJam example games</title>
+  <meta name="description" content="Seven 2D games made with ThreeJam, a game engine on Three.js where your coding agent proves what its game does. Play them in the browser.">
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; background: #08080d; color: #e6e6ee; font: 17px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    main { max-width: 42rem; margin: 0 auto; padding: 3rem 1.25rem; }
+    h1 { margin: 0 0 1rem; font-size: 2rem; line-height: 1.2; }
+    a { color: #8cc8ff; }
+    code { font: 0.9em ui-monospace, Menlo, Consolas, monospace; }
+    .note { margin: 1.5rem 0; padding: 0.75rem 1rem; border-left: 3px solid #f2d91a; background: #12121a; }
+    ul { margin: 2rem 0; padding: 0; list-style: none; }
+    li { padding: 1rem 0; border-top: 1px solid #23232e; }
+    .game { font-size: 1.25rem; font-weight: 600; }
+    .more { display: block; color: #a0a0b2; font-size: 0.9rem; }
+    footer { color: #a0a0b2; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ThreeJam example games</h1>
+    <p>Seven 2D games made with <a href="https://github.com/aksheyd/threejam">ThreeJam</a>, a game engine on Three.js where your coding agent proves what its game does. Each one is a single HTML file from <code>threejam export</code>.</p>
+    <p class="note">These games need a keyboard. On a phone or tablet without one, only Asteroids plays: tap to start, then hold a finger where you want to shoot.</p>
+    <ul>
+      <li>
+        <a class="game" href="pong.html">Pong</a>: two players at one keyboard, first to 7 points.
+        <span class="more">W and S move the left paddle, Up and Down the right; Space starts. Code: <a href="https://github.com/aksheyd/threejam/tree/main/games/pong"><code>games/pong</code></a></span>
+      </li>
+      <li>
+        <a class="game" href="breakout.html">Breakout</a>: clear every brick with three lives.
+        <span class="more">Left and Right, or A and D, move the paddle; Space serves. Code: <a href="https://github.com/aksheyd/threejam/tree/main/games/breakout"><code>games/breakout</code></a></span>
+      </li>
+      <li>
+        <a class="game" href="snake.html">Snake</a>: eat apples to grow, and don't hit a wall or yourself.
+        <span class="more">An arrow key starts the snake, and the arrow keys turn it; Space plays again. Code: <a href="https://github.com/aksheyd/threejam/tree/main/games/snake"><code>games/snake</code></a></span>
+      </li>
+      <li>
+        <a class="game" href="flappy.html">Flappy</a>: flap through the gaps between the pipes.
+        <span class="more">Space starts a run, and each press flaps. Code: <a href="https://github.com/aksheyd/threejam/tree/main/games/flappy"><code>games/flappy</code></a></span>
+      </li>
+      <li>
+        <a class="game" href="invaders.html">Invaders</a>: clear the wave before the invaders reach the bottom.
+        <span class="more">Left and Right move the cannon; Space starts and fires, and holding it keeps firing. Code: <a href="https://github.com/aksheyd/threejam/tree/main/games/invaders"><code>games/invaders</code></a></span>
+      </li>
+      <li>
+        <a class="game" href="tetris.html">Tetris</a>: fill rows to clear them, until a new piece has no room.
+        <span class="more">Left and Right move the piece, Up rotates it, and Down drops it faster; Space starts. Code: <a href="https://github.com/aksheyd/threejam/tree/main/games/tetris"><code>games/tetris</code></a></span>
+      </li>
+      <li>
+        <a class="game" href="asteroids.html">Asteroids</a>: shoot the rocks, which split when hit, and don't let them hit you.
+        <span class="more">Left and Right turn, Up thrusts, and Space fires; or hold the mouse to aim and fire, and the right button to thrust. Space or a click starts. Code: <a href="https://github.com/aksheyd/threejam/tree/main/games/asteroids"><code>games/asteroids</code></a></span>
+      </li>
+    </ul>
+    <footer><a href="https://github.com/aksheyd/threejam">ThreeJam on GitHub</a> · <a href="https://github.com/aksheyd/threejam/blob/main/docs/examples.md">What each game shows</a> · MIT license</footer>
+  </main>
+</body>
+</html>
