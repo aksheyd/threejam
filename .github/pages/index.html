@@ -3,89 +3,210 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ThreeJam</title>
-  <meta name="description" content="A 2D game engine on Three.js where your coding agent proves what its game does. Install it, read the guides, and play the example games.">
+  <meta name="color-scheme" content="dark">
+  <title>ThreeJam: a 2D game engine on Three.js for coding agents</title>
+  <meta name="description" content="A 2D game engine on Three.js where your coding agent proves what its game does. Install it, read the guides, and play the example games in your browser.">
   <link rel="icon" href="data:,">
   <style>
-    :root { color-scheme: dark; }
-    body { margin: 0; background: #08080d; color: #e6e6ee; font: 17px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
-    main, header, footer { max-width: 60rem; margin: 0 auto; padding: 0 1.25rem; }
-    a { color: #8cc8ff; }
-    code, pre { font: 0.9em ui-monospace, Menlo, Consolas, monospace; }
-    pre { overflow-x: auto; padding: 0.75rem 1rem; background: #12121a; }
-    .games { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); padding: 0; list-style: none; }
-    .games img { display: block; width: 100%; height: auto; }
+    /* Every spacing, type size, color, radius, and duration in the stylesheet comes from this set, apart from the colors each card takes from its game. */
+    :root {
+      color-scheme: dark;
+      /* Pong's background, which is also the engine's default. */
+      --page: #08080d;
+      --surface: #14141e;
+      --surface-hover: #1c1c28;
+      --surface-press: #242432;
+      --text: #e6e6ee;
+      --text-dim: #b0b0c2;
+      --line: #3a3a52;
+      /* Flappy's sky, kept for what can be clicked and for the focus ring. */
+      --accent: #4ec0ca;
+      --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+      --title: 40px; --heading: 24px; --name: 20px; --body: 16px; --small: 14px;
+      --round: 16px; --round-small: 6px; --round-inset: 4px;
+      --quick: 150ms;
+      --gutter: var(--s4);
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--page); color: var(--text); -webkit-text-size-adjust: 100%; }
+    body { margin: 0; font: var(--body)/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    h1, h2, h3, p, ul, pre { margin: 0; }
+    h1, h2, h3 { text-wrap: balance; }
+    p { text-wrap: pretty; }
+    ul { padding: 0; list-style: none; }
+    a { color: var(--accent); text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    a:hover { text-decoration-thickness: 2px; }
+    a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--round-inset); }
+    code, pre { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace; font-size: var(--small); }
+    p code { white-space: nowrap; }
+    .wrap { max-width: calc(1120px + 2 * var(--gutter)); margin-inline: auto; padding-inline: var(--gutter); }
+
+    /* A link's box, and so its focus ring, is one line of its text in any font; a larger box around it, at least 44 px high and wide, takes the taps. */
+    .links a, .top a { position: relative; display: inline-block; line-height: 1.3; }
+    .links a::before, .top a::before { content: ''; position: absolute; inset: calc(-1 * var(--s3)) calc(-1 * var(--s2)); }
+
+    /* On a phone the pitch comes before the links; from 580 px the links sit beside the name. */
+    .top { display: grid; grid-template-areas: 'title' 'pitch' 'homes'; row-gap: var(--s2); padding-top: var(--s5); }
+    h1 { grid-area: title; font-size: var(--title); line-height: 1.1; letter-spacing: -0.01em; }
+    .pitch { grid-area: pitch; max-width: 30em; font-size: var(--name); line-height: 1.35; }
+    .top nav { grid-area: homes; }
+    .top ul { display: flex; gap: var(--s5); }
+
+    section { margin-top: var(--s8); }
+    h2 { font-size: var(--heading); line-height: 1.2; margin-bottom: var(--s3); }
+    .lede { max-width: 36em; }
+
+    .games { display: grid; gap: var(--s5); margin-block: var(--s5); }
+    .card { position: relative; display: flex; flex-direction: column; padding: var(--s3); border-radius: var(--round); background: var(--surface); transition: background-color var(--quick) ease-out; }
+    .card img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: var(--round-inset); background: var(--game); color: var(--on-game, var(--text)); font-size: var(--small); }
+    .card h3 { margin: var(--s3) 0 var(--s1); font-size: var(--name); line-height: 1.25; }
+    .card h3 a { text-decoration: none; }
+    /* The title's link covers the whole card, so the picture and the title are one stop for the same game. */
+    .card h3 a::after { content: ''; position: absolute; inset: 0; border-radius: var(--round); }
+    .card h3 a:focus-visible { outline: none; }
+    .card h3 a:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .card .about { line-height: 1.4; }
+    .card .keys { margin-top: var(--s2); color: var(--text-dim); font-size: var(--small); line-height: 1.4; }
+    .card .foot { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-top: auto; padding-top: var(--s3); font-size: var(--small); line-height: 1.3; }
+    .card .label { color: var(--text-dim); }
+    /* The code link sits above the card's link, with a 44 px area of its own that leaves the card's padding as it is. */
+    .card .code { position: relative; z-index: 1; }
+    .card .code::before { content: ''; position: absolute; inset: calc(-1 * var(--s4)) calc(-1 * var(--s3)); }
+    @media (hover: hover) {
+      .card:hover:not(:has(.code:hover)) { background: var(--surface-hover); }
+    }
+    /* As specific as the hover, and after it, so a press shows over a hover. */
+    .card:active:not(:has(.code:active)) { background: var(--surface-press); }
+    @media (prefers-reduced-motion: reduce) {
+      .card { transition: none; }
+    }
+
+    .lede, .start p { color: var(--text-dim); }
+    .start p { max-width: 36em; margin-top: var(--s4); }
+    .start h2 + p { margin-top: 0; }
+    /* Wide enough for the longest command on one line; a long URL breaks after its slashes. */
+    pre { max-width: 46rem; margin-top: var(--s2); padding: var(--s3) var(--s4); border-radius: var(--round-small); background: var(--surface); line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* On a phone both lists of links share the same two columns, the first never too narrow for "For coding agents"; wider, each is one row, which wraps only if it must. */
+    .start .links, footer .links { display: grid; grid-template-columns: minmax(9rem, 1fr) minmax(0, 1fr); gap: var(--s5); }
+    .start .links { margin-top: var(--s5); }
+
+    footer { margin-top: var(--s8); padding-bottom: var(--s7); }
+    /* The line spans the content's width, like everything above it. */
+    footer::before { content: ''; display: block; height: 1px; margin-bottom: var(--s5); background: var(--line); }
+    footer p { color: var(--text-dim); line-height: 1.35; }
+    footer .links { margin-top: var(--s5); }
+
+    @media (min-width: 580px) {
+      .top { grid-template-columns: 1fr auto; grid-template-areas: 'title homes' 'pitch pitch'; align-items: center; column-gap: var(--s5); }
+      .games { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .start .links, footer .links { display: flex; flex-wrap: wrap; }
+    }
+    @media (min-width: 600px) {
+      :root { --gutter: var(--s5); }
+    }
+    @media (min-width: 900px) {
+      .games { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (min-width: 1024px) {
+      :root { --gutter: var(--s6); }
+    }
   </style>
 </head>
 <body>
-  <header>
+  <header class="top wrap">
     <h1>ThreeJam</h1>
-    <p>A 2D game engine on Three.js where your coding agent proves what its game does.</p>
-    <nav aria-label="ThreeJam">
-      <a href="https://github.com/aksheyd/threejam">GitHub</a>
-      <a href="https://www.npmjs.com/package/threejam">npm</a>
-      <a href="https://github.com/aksheyd/threejam/blob/main/CHANGELOG.md">Changelog</a>
+    <p class="pitch">A 2D game engine on Three.js where your coding agent proves what its game does.</p>
+    <nav aria-label="ThreeJam's homes">
+      <ul>
+        <li><a href="https://github.com/aksheyd/threejam">GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/threejam">npm</a></li>
+        <li><a href="https://github.com/aksheyd/threejam/blob/main/docs/README.md">Docs</a></li>
+      </ul>
     </nav>
   </header>
-  <main>
-    <section aria-labelledby="start">
-      <h2 id="start">Start</h2>
+  <main class="wrap">
+    <section aria-labelledby="games">
+      <h2 id="games">Example games</h2>
+      <p class="lede">Each game is one HTML file from <code>threejam export</code>, and each picture is a frame <code>threejam shot</code> draws at a fixed seed and tick. Most of them need a keyboard: on a phone or tablet without one, only Asteroids plays. Tap to start, then hold a finger where you want to shoot.</p>
+      <ul class="games">
+        <!-- A wide screen shows the first row at once, so its pictures load with the page. -->
+        <li class="card" style="--game: #08080d">
+          <img src="pong.png" width="800" height="600" alt="Pong at 0 to 1, the ball crossing low between the paddles" decoding="async">
+          <h3><a href="pong.html" aria-label="Play Pong">Pong</a></h3>
+          <p class="about">Two players at one keyboard, first to 7 points.</p>
+          <p class="keys">W and S move the left paddle, Up and Down the right; Space starts.</p>
+          <p class="foot"><span class="label">Needs a keyboard</span><a class="code" href="https://github.com/aksheyd/threejam/tree/main/games/pong" aria-label="Pong's code">Code</a></p>
+        </li>
+        <li class="card" style="--game: #000000">
+          <img src="breakout.png" width="800" height="600" alt="Breakout with four bricks gone and the ball rising toward the wall" decoding="async">
+          <h3><a href="breakout.html" aria-label="Play Breakout">Breakout</a></h3>
+          <p class="about">Clear every brick with three lives.</p>
+          <p class="keys">Left and Right, or A and D, move the paddle; Space serves.</p>
+          <p class="foot"><span class="label">Needs a keyboard</span><a class="code" href="https://github.com/aksheyd/threejam/tree/main/games/breakout" aria-label="Breakout's code">Code</a></p>
+        </li>
+        <li class="card" style="--game: #0d170d">
+          <img src="snake.png" width="800" height="600" alt="Snake turning up toward an apple, with a score of 2" decoding="async">
+          <h3><a href="snake.html" aria-label="Play Snake">Snake</a></h3>
+          <p class="about">Eat apples to grow, and don't hit a wall or yourself.</p>
+          <p class="keys">An arrow key starts the snake, and the arrow keys turn it; Space plays again.</p>
+          <p class="foot"><span class="label">Needs a keyboard</span><a class="code" href="https://github.com/aksheyd/threejam/tree/main/games/snake" aria-label="Snake's code">Code</a></p>
+        </li>
+        <li class="card" style="--game: #4ec0ca; --on-game: #08080d">
+          <img src="flappy.png" width="800" height="600" alt="Flappy flying through the first gap" loading="lazy" decoding="async">
+          <h3><a href="flappy.html" aria-label="Play Flappy">Flappy</a></h3>
+          <p class="about">Flap through the gaps between the pipes.</p>
+          <p class="keys">Space starts a run, and each press flaps.</p>
+          <p class="foot"><span class="label">Needs a keyboard</span><a class="code" href="https://github.com/aksheyd/threejam/tree/main/games/flappy" aria-label="Flappy's code">Code</a></p>
+        </li>
+        <li class="card" style="--game: #000000">
+          <img src="invaders.png" width="800" height="600" alt="Invaders at a score of 560, most of the wave gone and the saucer crossing the top" loading="lazy" decoding="async">
+          <h3><a href="invaders.html" aria-label="Play Invaders">Invaders</a></h3>
+          <p class="about">Clear the wave before the invaders reach the bottom.</p>
+          <p class="keys">Left and Right move the cannon; Space starts and fires, and holding it keeps firing.</p>
+          <p class="foot"><span class="label">Needs a keyboard</span><a class="code" href="https://github.com/aksheyd/threejam/tree/main/games/invaders" aria-label="Invaders' code">Code</a></p>
+        </li>
+        <li class="card" style="--game: #0d0d14">
+          <img src="tetris.png" width="800" height="600" alt="Tetris just before a row clears" loading="lazy" decoding="async">
+          <h3><a href="tetris.html" aria-label="Play Tetris">Tetris</a></h3>
+          <p class="about">Fill rows to clear them, until a new piece has no room.</p>
+          <p class="keys">Left and Right move the piece, Up rotates it, and Down drops it faster; Space starts.</p>
+          <p class="foot"><span class="label">Needs a keyboard</span><a class="code" href="https://github.com/aksheyd/threejam/tree/main/games/tetris" aria-label="Tetris's code">Code</a></p>
+        </li>
+        <li class="card" style="--game: #000000">
+          <img src="asteroids.png" width="800" height="600" alt="Asteroids at 810 points, the ship firing at a small rock below it, among rocks of all three sizes" loading="lazy" decoding="async">
+          <h3><a href="asteroids.html" aria-label="Play Asteroids">Asteroids</a></h3>
+          <p class="about">Shoot the rocks, which split when hit, and don't let them hit you.</p>
+          <p class="keys">Left and Right turn, Up thrusts, and Space fires; or hold the mouse to aim and fire, and the right button to thrust. Space or a click starts.</p>
+          <p class="foot"><span class="label">Plays on touch</span><a class="code" href="https://github.com/aksheyd/threejam/tree/main/games/asteroids" aria-label="Asteroids' code">Code</a></p>
+        </li>
+      </ul>
+      <p class="links"><a href="https://github.com/aksheyd/threejam/blob/main/docs/examples.md">What each game shows</a></p>
+    </section>
+
+    <section class="start" aria-labelledby="start">
+      <h2 id="start">Make your own</h2>
       <p>Install ThreeJam in your project:</p>
       <pre><code>npm install -D threejam</code></pre>
       <p>Give your coding agent the skill that teaches it to build and test games with ThreeJam:</p>
-      <pre><code>npx skills add https://github.com/aksheyd/threejam/tree/v0.0.4/skills/threejam</code></pre>
-      <p>Or register ThreeJam's <a href="https://github.com/aksheyd/threejam/blob/main/docs/agents.md#mcp-tools-and-other-forms">MCP server</a> with your coding agents:</p>
+      <pre><code>npx skills add https://github.com/<wbr>aksheyd/<wbr>threejam/<wbr>tree/<wbr>v0.0.4/<wbr>skills/<wbr>threejam</code></pre>
+      <p>Or register ThreeJam's MCP server with your coding agents, so they get the same commands as tools:</p>
       <pre><code>npx threejam mcp add</code></pre>
-      <ul>
+      <ul class="links">
         <li><a href="https://github.com/aksheyd/threejam/blob/main/docs/getting-started.md">Getting started</a></li>
         <li><a href="https://github.com/aksheyd/threejam/blob/main/docs/making-a-game.md">Making a game</a></li>
         <li><a href="https://github.com/aksheyd/threejam/blob/main/docs/agents.md">For coding agents</a></li>
-      </ul>
-    </section>
-    <section aria-labelledby="games">
-      <h2 id="games">Example games</h2>
-      <p>Each one is a single HTML file from <code>threejam export</code>, and each picture is a frame <code>threejam shot</code> draws at a fixed seed and tick. They need a keyboard: on a phone or tablet without one, only Asteroids plays. Tap to start, then hold a finger where you want to shoot.</p>
-      <ul class="games">
-        <li>
-          <a href="pong.html"><img src="pong.png" width="800" height="600" alt="Pong at 0 to 1, the ball crossing low between the paddles" loading="lazy" decoding="async"><b>Pong</b></a>
-          <p>Two players at one keyboard, first to 7 points.</p>
-          <p>W and S move the left paddle, Up and Down the right; Space starts. <a href="https://github.com/aksheyd/threejam/tree/main/games/pong">Code</a></p>
-        </li>
-        <li>
-          <a href="breakout.html"><img src="breakout.png" width="800" height="600" alt="Breakout with four bricks gone and the ball rising toward the wall" loading="lazy" decoding="async"><b>Breakout</b></a>
-          <p>Clear every brick with three lives.</p>
-          <p>Left and Right, or A and D, move the paddle; Space serves. <a href="https://github.com/aksheyd/threejam/tree/main/games/breakout">Code</a></p>
-        </li>
-        <li>
-          <a href="snake.html"><img src="snake.png" width="800" height="600" alt="Snake turning up toward an apple, with a score of 2" loading="lazy" decoding="async"><b>Snake</b></a>
-          <p>Eat apples to grow, and don't hit a wall or yourself.</p>
-          <p>An arrow key starts the snake, and the arrow keys turn it; Space plays again. <a href="https://github.com/aksheyd/threejam/tree/main/games/snake">Code</a></p>
-        </li>
-        <li>
-          <a href="flappy.html"><img src="flappy.png" width="800" height="600" alt="Flappy flying through the first gap" loading="lazy" decoding="async"><b>Flappy</b></a>
-          <p>Flap through the gaps between the pipes.</p>
-          <p>Space starts a run, and each press flaps. <a href="https://github.com/aksheyd/threejam/tree/main/games/flappy">Code</a></p>
-        </li>
-        <li>
-          <a href="invaders.html"><img src="invaders.png" width="800" height="600" alt="Invaders at a score of 560, most of the wave gone and the saucer crossing the top" loading="lazy" decoding="async"><b>Invaders</b></a>
-          <p>Clear the wave before the invaders reach the bottom.</p>
-          <p>Left and Right move the cannon; Space starts and fires, and holding it keeps firing. <a href="https://github.com/aksheyd/threejam/tree/main/games/invaders">Code</a></p>
-        </li>
-        <li>
-          <a href="tetris.html"><img src="tetris.png" width="800" height="600" alt="Tetris just before a row clears" loading="lazy" decoding="async"><b>Tetris</b></a>
-          <p>Fill rows to clear them, until a new piece has no room.</p>
-          <p>Left and Right move the piece, Up rotates it, and Down drops it faster; Space starts. <a href="https://github.com/aksheyd/threejam/tree/main/games/tetris">Code</a></p>
-        </li>
-        <li>
-          <a href="asteroids.html"><img src="asteroids.png" width="800" height="600" alt="Asteroids at 810 points, the ship firing at a small rock below it, among rocks of all three sizes" loading="lazy" decoding="async"><b>Asteroids</b></a>
-          <p>Shoot the rocks, which split when hit, and don't let them hit you.</p>
-          <p>Left and Right turn, Up thrusts, and Space fires; or hold the mouse to aim and fire, and the right button to thrust. Space or a click starts. <a href="https://github.com/aksheyd/threejam/tree/main/games/asteroids">Code</a></p>
-        </li>
+        <li><a href="https://github.com/aksheyd/threejam/blob/main/docs/agents.md#mcp-tools-and-other-forms">MCP setup</a></li>
       </ul>
     </section>
   </main>
-  <footer>
-    <p>ThreeJam is a prototype, and <a href="https://github.com/aksheyd/threejam/blob/main/AGENTS.md#not-in-threejam-yet">some things aren't in it yet</a>. MIT license. <a href="https://github.com/aksheyd/threejam/releases">Releases</a></p>
+  <footer class="wrap">
+    <p>ThreeJam is a prototype, under the MIT license.</p>
+    <ul class="links">
+      <li><a href="https://github.com/aksheyd/threejam/blob/main/AGENTS.md#not-in-threejam-yet">What's missing</a></li>
+      <li><a href="https://github.com/aksheyd/threejam/blob/main/CHANGELOG.md">Changelog</a></li>
+      <li><a href="https://github.com/aksheyd/threejam/releases">Releases</a></li>
+      <li><a href="https://github.com/aksheyd/threejam/blob/main/LICENSE">MIT license</a></li>
+    </ul>
   </footer>
 </body>
 </html>

@@ -65,7 +65,8 @@ test("the docs install the skill from the newest release's tag, and CHANGELOG.md
   const [root] = manifestsAbove(ROOT)
   const source = `${String(root.json.homepage)}/tree/v${released[0]}/skills/threejam`
   for (const doc of ['README.md', join('docs', 'agents.md'), join('.github', 'pages', 'index.html')]) {
-    const sources = [...readFileSync(join(ROOT, doc), 'utf8').matchAll(/npx skills add (https:[^\s<]+)/g)].map((match) => match[1])
+    // The index marks where a long URL may wrap with <wbr>, which isn't part of the URL.
+    const sources = [...readFileSync(join(ROOT, doc), 'utf8').replaceAll('<wbr>', '').matchAll(/npx skills add (https:[^\s<]+)/g)].map((match) => match[1])
     assert.deepEqual(sources, [source], `${doc} should install the skill from ${source}`)
   }
 })
