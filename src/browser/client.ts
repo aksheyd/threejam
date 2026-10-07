@@ -53,9 +53,10 @@ type Source =
   | { readonly kind: 'driver'; readonly driver: Driver }
 
 const TICK_MS = 1000 / 60
-const BUTTONS: ReadonlyMap<number, Key> = new Map([
-  [0, 'Mouse'],
-  [2, 'MouseRight'],
+// Each mouse key by the button a pointer event names, with its bit in the event's buttons.
+const BUTTONS: ReadonlyMap<number, { readonly key: Key; readonly bit: number }> = new Map([
+  [0, { key: 'Mouse', bit: 1 }],
+  [2, { key: 'MouseRight', bit: 2 }],
 ])
 
 // The game's, view's, and driver's modules, each loaded when called.
@@ -272,13 +273,16 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     text: () => JSON.stringify({ tick: current().tick, entities: current().state() }),
   })
 
+  const press = (key: Key) => {
+    down.add(key)
+    tapped.add(key)
+  }
   addEventListener('keydown', (event) => {
     speaker?.unlock()
     if (event.metaKey) return
     const key = keyFromCode(event.code)
     if (key) {
-      down.add(key)
-      tapped.add(key)
+      press(key)
       event.preventDefault()
     }
   })
@@ -293,23 +297,27 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     const y = 1.5 - ((event.clientY - box.top) / box.height) * 3
     pointer = Object.freeze({ x: Math.min(2, Math.max(-2, x)), y: Math.min(1.5, Math.max(-1.5, y)) })
   }
-  addEventListener('pointermove', aim)
+  // A button pressed or let go while another is held comes as a pointermove that names it, with buttons saying whether it's down now.
+  addEventListener('pointermove', (event) => {
+    aim(event)
+    const button = BUTTONS.get(event.button)
+    if (button === undefined) return
+    if (event.buttons & button.bit) press(button.key)
+    else down.delete(button.key)
+  })
   addEventListener('pointerdown', (event) => {
     speaker?.unlock()
     aim(event)
-    const key = BUTTONS.get(event.button)
-    if (key) {
-      down.add(key)
-      tapped.add(key)
-    }
+    const button = BUTTONS.get(event.button)
+    if (button) press(button.key)
   })
   addEventListener('pointerup', (event) => {
-    const key = BUTTONS.get(event.button)
-    if (key) down.delete(key)
+    const button = BUTTONS.get(event.button)
+    if (button) down.delete(button.key)
   })
   // A pointer the browser takes over, like a finger that starts to pan the page, ends with pointercancel instead of pointerup, and a cancel needn't say which button it held.
   addEventListener('pointercancel', () => {
-    for (const key of BUTTONS.values()) down.delete(key)
+    for (const { key } of BUTTONS.values()) down.delete(key)
   })
   addEventListener('contextmenu', (event) => event.preventDefault())
   addEventListener('blur', () => {

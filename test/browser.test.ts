@@ -619,6 +619,57 @@ test("a played page takes keys by where they sit, holds a tap shorter than a tic
   ])
 })
 
+test('a played page holds a mouse button pressed while another is held, whichever comes first, holds one tapped meanwhile for a tick, and keeps the other held when either lets go', { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'buttons-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), INPUT)
+  const file = join(dir, 'input.html')
+  await exportGame({ dir, out: file })
+  const tab = await newTab(t)
+  await tab.setViewport({ width: 1000, height: 600, deviceScaleFactor: 1 })
+  await openPage(tab, pathToFileURL(file).href)
+  await tab.waitForFunction('window.engine !== undefined')
+  await tab.evaluate(() => {
+    window.engine.pause()
+    window.engine.reset({ seed: 0 })
+  })
+  const step = () => tab.evaluate(() => window.engine.step())
+  // The browser sends a button pressed or let go while another is held as a pointermove, not a pointerdown or pointerup.
+  await tab.mouse.move(500, 300)
+  await tab.mouse.down({ button: 'left' })
+  await step()
+  await tab.mouse.down({ button: 'right' })
+  await step()
+  await tab.mouse.up({ button: 'right' })
+  await step()
+  await tab.mouse.down({ button: 'right' })
+  await tab.mouse.up({ button: 'right' })
+  await step()
+  await step()
+  await tab.mouse.up({ button: 'left' })
+  await step()
+  await tab.mouse.down({ button: 'right' })
+  await step()
+  await tab.mouse.down({ button: 'left' })
+  await step()
+  await tab.mouse.up({ button: 'right' })
+  await step()
+  await tab.mouse.up({ button: 'left' })
+  await step()
+  assert.deepEqual(await tab.evaluate(() => window.engine.state('input')[0].ticks), [
+    'Mouse @ 0 0',
+    'Mouse MouseRight @ 0 0',
+    'Mouse @ 0 0',
+    'Mouse MouseRight @ 0 0',
+    'Mouse @ 0 0',
+    ' @ 0 0',
+    'MouseRight @ 0 0',
+    'Mouse MouseRight @ 0 0',
+    'Mouse @ 0 0',
+    ' @ 0 0',
+  ])
+})
+
 test('on a touch screen, a played page follows a finger dragged on the game until it lifts, and lets go of Mouse when the browser takes a touch over, as it does one dragged beside the game', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'touch-'))
   made.push(dir)
