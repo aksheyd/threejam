@@ -315,12 +315,12 @@ test('a game that keeps more than the 1 GB a sandbox may grow to runs out of mem
   assert.deepEqual({ code: sim.code, json: sim.json }, { code: 1, json: { code: 'GAME_ERROR', message: 'the game ran out of memory; look for a list or a loop that keeps growing' } })
 })
 
-// Each load is a short-lived process of its own, so a long run of them, as in an MCP server, keeps no temp files.
+// Each load is a process of its own that shares only the temporary folder with the next, so what a long run of loads would leave there, as an MCP server's would, shows after two.
 test('repeated loads leave no growing temp files', () => {
   const tmp = mkdtempSync(join(TMP, 'tmproot-'))
   made.push(tmp)
   const { dir } = folder({ 'game.ts': game('') })
-  for (let i = 0; i < 6; i++) threejam(['sim', dir, '--ticks', '1', '--only', 'ball'], { TMPDIR: tmp, TMP: tmp, TEMP: tmp })
+  for (let i = 0; i < 2; i++) threejam(['sim', dir, '--ticks', '1', '--only', 'ball'], { TMPDIR: tmp, TMP: tmp, TEMP: tmp })
   assert.deepEqual(readdirSync(tmp), [], `loads left temp files: ${readdirSync(tmp).join(', ')}`)
 })
 
