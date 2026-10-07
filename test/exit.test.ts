@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -47,8 +47,11 @@ function ended(pid: number): boolean {
 // What Linux shows of a sandbox once its shell has become Node: its environment, but for the SHLVL=0 that bash's exec adds, and which descriptors are sockets, which should be only the server's 0 to 2.
 async function sandboxed(pid: number): Promise<{ env: string[]; sockets: number[] }> {
   await until('the sandbox to become Node', () => realpathSync(`/proc/${pid}/exe`) === realpathSync(process.execPath))
+  // Linux shows Node as the exe a moment before it lays out Node's environment, which reads empty until then, and a sandbox's environment is never empty.
+  await until("the sandbox's environment", () => readFileSync(`/proc/${pid}/environ`, 'utf8') !== '')
   const env = readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').filter((entry) => entry !== '' && entry !== 'SHLVL=0')
-  const sockets = readdirSync(`/proc/${pid}/fd`).filter((fd) => readlinkSync(`/proc/${pid}/fd/${fd}`).startsWith('socket:'))
+  // Node opens and closes files as it starts, so a descriptor listed can be gone by the time it's looked at.
+  const sockets = readdirSync(`/proc/${pid}/fd`).filter((fd) => statSync(`/proc/${pid}/fd/${fd}`, { throwIfNoEntry: false })?.isSocket())
   return { env: env.sort(), sockets: sockets.map(Number).sort((a, b) => a - b) }
 }
 
