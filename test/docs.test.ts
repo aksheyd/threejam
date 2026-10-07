@@ -198,10 +198,21 @@ test('AGENTS.md, the agents guide, and the skill name the same MCP tools, which 
 const GAMES = readdirSync(join(ROOT, 'games'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
 const INDEX = readFileSync(join(ROOT, '.github', 'pages', 'index.html'), 'utf8')
 
-test('the Pages index links the page export writes for every example game, and no other file of the site', () => {
-  // The site is index.html, sitemap.xml, and one exported page per folder in games/, of which the index links the games.
+test('the Pages index links the page export writes for every example game and shows its picture, and links no other file of the site', () => {
+  // The site is index.html, sitemap.xml, and each game's exported page and picture, of which the index links the games and their pictures.
   const local = new Set([...INDEX.matchAll(/\b(?:href|src)="([^"]+)"/g)].map((match) => match[1]).filter((link) => !/^[a-z][a-z\d+.-]*:/i.test(link)))
-  assert.deepEqual([...local].toSorted(), GAMES.map((game) => `${game}.html`).toSorted(), '.github/pages/index.html should link the page export writes for each folder in games/, and nothing else on the site')
+  const files = GAMES.flatMap((game) => [`${game}.html`, `${game}.png`])
+  assert.deepEqual([...local].toSorted(), files.toSorted(), ".github/pages/index.html should link each game's page and picture, and nothing else on the site")
+})
+
+test('every example game has an 800 by 600 picture in docs/images, drawn by a shot command docs/examples.md records', () => {
+  const examples = readFileSync(join(ROOT, 'docs', 'examples.md'), 'utf8')
+  for (const game of GAMES) {
+    const png = readFileSync(join(ROOT, 'docs', 'images', `${game}.png`))
+    // A PNG's header chunk comes right after its 8-byte signature, and starts with the width and height.
+    assert.deepEqual([png.toString('latin1', 1, 4), png.readUInt32BE(16), png.readUInt32BE(20)], ['PNG', 800, 600], `docs/images/${game}.png should be an 800 by 600 PNG`)
+    assert.match(examples, new RegExp(`^npx threejam shot games/${game} .*--at \\d+ -o docs/images/${game}\\.png$`, 'm'), `docs/examples.md should give the shot command that draws docs/images/${game}.png`)
+  }
 })
 
 // GitHub's anchor for a Markdown heading: lowercase, without punctuation, and with hyphens for spaces.

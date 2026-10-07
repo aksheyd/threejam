@@ -34,13 +34,15 @@ jobs:
 
       - run: npm ci --ignore-scripts
 
-      # A new folder outside the checkout, so the site holds the exported games, the index, and the sitemap, and nothing else.
-      - name: Export every game and add the index and the sitemap
+      # A new folder outside the checkout, so the site holds the exported games, their pictures, the index, and the sitemap, and nothing else.
+      - name: Export every game and add its picture, the index, and the sitemap
         run: |
           site="$RUNNER_TEMP/site"
           mkdir "$site"
           for dir in games/*/; do
-            npx threejam export "${dir%/}" -o "$site/$(basename "$dir").html"
+            name=$(basename "$dir")
+            npx threejam export "games/$name" -o "$site/$name.html"
+            cp "docs/images/$name.png" "$site/"
           done
           cp .github/pages/index.html .github/pages/sitemap.xml "$site/"
 

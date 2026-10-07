@@ -14,6 +14,7 @@
     code, pre { font: 0.9em ui-monospace, Menlo, Consolas, monospace; }
     pre { overflow-x: auto; padding: 0.75rem 1rem; background: #12121a; }
     .games { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); padding: 0; list-style: none; }
+    .games img { display: block; width: 100%; height: auto; }
   </style>
 </head>
 <body>
@@ -43,40 +44,40 @@
     </section>
     <section aria-labelledby="games">
       <h2 id="games">Example games</h2>
-      <p>Each one is a single HTML file from <code>threejam export</code>. They need a keyboard: on a phone or tablet without one, only Asteroids plays. Tap to start, then hold a finger where you want to shoot.</p>
+      <p>Each one is a single HTML file from <code>threejam export</code>, and each picture is a frame <code>threejam shot</code> draws at a fixed seed and tick. They need a keyboard: on a phone or tablet without one, only Asteroids plays. Tap to start, then hold a finger where you want to shoot.</p>
       <ul class="games">
         <li>
-          <a href="pong.html"><b>Pong</b></a>
+          <a href="pong.html"><img src="pong.png" width="800" height="600" alt="Pong at 0 to 1, the ball crossing low between the paddles" loading="lazy" decoding="async"><b>Pong</b></a>
           <p>Two players at one keyboard, first to 7 points.</p>
           <p>W and S move the left paddle, Up and Down the right; Space starts. <a href="https://github.com/aksheyd/threejam/tree/main/games/pong">Code</a></p>
         </li>
         <li>
-          <a href="breakout.html"><b>Breakout</b></a>
+          <a href="breakout.html"><img src="breakout.png" width="800" height="600" alt="Breakout with four bricks gone and the ball rising toward the wall" loading="lazy" decoding="async"><b>Breakout</b></a>
           <p>Clear every brick with three lives.</p>
           <p>Left and Right, or A and D, move the paddle; Space serves. <a href="https://github.com/aksheyd/threejam/tree/main/games/breakout">Code</a></p>
         </li>
         <li>
-          <a href="snake.html"><b>Snake</b></a>
+          <a href="snake.html"><img src="snake.png" width="800" height="600" alt="Snake turning up toward an apple, with a score of 2" loading="lazy" decoding="async"><b>Snake</b></a>
           <p>Eat apples to grow, and don't hit a wall or yourself.</p>
           <p>An arrow key starts the snake, and the arrow keys turn it; Space plays again. <a href="https://github.com/aksheyd/threejam/tree/main/games/snake">Code</a></p>
         </li>
         <li>
-          <a href="flappy.html"><b>Flappy</b></a>
+          <a href="flappy.html"><img src="flappy.png" width="800" height="600" alt="Flappy flying through the first gap" loading="lazy" decoding="async"><b>Flappy</b></a>
           <p>Flap through the gaps between the pipes.</p>
           <p>Space starts a run, and each press flaps. <a href="https://github.com/aksheyd/threejam/tree/main/games/flappy">Code</a></p>
         </li>
         <li>
-          <a href="invaders.html"><b>Invaders</b></a>
+          <a href="invaders.html"><img src="invaders.png" width="800" height="600" alt="Invaders at a score of 560, most of the wave gone and the saucer crossing the top" loading="lazy" decoding="async"><b>Invaders</b></a>
           <p>Clear the wave before the invaders reach the bottom.</p>
           <p>Left and Right move the cannon; Space starts and fires, and holding it keeps firing. <a href="https://github.com/aksheyd/threejam/tree/main/games/invaders">Code</a></p>
         </li>
         <li>
-          <a href="tetris.html"><b>Tetris</b></a>
+          <a href="tetris.html"><img src="tetris.png" width="800" height="600" alt="Tetris just before a row clears" loading="lazy" decoding="async"><b>Tetris</b></a>
           <p>Fill rows to clear them, until a new piece has no room.</p>
           <p>Left and Right move the piece, Up rotates it, and Down drops it faster; Space starts. <a href="https://github.com/aksheyd/threejam/tree/main/games/tetris">Code</a></p>
         </li>
         <li>
-          <a href="asteroids.html"><b>Asteroids</b></a>
+          <a href="asteroids.html"><img src="asteroids.png" width="800" height="600" alt="Asteroids at 810 points, the ship firing at a small rock below it, among rocks of all three sizes" loading="lazy" decoding="async"><b>Asteroids</b></a>
           <p>Shoot the rocks, which split when hit, and don't let them hit you.</p>
           <p>Left and Right turn, Up thrusts, and Space fires; or hold the mouse to aim and fire, and the right button to thrust. Space or a click starts. <a href="https://github.com/aksheyd/threejam/tree/main/games/asteroids">Code</a></p>
         </li>

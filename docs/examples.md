@@ -12,11 +12,14 @@ Play them in the browser from the [gallery](https://aksheyd.github.io/threejam/)
 | [Tetris](../games/tetris) ([play](https://aksheyd.github.io/threejam/tetris.html)) | Space starts; Left and Right move the piece, Up rotates it, and Down drops it faster. | A [driver](../games/tetris/plan.ts) that plays seed 0's first seven pieces into two cleared rows |
 | [Asteroids](../games/asteroids) ([play](https://aksheyd.github.io/threejam/asteroids.html)) | Space or a click starts; Left and Right (or A and D) turn, Up (or W) thrusts, and Space fires. Or hold the mouse to aim at the pointer and fire, and the right button to thrust. | SVG rocks that spin and split, bullets and rocks pooled with `spawn`, a ship of turned parts, sounds, and a [driver](../games/asteroids/autopilot.ts) that plays with the mouse |
 
-Keys are places on the keyboard, named for what a US keyboard has there, so on a French AZERTY keyboard W, A, S, and D are the keys marked Z, Q, S, and D. In a clone of this repo, play any of them with `npx threejam run games/<name>`. The frames at the top of the [README](../README.md) come from `shot`, three of them played by those drivers:
+Keys are places on the keyboard, named for what a US keyboard has there, so on a French AZERTY keyboard W, A, S, and D are the keys marked Z, Q, S, and D. In a clone of this repo, play any of them with `npx threejam run games/<name>`. The frames at the top of the [README](../README.md) and in the [gallery](https://aksheyd.github.io/threejam/) come from `shot` at the default seed, 0, three of them played by those drivers and the rest by scheduled keys:
 
 ```bash
 npx threejam shot games/asteroids --driver games/asteroids/autopilot.ts --at 420 -o docs/images/asteroids.png
 npx threejam shot games/invaders --driver games/invaders/autopilot.ts --at 1075 -o docs/images/invaders.png
 npx threejam shot games/flappy --press Space@1,35,69,103,137,171 --at 200 -o docs/images/flappy.png
 npx threejam shot games/tetris --driver games/tetris/plan.ts --at 285 -o docs/images/tetris.png
+npx threejam shot games/pong --press Space@1 --hold Up@2-27 --hold S@300-322 --at 425 -o docs/images/pong.png
+npx threejam shot games/breakout --press Space@1 --hold Left@140-152 --at 495 -o docs/images/breakout.png
+npx threejam shot games/snake --press Up@1,266 --press Left@58 --press Down@66 --press Right@178 --at 282 -o docs/images/snake.png
 ```
