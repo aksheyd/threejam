@@ -1,6 +1,6 @@
 # Example games
 
-Play them in the browser from the [gallery](https://aksheyd.github.io/threejam/), where each one is the HTML file `npx threejam export` writes for it. They need a keyboard. Asteroids also plays with the mouse, and on a touch screen a tap starts it and a held finger aims and fires.
+Play them in the browser from the [gallery](https://aksheyd.github.io/threejam/), where each one is the HTML file `npx threejam export` writes for it. Play them with a keyboard, or on a phone or tablet with the keys each one shows next to it, one for each key it reads. Asteroids also plays with the mouse, and on a touch screen a tap on the game starts it and a held finger aims and fires.
 
 | Game | How to play | Worth reading for |
 | --- | --- | --- |

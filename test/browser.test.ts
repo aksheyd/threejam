@@ -8,6 +8,7 @@ import { join, relative, sep } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import type { BoundingBox, HTTPRequest, KeyInput, Page } from 'puppeteer-core'
+import asteroids from '../games/asteroids/game.ts'
 import pong from '../games/pong/game.ts'
 import { parseGame, simulate } from '../src/engine.ts'
 import { RunError } from '../src/errors.ts'
@@ -692,10 +693,24 @@ test('a played page holds a mouse button pressed while another is held, whicheve
   ])
 })
 
+// Each tick, the mouse buttons held and where the pointer is, from a game that reads no keyboard key, so a touch screen shows no keys beside it.
+const POINTER = [
+  "import { defineGame, listOf } from 'threejam'",
+  '',
+  'export default defineGame({',
+  "  entities: { input: { ticks: listOf('') } },",
+  '  update({ input }, ctx) {',
+  '    const { x, y } = ctx.input.pointer',
+  "    input.ticks.push(`${(['Mouse', 'MouseRight'] as const).filter((key) => ctx.input.held(key)).join(' ')} @ ${x} ${y}`)",
+  '  },',
+  '})',
+  '',
+].join('\n')
+
 test('on a touch screen, a played page follows a finger dragged on the game until it lifts, and lets go of Mouse when the browser takes a touch over, as it does one dragged beside the game', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'touch-'))
   made.push(dir)
-  writeFileSync(join(dir, 'game.ts'), INPUT)
+  writeFileSync(join(dir, 'game.ts'), POINTER)
   const file = join(dir, 'input.html')
   await exportGame({ dir, out: file })
   const tab = await newTab(t)
@@ -733,6 +748,181 @@ test('on a touch screen, a played page follows a finger dragged on the game unti
   await drag([80, 300], [10, 300], { moved: ['pointercancel'], times: 2 })
   assert.deepEqual(await tab.evaluate(() => window.engine.state('input')[0].ticks), ['Mouse @ 0 0', 'Mouse @ 1 -0.75', ' @ 1 -0.75', 'Mouse @ -2 0', ' @ -2 0', ' @ -2 0'])
   assert.deepEqual(await tab.evaluate(() => (Reflect.get(window, 'seen') as string[]).filter((each) => each === 'pointerup' || each === 'pointercancel')), ['pointerup', 'pointercancel'])
+})
+
+test("on a touch screen, a played page shows a key for each keyboard key the game reads, once it reads it, below or beside the game and never on it, which fingers hold as the keyboard would and never as the mouse, so the page reaches sim's state; without touch it shows none", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'threejam-export-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const file = join(dir, 'asteroids.html')
+  await exportGame({ dir: 'games/asteroids', out: file })
+  const tab = await newTab(t)
+  await tab.setViewport({ width: 393, height: 851, deviceScaleFactor: 1, isMobile: true, hasTouch: true })
+  // A key stops the events of the fingers on it, so they're watched before they reach it.
+  await tab.evaluateOnNewDocument(() => {
+    const seen: string[] = []
+    Reflect.set(window, 'seen', seen)
+    for (const type of ['pointerdown', 'pointerup', 'pointercancel']) addEventListener(type, (event) => seen.push(`${type} ${event.target instanceof HTMLElement ? event.target.dataset.key : ''}`), { capture: true })
+  })
+  await openPage(tab, pathToFileURL(file).href)
+  await tab.waitForFunction('window.engine !== undefined')
+  await tab.evaluate(() => {
+    window.engine.pause()
+    window.engine.reset({ seed: 3 })
+  })
+  const step = (count = 1) => tab.evaluate((ticks) => window.engine.step(ticks), count)
+  const keys = () => tab.$$eval('button', (buttons) => buttons.map((button) => button.dataset.key))
+  // Chrome answers for a touch before the page has had its events, so each tick waits until the page has seen the touch's.
+  const saw = (event: string, times = 1) => tab.waitForFunction((wanted, count) => (Reflect.get(window, 'seen') as string[]).filter((each) => each === wanted).length >= count, { timeout: 10_000 }, event, times)
+  const finger = async (key: string) => {
+    const box = await (await tab.waitForSelector(`button[data-key="${key}"]`))?.boundingBox()
+    assert.ok(box, `the ${key} key has no box`)
+    const touch = await tab.touchscreen.touchStart(box.x + box.width / 2, box.y + box.height / 2)
+    await saw(`pointerdown ${key}`)
+    return { lift: async () => (await touch.end(), await saw(`pointerup ${key}`)) }
+  }
+
+  // Asteroids asks about Space and the mouse until a game starts, then about the keys that fly the ship.
+  await step()
+  await tab.waitForSelector('button[data-key="Space"]')
+  assert.deepEqual(await keys(), ['Space'])
+  const space = await finger('Space')
+  await step()
+  await space.lift()
+  await step()
+  await tab.waitForFunction(() => document.querySelectorAll('button').length > 1)
+  assert.deepEqual((await keys()).toSorted(), ['A', 'D', 'Left', 'Right', 'Space', 'Up', 'W'])
+  const left = await finger('Left')
+  await step(4)
+  const up = await finger('Up')
+  await step(6)
+  await left.lift()
+  await step()
+  await up.lift()
+  await step()
+  const expected = simulate(asteroids, { seed: 3, ticks: 15, hold: ['Space@2', 'Left@4-13', 'Up@8-14'] }).snapshots[0].entities
+  assert.deepEqual(await tab.evaluate(() => window.engine.state()), expected)
+  // Held upright, the keys sit below the game, and turned on its side, beside it.
+  const clearOfTheGame = async () => {
+    const layout = await tab.evaluate(() => {
+      const box = (element: Element) => {
+        const { left, top, right, bottom } = element.getBoundingClientRect()
+        return { left, top, right, bottom }
+      }
+      const canvas = document.querySelector('canvas')
+      if (!canvas) throw new Error('the page has no canvas')
+      return { width: innerWidth, height: innerHeight, canvas: box(canvas), keys: [...document.querySelectorAll('button')].map(box) }
+    })
+    const apart = (a: typeof layout.canvas, b: typeof layout.canvas) => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top
+    assert.ok(layout.keys.every((key) => key.left >= 0 && key.top >= 0 && key.right <= layout.width && key.bottom <= layout.height && apart(key, layout.canvas)), JSON.stringify(layout))
+  }
+  await clearOfTheGame()
+  await tab.setViewport({ width: 851, height: 393, deviceScaleFactor: 1, isMobile: true, hasTouch: true })
+  await tab.waitForFunction(() => document.querySelector('canvas')?.getBoundingClientRect().width !== 393, { timeout: 10_000 })
+  await clearOfTheGame()
+
+  const desktop = await newTab(t)
+  await desktop.setViewport({ width: 1000, height: 600, deviceScaleFactor: 1 })
+  await openPage(desktop, pathToFileURL(file).href)
+  await desktop.waitForFunction('window.engine !== undefined && window.engine.tick > 1')
+  await desktop.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
+  assert.deepEqual(await desktop.$$eval('button', (buttons) => buttons.length), 0)
+})
+
+// Each tick, which of Space, Left, Right, and the mouse are held, and where the pointer is: a game whose Left and Right keys share a row with a gap between them.
+const KEYED = [
+  "import { defineGame, listOf } from 'threejam'",
+  '',
+  'export default defineGame({',
+  "  entities: { input: { ticks: listOf('') } },",
+  '  update({ input }, ctx) {',
+  '    const { x, y } = ctx.input.pointer',
+  "    input.ticks.push(`${(['Space', 'Left', 'Right', 'Mouse'] as const).filter((key) => ctx.input.held(key)).join(' ')} @ ${x} ${y}`)",
+  '  },',
+  '})',
+  '',
+].join('\n')
+
+test('on a touch screen, a page that shows a key for each keyboard key the game reads keeps a finger on a key from the game, even one that wobbles and slides onto it, and a tap between keys too, holds a key tapped between two ticks for a tick, and holds a key until the last finger on it lifts', { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'keys-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), KEYED)
+  const file = join(dir, 'keys.html')
+  await exportGame({ dir, out: file })
+  const tab = await newTab(t)
+  await tab.setViewport({ width: 393, height: 851, deviceScaleFactor: 1, isMobile: true, hasTouch: true })
+  // A key stops the events of the fingers on it, so they're watched before they reach it, by what each is on.
+  await tab.evaluateOnNewDocument(() => {
+    const seen: string[] = []
+    Reflect.set(window, 'seen', seen)
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
+      addEventListener(type, (event) => seen.push(`${type} ${event.target instanceof HTMLElement ? (event.target.dataset.key ?? event.target.nodeName) : ''}`), { capture: true })
+    }
+  })
+  await openPage(tab, pathToFileURL(file).href)
+  await tab.waitForFunction('window.engine !== undefined')
+  await tab.evaluate(() => {
+    window.engine.pause()
+    window.engine.reset({ seed: 0 })
+  })
+  const step = () => tab.evaluate(() => window.engine.step())
+  // Chrome answers for a touch before the page has had its events, so each tick waits until the page has seen the touch's.
+  const saw = (event: string, times: number) => tab.waitForFunction((wanted, count) => (Reflect.get(window, 'seen') as string[]).filter((each) => each === wanted).length >= count, { timeout: 10_000 }, event, times)
+  const middle = async (key: string): Promise<[number, number]> => {
+    const box = await (await tab.waitForSelector(`button[data-key="${key}"]`, { timeout: 10_000 }))?.boundingBox()
+    assert.ok(box, `the ${key} key has no box`)
+    return [box.x + box.width / 2, box.y + box.height / 2]
+  }
+  await step()
+  const [space, left, right] = [await middle('Space'), await middle('Left'), await middle('Right')]
+  const game = await tab.$eval('canvas', (canvas) => {
+    const { left, top, width, height } = canvas.getBoundingClientRect()
+    return [left + width / 2, top + height / 2] as const
+  })
+
+  const finger = await tab.touchscreen.touchStart(...space)
+  await saw('pointerdown Space', 1)
+  await finger.move(space[0] + 6, space[1] - 6)
+  await saw('pointermove Space', 1)
+  await step()
+  await finger.move(...game)
+  await saw('pointermove Space', 2)
+  await step()
+  await finger.end()
+  await saw('pointerup Space', 1)
+  await step()
+  // Left and Right sit in one row of their pad, and the middle of it is the pad's alone.
+  await tab.touchscreen.tap((left[0] + right[0]) / 2, left[1])
+  await saw('pointerup DIV', 1)
+  await step()
+  const tap = await tab.touchscreen.touchStart(...space)
+  await saw('pointerdown Space', 2)
+  await tap.end()
+  await saw('pointerup Space', 2)
+  await step()
+  await step()
+  const first = await tab.touchscreen.touchStart(left[0] - 8, left[1])
+  await saw('pointerdown Left', 1)
+  const second = await tab.touchscreen.touchStart(left[0] + 8, left[1])
+  await saw('pointerdown Left', 2)
+  await step()
+  await first.end()
+  await saw('pointerup Left', 1)
+  await step()
+  await second.end()
+  await saw('pointerup Left', 2)
+  await step()
+  assert.deepEqual(await tab.evaluate(() => window.engine.state('input')[0].ticks), [
+    ' @ 0 0',
+    'Space @ 0 0',
+    'Space @ 0 0',
+    ' @ 0 0',
+    ' @ 0 0',
+    'Space @ 0 0',
+    ' @ 0 0',
+    'Left @ 0 0',
+    'Left @ 0 0',
+    ' @ 0 0',
+  ])
 })
 
 // A snapshot as JSON carries it, which is how render_game_to_text gives one.

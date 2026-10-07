@@ -6,6 +6,7 @@ import { guarded, newRun, throughout } from './guard.ts'
 import { InputState, controlsOf, pointerMoves, schedule } from './input.ts'
 import { checkSeed, createRandom } from './random.ts'
 import {
+  KEYS,
   driverFor,
   type Context,
   type Controls,
@@ -88,6 +89,11 @@ export class Session<E extends Entities = Entities> {
 
   get world(): ReadonlyDeep<World<E>> {
     return this.#store.frozen
+  }
+
+  // The keys game code has asked ctx.input about so far, in the order KEYS has them.
+  get keysRead(): readonly Key[] {
+    return KEYS.filter((key) => this.#input.asked.has(key))
   }
 
   start(): void {

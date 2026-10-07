@@ -7,6 +7,7 @@ import { loadImages, parseAssets, type Assets } from './assets.ts'
 import { barePage } from './bare.ts'
 import { Recorder } from './playtest.ts'
 import { Speaker } from './sound.ts'
+import { TouchKeys } from './touch.ts'
 import { View, parseView, type ViewModule } from './view.ts'
 
 // run is served by threejam run, whose server takes the token with /events, /quit, and /record, and the build the page comes from with /events and /record, gives the failure when the latest save didn't build, and says whether to record the playtest, shot by threejam shot, and export is one file opened from disk, with no server behind it.
@@ -121,6 +122,10 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   const down = new Set<Key>()
   // A tap shorter than a tick still counts as held for one tick.
   const tapped = new Set<Key>()
+  const press = (key: Key) => {
+    down.add(key)
+    tapped.add(key)
+  }
   let pointer = CENTER
   let session: Session | undefined
   let source: Source = { kind: 'keyboard' }
@@ -221,9 +226,23 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     return
   }
 
+  // A touch on a key wakes the page's audio as a key press does; a touch only counts for that once the finger lifts.
+  const touch = new TouchKeys({
+    press(key) {
+      speaker?.unlock()
+      press(key)
+    },
+    release(key) {
+      speaker?.unlock()
+      down.delete(key)
+    },
+    changed: () => fit(),
+  })
   const fit = () => {
-    const scale = Math.min(innerWidth / 800, innerHeight / 600)
-    view.resize(Math.floor(800 * scale), Math.floor(600 * scale))
+    const room = touch.room(innerWidth, innerHeight)
+    const scale = Math.min((innerWidth - room.left - room.right) / 800, (innerHeight - room.top - room.bottom) / 600)
+    canvas.style.inset = `${room.top}px ${room.right}px ${room.bottom}px ${room.left}px`
+    view.resize(Math.max(1, Math.floor(800 * scale)), Math.max(1, Math.floor(600 * scale)))
   }
   fit()
   addEventListener('resize', fit)
@@ -273,10 +292,6 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
     text: () => JSON.stringify({ tick: current().tick, entities: current().state() }),
   })
 
-  const press = (key: Key) => {
-    down.add(key)
-    tapped.add(key)
-  }
   addEventListener('keydown', (event) => {
     speaker?.unlock()
     if (event.metaKey) return
@@ -342,6 +357,7 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
       recorder?.pace(now)
       const { sounds } = current()
       for (; heard < sounds.length; heard++) speaker?.play(sounds[heard])
+      touch.show(current().keysRead)
       draw()
     } catch (error) {
       fail(error)

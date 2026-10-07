@@ -37,9 +37,15 @@ export class InputState implements Input {
   #now: ReadonlySet<Key> = new Set()
   #before: ReadonlySet<Key> = new Set()
   #pointer = CENTER
+  readonly #asked = new Set<Key>()
 
   get pointer(): Point {
     return this.#pointer
+  }
+
+  // Every key game code has asked about.
+  get asked(): ReadonlySet<Key> {
+    return this.#asked
   }
 
   advance(held: Iterable<Key>, pointer: Point | undefined): void {
@@ -49,17 +55,23 @@ export class InputState implements Input {
   }
 
   held(key: Key): boolean {
-    return this.#now.has(keyNamed(key))
+    return this.#now.has(this.#ask(key))
   }
 
   pressed(key: Key): boolean {
-    const k = keyNamed(key)
+    const k = this.#ask(key)
     return this.#now.has(k) && !this.#before.has(k)
   }
 
   released(key: Key): boolean {
-    const k = keyNamed(key)
+    const k = this.#ask(key)
     return !this.#now.has(k) && this.#before.has(k)
+  }
+
+  #ask(name: Key): Key {
+    const key = keyNamed(name)
+    this.#asked.add(key)
+    return key
   }
 }
 
