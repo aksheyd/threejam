@@ -2,6 +2,12 @@
 
 Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest first. Until 1.0, a release can break a game or a script that worked with the one before, and each one that does says how under Breaking changes.
 
+## Unreleased
+
+### Fixed
+
+- On macOS and Linux, when Chrome exits as it starts, `shot` kills the processes Chrome started before it removes Chrome's profile. Before, on a busy machine, one that was still starting could make the profile's folder again after `shot` removed it, and the folder stayed in the temporary folder.
+
 ## [0.0.5](https://github.com/aksheyd/threejam/compare/v0.0.4...v0.0.5) - 2026-10-07
 
 Games play on phones and in a gallery in the browser, and a game can draw pixel art written as text, or its whole world in 3D. `sim --seeds` checks a game's balance over many seeds, `run --record` turns a playtest into a driver that `sim` replays, and `run`, `shot`, `check`, and the MCP server leave less behind when they're stopped or killed. From [#4](https://github.com/aksheyd/threejam/pull/4) through [#25](https://github.com/aksheyd/threejam/pull/25).

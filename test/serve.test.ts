@@ -475,6 +475,20 @@ test('a Chrome that exits as it starts fails with one line naming it, though ove
   await assert.rejects(launchChrome(join(dir, 'notes.txt')), { name: 'BrowserError', message: `${join(dir, 'notes.txt')} isn't executable; set CHROME_PATH to the executable file of Chrome or Chromium` })
 })
 
+test('a Chrome that exits as it starts takes the processes it started with it, so none can make its profile again once shot has removed it', { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {
+  const dir = mkdtempSync(join(TMP, 'late-'))
+  made.push(dir)
+  const profile = join(dir, 'profile')
+  mkdirSync(profile)
+  // Like a zygote still starting as Chrome exits, its helper holds none of the pipe to Puppeteer, and makes the profile's folder whenever it's missing.
+  const fake = join(dir, 'chrome')
+  writeFileSync(fake, `#!/bin/sh\n(while [ -d ${sh(profile)} ]; do sleep 0.05; done; mkdir ${sh(profile)}) 3<&- 4<&- </dev/null &\nexit 3\n`, { mode: 0o755 })
+  await assert.rejects(launchChrome(fake, { profile }), { name: 'BrowserError', message: `Chrome at ${fake} didn't start: it exited as soon as it started; set CHROME_PATH to a working Chrome or Chromium` })
+  removeProfile(profile)
+  await new Promise((wait) => setTimeout(wait, 1000))
+  assert.equal(existsSync(profile), false)
+})
+
 test('commands other than shot start without loading Puppeteer', () => {
   const hook = "import { registerHooks } from 'node:module'\nregisterHooks({ resolve: (specifier, context, next) => { if (specifier.startsWith('puppeteer')) throw new Error(`loaded ${specifier}`); return next(specifier, context) } })"
   const cli = join(ROOT, 'src', 'cli.ts')

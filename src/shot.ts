@@ -9,7 +9,7 @@ import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { LimitError, STOPS, endBy, gameFailure, isSystemError, timeLimit } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
-import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, removeProfile, removeSocketFolders, serve, socketFolder, socketFolders, tmpdirHint, type Server } from './serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, endGroup, findChrome, removeProfile, removeSocketFolders, serve, socketFolder, socketFolders, tmpdirHint, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
 export interface ShotOptions {
@@ -94,9 +94,11 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
       args: [...defaults, ...switches, '--use-gl=angle', '--use-angle=swiftshader', '--remote-debugging-pipe', NO_DEVTOOLS_PORT],
     }))
   } catch (error) {
+    // Puppeteer kills Chrome's process group only while Chrome runs, and a Chrome that exits as it starts can leave a zygote still starting, which makes the profile's folder again after shot removes it.
+    const launched = started.find((child) => child.spawnargs.includes(`--user-data-dir=${profile}`))
+    if (launched !== undefined) await endGroup(launched)
     if (signal?.aborted) {
-      const killed = started.find((child) => child.spawnargs.includes(`--user-data-dir=${profile}`))
-      if (killed !== undefined) await within(10_000, gone(killed))
+      if (launched !== undefined) await within(10_000, gone(launched))
       throw new BrowserError(`Chrome at ${where} was stopped as it started`)
     }
     // Over a pipe, a Chrome that exits as it starts only closes the connection, which Puppeteer reports with a TargetCloseError its types don't export.
