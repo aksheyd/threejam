@@ -102,15 +102,26 @@ export interface Run {
 
 // Runs a game and its driver, read fresh from disk, in a sandbox: a realm of their own that has only the language and the engine, in a child process that Node's permission model allows nothing.
 export async function runGame(dir: string, options: RunOptions): Promise<Run> {
+  const run = await loadGame(dir, options)
+  return run(options.seed)
+}
+
+type Runner = (seed: number | undefined) => Promise<Run>
+
+// Reads and bundles a game and its driver once, for runs that differ only in their seed, each in a sandbox of its own.
+async function loadGame(dir: string, options: RunOptions): Promise<Runner> {
   const files = gameFiles(dir)
   const driver = options.driver === undefined ? undefined : driverFile(options.driver)
   const seconds = timeLimit(options.timeout)
   const { code, map } = await bundle(files, driver)
-  const { ticks, press, hold, pointer, set, seed, every, until, only, clip } = options
-  const request: Request = { ticks, press, hold, pointer, set, seed, every, until, only, clip, assets: files.assets, driver: options.driver }
-  const reply = parseReply(await inChild({ code, request: JSON.stringify(request), timeout: Math.min(Math.ceil(seconds * 1000), 2 ** 32 - 1) }))
-  if (reply.ok) return reply
-  throw failed(reply.failure, map, seconds)
+  const { ticks, press, hold, pointer, set, every, until, only, clip } = options
+  const timeout = Math.min(Math.ceil(seconds * 1000), 2 ** 32 - 1)
+  return async (seed) => {
+    const request: Request = { ticks, press, hold, pointer, set, seed, every, until, only, clip, assets: files.assets, driver: options.driver }
+    const reply = parseReply(await inChild({ code, request: JSON.stringify(request), timeout }))
+    if (reply.ok) return reply
+    throw failed(reply.failure, map, seconds)
+  }
 }
 
 function driverFile(path: string): string {
