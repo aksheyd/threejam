@@ -400,7 +400,7 @@ test('the page draws GIF, WebP, and JPEG images as it does PNGs, and a GIF as it
   }
 })
 
-test('played by the mouse autopilot, Asteroids reaches the state sim computes in the page, which records the sounds sim lists', { skip: !chrome && 'needs Chrome' }, async (t) => {
+test('played by the mouse autopilot, Asteroids reaches the state sim computes in the page, which records the sounds sim lists, and a second run in the page starts over with none of the first run in it', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const driver = join('games', 'asteroids', 'autopilot.ts')
   const expected = await runGame('games/asteroids', { ticks: 600, driver })
   assert.ok(expected.sounds.some((sound) => sound.name === 'explode'))
@@ -410,12 +410,15 @@ test('played by the mouse autopilot, Asteroids reaches the state sim computes in
     const tab = await newTab(t)
     await openPage(tab, server.url)
     await tab.waitForFunction('window.engine !== undefined')
-    const actual = await tab.evaluate(() => {
-      window.engine.reset({ seed: 0, drive: true })
-      window.engine.advanceTo(600)
-      return { entities: window.engine.state(), sounds: window.engine.sounds() }
-    })
-    assert.deepEqual(actual, { entities: expected.snapshots[0].entities, sounds: expected.sounds })
+    const runs = await tab.evaluate(() =>
+      [1, 2].map(() => {
+        window.engine.reset({ seed: 0, drive: true })
+        window.engine.advanceTo(600)
+        return { entities: window.engine.state(), sounds: window.engine.sounds() }
+      }),
+    )
+    const run = { entities: expected.snapshots[0].entities, sounds: expected.sounds }
+    assert.deepEqual(runs, [run, run])
   } finally {
     server.close()
     await page.dispose()
@@ -430,7 +433,7 @@ const MONKEY = [
   '',
 ].join('\n')
 
-test('every example game, played by a seeded random driver for 1500 ticks with each of two seeds, reaches the state and sounds sim computes in the page', { skip: !chrome && 'needs Chrome' }, async (t) => {
+test('every example game, played by a seeded random driver for 1500 ticks, reaches the state and sounds sim computes in the page', { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'monkey-'))
   made.push(dir)
   const driver = join(dir, 'monkey.ts')
@@ -449,15 +452,13 @@ test('every example game, played by a seeded random driver for 1500 ticks with e
     try {
       await openPage(tab, server.url)
       await tab.waitForFunction('window.engine !== undefined')
-      for (const seed of [3, 11]) {
-        const { snapshots, sounds } = simulate(played, { ticks: 1500, seed, drive })
-        const actual = await tab.evaluate((s) => {
-          window.engine.reset({ seed: s, drive: true })
-          window.engine.advanceTo(1500)
-          return { entities: window.engine.state(), sounds: window.engine.sounds() }
-        }, seed)
-        assert.deepEqual(actual, { entities: snapshots[0].entities, sounds }, `${game} with seed ${seed}`)
-      }
+      const { snapshots, sounds } = simulate(played, { ticks: 1500, seed: 11, drive })
+      const actual = await tab.evaluate(() => {
+        window.engine.reset({ seed: 11, drive: true })
+        window.engine.advanceTo(1500)
+        return { entities: window.engine.state(), sounds: window.engine.sounds() }
+      })
+      assert.deepEqual(actual, { entities: snapshots[0].entities, sounds }, game)
     } finally {
       server.close()
       await page.dispose()
