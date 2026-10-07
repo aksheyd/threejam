@@ -18,14 +18,22 @@ export function exportPath(out: string): string {
   return out
 }
 
-// One HTML file that plays the game from disk: the page code, Three.js, the game, its view, and its images and sounds as data URLs.
-export async function exportGame({ dir, out, seed }: { dir: string; out: string; seed?: number }): Promise<Exported> {
+// A script the page loads from the network, like the widget a game jam requires on every entry, which a page served over https can load only over https too.
+export function scriptAddress(value: string): string {
+  const url = URL.parse(value)
+  if (url?.protocol !== 'https:') throw new UsageError(`--script ${quote(value)} should be the https:// address of a script, like https://jam.pieter.com/2026/widget.js`)
+  return url.href
+}
+
+// One HTML file that plays the game from disk: the page code, Three.js, the game, its view, and its images and sounds as data URLs, and nothing it loads from the network but the scripts it's given.
+export async function exportGame({ dir, out, seed, scripts = [] }: { dir: string; out: string; seed?: number; scripts?: readonly string[] }): Promise<Exported> {
   exportPath(out)
+  const sources = scripts.map(scriptAddress)
   const files = gameFiles(dir)
   const address = (name: string) => dataUrl(join(files.folder, name))
   const built = await esbuild.build({ ...pageBuild({ files, address }), minify: true, write: false }).catch((failure: esbuild.BuildFailure) => failure)
   if (built instanceof Error) throw new BuildError(built.errors.map(formatMessage).join('; '))
-  const page = html({ title: basename(files.folder), config: { mode: 'export', seed }, script: { kind: 'inline', code: built.outputFiles[0].text } })
+  const page = html({ title: basename(files.folder), config: { mode: 'export', seed }, script: { kind: 'inline', code: built.outputFiles[0].text }, scripts: sources })
   makeFolder(dirname(resolve(out)))
   saveFile(out, page)
   return { file: out, bytes: Buffer.byteLength(page) }

@@ -168,7 +168,8 @@ export function formatMessage(message: esbuild.Message): string {
 type Script = { readonly kind: 'file'; readonly src: string } | { readonly kind: 'inline'; readonly code: string }
 
 // With touch-action none, a finger dragged on the canvas stays the game's instead of the browser taking it over to pan or zoom the page.
-export function html({ title, config, script }: { title: string; config: Config; script: Script }): string {
+// Each of scripts loads async, so the game never waits on the network, and after the rest of the body, so one that adds to the body, as a jam's widget does, finds it there.
+export function html({ title, config, script, scripts = [] }: { title: string; config: Config; script: Script; scripts?: readonly string[] }): string {
   return `<!doctype html>
 <html>
 <head>
@@ -181,7 +182,7 @@ export function html({ title, config, script }: { title: string; config: Config;
 <canvas></canvas>
 <script>window.THREEJAM = ${configJson(config)}</script>
 ${scriptTag(script)}
-</body>
+${scripts.map((src) => `<script async src="${src.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"></script>\n`).join('')}</body>
 </html>
 `
 }

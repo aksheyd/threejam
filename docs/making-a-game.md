@@ -71,7 +71,7 @@ npx threejam run games/catch
 npx threejam export games/catch -o catch.html
 ```
 
-All three build the same page, which holds only files from the game's folder and ThreeJam's own, so a game that imports a file from outside its folder fails there with that import's line. On a phone, the page shows a key next to the game for each key the game reads, so the game of catch gets Space, Left, Right, A, and D, and `sim` replays a finger on one as it does the key.
+All three build the same page, which holds only files from the game's folder and ThreeJam's own, so a game that imports a file from outside its folder fails there with that import's line. On a phone, the page shows a key next to the game for each key the game reads, so the game of catch gets Space, Left, Right, A, and D, and `sim` replays a finger on one as it does the key. For a game jam that requires its widget on every entry, like Vibe Jam, `--script` adds the widget's script, as in `npx threejam export games/catch -o catch.html --script https://jam.pieter.com/2026/widget.js`; without it, the file loads nothing from the network.
 
 ## Test it
 

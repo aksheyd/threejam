@@ -571,6 +571,23 @@ test("an exported page lays out at a phone's own width, so the game spans the wi
   }
 })
 
+test('an exported file loads the script export --script adds, as a jam asks of its widget, which may add to the page, and plays on beside it, asking the network for nothing else', { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'threejam-export-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const file = join(dir, 'pong.html')
+  const widget = 'https://widget.test/2026/widget.js'
+  await exportGame({ dir: 'games/pong', out: file, scripts: [widget] })
+  const tab = await newTab(t)
+  const { errors, requests } = watch(tab)
+  // The page gets a stand-in for the widget, which puts a badge in a corner, as a jam's does.
+  const badge = "const badge = document.createElement('a'); badge.id = 'badge'; badge.textContent = 'JAM'; badge.style.cssText = 'position:fixed;bottom:0;right:0'; document.body.append(badge)"
+  await tab.setRequestInterception(true)
+  tab.on('request', (request) => void (request.url() === widget ? request.respond({ contentType: 'text/javascript', body: badge }) : request.continue()))
+  await openPage(tab, pathToFileURL(file).href)
+  await tab.waitForFunction(() => document.getElementById('badge') !== null && typeof window.engine === 'object' && window.engine.tick > 10, { timeout: 10_000 })
+  assert.deepEqual({ errors, elsewhere: requests.filter((url) => !/^(file|data):/.test(url)) }, { errors: [], elsewhere: [widget] })
+})
+
 // Each tick, the keys held, in KEYS's order, and where the pointer is.
 const INPUT = [
   "import { KEYS, defineGame, listOf } from 'threejam'",

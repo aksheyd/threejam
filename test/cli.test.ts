@@ -131,6 +131,33 @@ test('shot and export check -o before they run the game or start Chrome, with on
   assert.deepEqual({ code: exported.code, failure: JSON.parse(exported.out) }, { code: 1, failure: { code: 'USAGE', message: '-o "page.txt" should be an .html file, like pong.html' } })
 })
 
+test("export adds each script --script names right before the end of the body, as a jam's widget asks to be added, with its & and \" escaped, refuses one without an https:// address before it runs the game, and adds none of its own", () => {
+  const broken = folder({ 'game.ts': game({ update: 'world.ball.x += ;' }) })
+  for (const script of ['http://jam.pieter.com/2026/widget.js', 'widget.js']) {
+    const refused = threejam('export', broken, '-o', join(broken, 'page.html'), '--script', script, '--format', 'json')
+    const message = `--script ${JSON.stringify(script)} should be the https:// address of a script, like https://jam.pieter.com/2026/widget.js`
+    assert.deepEqual({ code: refused.code, failure: JSON.parse(refused.out) }, { code: 1, failure: { code: 'USAGE', message } })
+  }
+  const dir = mkdtempSync(join(TMP, 'scripts-'))
+  made.push(dir)
+  const [plain, jam] = [join(dir, 'plain.html'), join(dir, 'jam.html')]
+  assert.equal(threejam('export', 'games/pong', '-o', plain).code, 0)
+  // A host keeps a " as it is, where it would end the attribute and start an onerror of its own.
+  const scripts = ['https://jam.pieter.com/2026/widget.js', 'https://example.com/a.js?x=1&y="2"', 'https://x"onerror="alert(1)"x.example/w.js']
+  assert.equal(threejam('export', 'games/pong', '-o', jam, ...scripts.flatMap((script) => ['--script', script])).code, 0)
+  const remote = (file: string) => readFileSync(file, 'utf8').match(/<script[^>]* src=[^>]*>/g) ?? []
+  assert.deepEqual(remote(plain), [])
+  const tags = [
+    '<script async src="https://jam.pieter.com/2026/widget.js"></script>',
+    '<script async src="https://example.com/a.js?x=1&amp;y=%222%22"></script>',
+    '<script async src="https://x&quot;onerror=&quot;alert(1)&quot;x.example/w.js"></script>',
+  ]
+  const end = `${tags.join('\n')}\n</body>\n</html>\n`
+  const page = readFileSync(jam, 'utf8')
+  assert.equal(page.slice(-end.length), end)
+  assert.equal(remote(jam).length, tags.length)
+})
+
 test("shot lets each call into Chrome run past Puppeteer's 180 s when --timeout gives its page longer, and keeps 180 s as the least", () => {
   assert.deepEqual([callLimit(2), callLimit(30), callLimit(300), callLimit(86_400)], [180_000, 180_000, 330_000, 86_430_000])
 })

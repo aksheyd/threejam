@@ -3,7 +3,7 @@ import { randomInt } from 'node:crypto'
 import { basename } from 'node:path'
 import { Cli, Errors, Formatter, z } from 'incur'
 import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, quote, shellWord, show, type Code } from './errors.ts'
-import { exportGame, exportPath } from './export.ts'
+import { exportGame, exportPath, scriptAddress } from './export.ts'
 import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, describe, gameFiles, isSystemError, runGame, typecheck } from './load.ts'
 import { createGame } from './new.ts'
 import { NAME, VERSION, mcpCommand } from './package.ts'
@@ -370,16 +370,24 @@ const cli = Cli.create('threejam', {
     options: z.object({
       out: z.string().optional().describe(`HTML path, ${PATHS} (default: the game folder's name, like pong.html)`),
       seed: integer().optional().describe('Random seed, a whole number; without one, the page picks a new one each time it loads'),
+      script: z
+        .array(z.string())
+        .optional()
+        .describe('The https:// address of a script for the page to load from the network, like the widget a game jam requires on every entry; repeatable. Without it, the page loads nothing from the network'),
       timeout,
     }),
     alias: { out: 'o' },
-    examples: [{ args: { dir: 'games/pong' }, options: { out: 'pong.html' }, description: 'Pong as one file to share' }],
+    examples: [
+      { args: { dir: 'games/pong' }, options: { out: 'pong.html' }, description: 'Pong as one file to share' },
+      { args: { dir: 'games/pong' }, options: { out: 'pong.html', script: ['https://jam.pieter.com/2026/widget.js'] }, description: "Pong as a Vibe Jam 2026 entry, with the jam's widget" },
+    ],
     mcp: { annotations: runsGame },
     async run(c) {
       try {
         const out = exportPath(c.options.out ?? `${basename(gameFiles(c.args.dir).folder)}.html`)
+        const scripts = (c.options.script ?? []).map(scriptAddress)
         await runGame(c.args.dir, { ticks: 1, seed: c.options.seed, timeout: c.options.timeout })
-        return await exportGame({ dir: c.args.dir, out, seed: c.options.seed })
+        return await exportGame({ dir: c.args.dir, out, seed: c.options.seed, scripts })
       } catch (error) {
         return c.error(failure(error))
       }
