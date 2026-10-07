@@ -197,10 +197,18 @@ test('AGENTS.md, the agents guide, and the skill name the same MCP tools, which 
 
 test('the Pages index links the page export writes for every example game, and no other file of the site', () => {
   const index = readFileSync(join(ROOT, '.github', 'pages', 'index.html'), 'utf8')
-  // The site is index.html and one exported page per folder in games/, so a link to anything else would be missing there.
+  // The site is index.html, sitemap.xml, and one exported page per folder in games/, of which the index links the games.
   const local = new Set([...index.matchAll(/\b(?:href|src)="([^"]+)"/g)].map((match) => match[1]).filter((link) => !/^[a-z][a-z\d+.-]*:/i.test(link)))
   const pages = readdirSync(join(ROOT, 'games'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => `${entry.name}.html`)
   assert.deepEqual([...local].toSorted(), pages.toSorted(), '.github/pages/index.html should link the page export writes for each folder in games/, and nothing else on the site')
+})
+
+test("the Pages sitemap names only the site's root, at the address GitHub Pages gives the repository", () => {
+  const [root] = manifestsAbove(ROOT)
+  // A repository's site is at its owner's github.io host, under the repository's name.
+  const [owner, repo] = new URL(String(root.json.homepage)).pathname.split('/').filter(Boolean)
+  const sitemap = readFileSync(join(ROOT, '.github', 'pages', 'sitemap.xml'), 'utf8')
+  assert.deepEqual([...sitemap.matchAll(/<loc>([^<]*)<\/loc>/g)].map((match) => match[1]), [`https://${owner.toLowerCase()}.github.io/${repo}/`])
 })
 
 function isRecord(value: unknown): value is Record<string, unknown> {
