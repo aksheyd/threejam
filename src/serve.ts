@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
 import { accessSync, constants, existsSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, rmdirSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
@@ -439,12 +439,16 @@ function browserPaths(): string[] {
 
 export interface AppWindow {
   readonly exited: Promise<void>
-  // Settles once every process Chrome started is gone, and its profile with them.
+  // Settles once Chrome and every process it started that can write to its profile are gone, and its profile with them.
   readonly closed: Promise<void>
   close(): void
 }
 
-export function openWindow(url: string): AppWindow | undefined {
+// macOS and Linux keep the processes a process starts in its process group unless they leave it; Windows has no process groups.
+const GROUPS = process.platform !== 'win32'
+
+// On macOS and Linux, a Chrome still running grace milliseconds after it's closed is killed.
+export function openWindow(url: string, { grace = 2000 }: { grace?: number } = {}): AppWindow | undefined {
   const chrome = findChrome()
   if (!chrome) {
     openBrowser(url)
@@ -454,8 +458,8 @@ export function openWindow(url: string): AppWindow | undefined {
   const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628', NO_DEVTOOLS_PORT]
   const env = chromeEnv()
   const before = socketFolders(env.TMPDIR)
-  // Every process Chrome starts shares its stderr, so close comes once none is left to write to the profile.
-  const child = spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'], env })
+  // On macOS and Linux, Chrome leads a process group of its own, which holds every process it starts that can write to its profile, and its output goes nowhere: its crash handlers share that output from outside the group, keeping their reports elsewhere, and on macOS something has held it open for seconds after Chrome exited. On Windows, close comes once nothing holds Chrome's stderr.
+  const child = spawn(chrome, args, { stdio: ['ignore', 'ignore', GROUPS ? 'ignore' : 'pipe'], env, detached: GROUPS })
   child.stderr?.resume()
   let closing = false
   child.once('exit', (code, signal) => {
@@ -470,7 +474,8 @@ export function openWindow(url: string): AppWindow | undefined {
     openBrowser(url)
   })
   const closed = new Promise<void>((done) =>
-    child.once('close', () => {
+    child.once('close', async () => {
+      await endGroup(child)
       removeProfile(profile)
       done()
     }),
@@ -479,9 +484,31 @@ export function openWindow(url: string): AppWindow | undefined {
     exited,
     closed,
     close: () => {
+      if (closing) return
       closing = true
       child.kill()
+      if (!GROUPS || child.exitCode !== null || child.signalCode !== null) return
+      const late = setTimeout(() => void endGroup(child), grace).unref()
+      child.once('exit', () => clearTimeout(late))
     },
+  }
+}
+
+// Kills what is left of the process group that Chrome leads, then waits for all of it to be gone, for at most 2 s, since a process that a busy disk holds up, or that no one reaps, can outlast the kill.
+async function endGroup(chrome: ChildProcess): Promise<void> {
+  const group = chrome.pid
+  if (!GROUPS || group === undefined) return
+  try {
+    process.kill(-group, 'SIGKILL')
+  } catch {
+    return
+  }
+  for (const deadline = Date.now() + 2000; Date.now() < deadline; await new Promise((wait) => setTimeout(wait, 10))) {
+    try {
+      process.kill(-group, 0)
+    } catch {
+      return
+    }
   }
 }
 

@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url'
 import { exportGame } from '../src/export.ts'
 import { ROOT } from '../src/package.ts'
 import { Recording } from '../src/playtest.ts'
-import { NO_DEVTOOLS_PORT, buildPage, openWindow, removeProfile, removeSocketFolders, serve, socketFolders } from '../src/serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, openWindow, removeProfile, removeSocketFolders, serve, socketFolders, type AppWindow } from '../src/serve.ts'
 import { closeChrome, launchChrome, openPage } from '../src/shot.ts'
 import { CHROME as chrome, testChrome } from './chrome.ts'
 import { spawnCli } from './children.ts'
@@ -477,13 +477,28 @@ test('commands other than shot start without loading Puppeteer', () => {
   assert.equal(result.status, 0, result.stdout + result.stderr)
 })
 
-// A launcher like Linux's google-chrome scripts, which put their own switches before ThreeJam's; this one also notes what it was given, and its process ID, which Chrome takes over.
-function wrapper(dir: string, switches: readonly string[]): string {
-  const sh = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`
+// A word quoted for sh.
+const sh = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`
+
+// A launcher like Linux's google-chrome scripts, which put their own switches before ThreeJam's; this one also notes what it was given, and its process ID, which Chrome takes over, after running any shell lines it's given first.
+function wrapper(dir: string, switches: readonly string[], first: readonly string[] = []): string {
   const file = join(dir, 'chrome')
-  const lines = ['#!/bin/sh', `echo $$ > ${sh(join(dir, 'pid'))}`, `env > ${sh(join(dir, 'env'))}`, `printf '%s\\n' "$@" > ${sh(join(dir, 'args'))}`, `exec ${[chrome ?? 'no Chrome', ...switches].map(sh).join(' ')} "$@"`]
+  const lines = ['#!/bin/sh', `echo $$ > ${sh(join(dir, 'pid'))}`, `env > ${sh(join(dir, 'env'))}`, `printf '%s\\n' "$@" > ${sh(join(dir, 'args'))}`, ...first, `exec ${[chrome ?? 'no Chrome', ...switches].map(sh).join(' ')} "$@"`]
   writeFileSync(file, `${lines.join('\n')}\n`, { mode: 0o755 })
   return file
+}
+
+// A page that tells the test once a browser has loaded it.
+async function loadingPage(): Promise<{ url: string; loaded: () => boolean; close: () => void }> {
+  let loaded = false
+  const site = createServer((incoming, response) => {
+    if (incoming.url === '/loaded') loaded = true
+    response.writeHead(200, { 'content-type': 'text/html' }).end("<script>fetch('/loaded')</script>")
+  })
+  await new Promise<void>((listening) => site.listen(0, '127.0.0.1', listening))
+  const address = site.address()
+  if (address === null || typeof address === 'string') throw new Error('the page server has no port')
+  return { url: `http://127.0.0.1:${address.port}/`, loaded: () => loaded, close: () => site.close() }
 }
 
 async function freePort(): Promise<number> {
@@ -544,24 +559,17 @@ test("run's window opens no DevTools port even when a wrapper script asks for on
   const dir = mkdtempSync(join(TMP, 'wrapper-'))
   made.push(dir)
   const port = await freePort()
-  let loaded = false
-  const site = createServer((incoming, response) => {
-    if (incoming.url === '/loaded') loaded = true
-    response.writeHead(200, { 'content-type': 'text/html' }).end("<script>fetch('/loaded')</script>")
-  })
-  await new Promise<void>((listening) => site.listen(0, '127.0.0.1', listening))
-  const address = site.address()
-  if (address === null || typeof address === 'string') throw new Error('the page server has no port')
+  const page = await loadingPage()
   const { CHROME_PATH } = process.env
   // Headless, so the window needs no display.
   process.env.CHROME_PATH = wrapper(dir, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${join(dir, 'profile')}`])
   process.env.THREEJAM_CANARY = 'secret'
-  const app = openWindow(`http://127.0.0.1:${address.port}/`)
+  const app = openWindow(page.url)
   let exited = false
   void app?.exited.then(() => (exited = true))
   try {
     assert.ok(app)
-    await until('Chrome to load the page', () => loaded || exited)
+    await until('Chrome to load the page', () => page.loaded() || exited)
     assert.equal(exited, false, 'Chrome exited before it loaded the page')
     const { env, args, profile } = given(dir)
     await assert.rejects(fetch(`http://127.0.0.1:${port}/json/version`))
@@ -582,11 +590,90 @@ test("run's window opens no DevTools port even when a wrapper script asks for on
   } finally {
     app?.close()
     await app?.exited
-    site.close()
+    page.close()
     if (CHROME_PATH === undefined) delete process.env.CHROME_PATH
     else process.env.CHROME_PATH = CHROME_PATH
     delete process.env.THREEJAM_CANARY
   }
+})
+
+// Opens run's window on a page that reports it loaded, with CHROME_PATH set to chrome, and has the test work with the window once the page has loaded, its profile and socket's folder, and Chrome's process ID, which is its process group's on macOS and Linux.
+async function windowed(chrome: string, test: (window: { app: AppWindow; closed: () => boolean; profile: string; socket: string; group: number }) => Promise<void>, options?: { grace?: number }): Promise<void> {
+  const dir = dirname(chrome)
+  const page = await loadingPage()
+  const { CHROME_PATH } = process.env
+  process.env.CHROME_PATH = chrome
+  const app = openWindow(page.url, options)
+  let exited = false
+  let closed = false
+  void app?.exited.then(() => (exited = true))
+  void app?.closed.then(() => (closed = true))
+  try {
+    assert.ok(app)
+    await until('Chrome to load the page', () => page.loaded() || exited)
+    assert.equal(exited, false, 'Chrome exited before it loaded the page')
+    const { profile } = given(dir)
+    assert.ok(profile)
+    const socket = dirname(readlinkSync(join(profile, 'SingletonSocket')))
+    await test({ app, closed: () => closed, profile, socket, group: Number(readFileSync(join(dir, 'pid'), 'utf8')) })
+  } finally {
+    app?.close()
+    page.close()
+    if (CHROME_PATH === undefined) delete process.env.CHROME_PATH
+    else process.env.CHROME_PATH = CHROME_PATH
+  }
+}
+
+test("closing run's window kills what is left of Chrome's process group once Chrome exits, then removes its profile, without waiting for a process outside the group that holds Chrome's output, as its crash handlers can on macOS", wrapped, async () => {
+  const dir = mkdtempSync(join(TMP, 'wrapper-'))
+  made.push(dir)
+  const holder = join(dir, 'holder')
+  // In a session of its own, like Chrome's crash handlers, a process holds the output Chrome was given for 30 s.
+  const hold = `${sh(process.execPath)} -e ${sh(`const held = require('node:child_process').spawn('sleep', ['30'], { detached: true, stdio: 'inherit' }); require('node:fs').writeFileSync(${JSON.stringify(holder)}, String(held.pid)); held.unref()`)}`
+  // In Chrome's process group, a process writes to the profile 300 ms after Chrome exits, as a helper that outlives Chrome could, then runs on.
+  const late = `(while kill -0 $$ 2>/dev/null; do sleep 0.05; done; sleep 0.3; for arg in "$@"; do case $arg in --user-data-dir=*) profile=\${arg#--user-data-dir=} ;; esac; done; mkdir -p "$profile/late"; sleep 30) &`
+  try {
+    await windowed(wrapper(dir, ['--headless=new'], [hold, late]), async ({ app, closed, profile, socket, group }) => {
+      app.close()
+      await until("run's window to close", closed)
+      await new Promise((wait) => setTimeout(wait, 500))
+      assert.deepEqual(
+        { group: alive(group), holder: alive(Number(readFileSync(holder, 'utf8'))), profile: existsSync(profile), socket: existsSync(socket) },
+        { group: false, holder: true, profile: false, socket: false },
+      )
+    })
+  } finally {
+    if (existsSync(holder)) process.kill(Number(readFileSync(holder, 'utf8')), 'SIGKILL')
+  }
+})
+
+test("run's window kills a Chrome still running when the time it has to close is up, with every process it started, and removes its profile", wrapped, async () => {
+  const dir = mkdtempSync(join(TMP, 'wrapper-'))
+  made.push(dir)
+  await windowed(
+    wrapper(dir, ['--headless=new']),
+    async ({ app, closed, profile, socket, group }) => {
+      // A stopped Chrome stands in for one too busy to exit when asked; its helpers run on.
+      process.kill(group, 'SIGSTOP')
+      try {
+        const closing = Date.now()
+        app.close()
+        await until("run's window to close", closed)
+        assert.deepEqual(
+          { waited: Date.now() - closing >= 200, group: alive(group), profile: existsSync(profile), socket: existsSync(socket) },
+          { waited: true, group: false, profile: false, socket: false },
+        )
+      } finally {
+        // A Chrome that the window failed to kill exits on the SIGTERM it was sent, rather than staying stopped and keeping this test's process running.
+        try {
+          process.kill(group, 'SIGCONT')
+        } catch {
+          // It was killed.
+        }
+      }
+    },
+    { grace: 200 },
+  )
 })
 
 // Whether any process is left in a process group.
@@ -630,7 +717,7 @@ test("closing the terminal that run is in closes its window and removes the wind
   const { profile } = given(dir)
   assert.ok(profile)
   const socket = dirname(readlinkSync(join(profile, 'SingletonSocket')))
-  // A Chrome that a closing terminal hangs up on can take 5 s to exit, which a stopped one stands in for.
+  // A stopped Chrome stands in for one slow to exit, which run waits for before it removes the window's profile, up to the 2 s it gives the window to close.
   const window = Number(readFileSync(join(dir, 'pid'), 'utf8'))
   process.kill(window, 'SIGSTOP')
   // The terminal takes no more output, and it hangs up on run twice, from its shell and then from the kernel.
@@ -641,6 +728,5 @@ test("closing the terminal that run is in closes its window and removes the wind
   const stoppedFirst = await Promise.race([exited.then(() => true), pause(300).then(() => false)])
   process.kill(window, 'SIGCONT')
   await exited
-  assert.deepEqual({ stoppedFirst, profile: existsSync(profile), socket: existsSync(socket) }, { stoppedFirst: false, profile: false, socket: false })
-  await until("the window's Chrome to exit", () => !alive(pid))
+  assert.deepEqual({ stoppedFirst, profile: existsSync(profile), socket: existsSync(socket), chrome: alive(window) }, { stoppedFirst: false, profile: false, socket: false, chrome: false })
 })

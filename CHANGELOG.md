@@ -34,6 +34,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - An MCP server answers other calls while `check` type-checks a game. Before, every other call waited until the type check finished or ran past `--timeout`.
 - `check` of a game with thousands of type errors fails with `OUTPUT_TOO_LARGE` once the type check prints 1 MB. Before, it failed with `INTERNAL_ERROR`.
 - A command like `sim`, or the MCP server, ends quietly when whatever reads its output closes the pipe during a write, as it does between writes. Before, macOS could report that as `ENOTCONN`, and Linux, when the reader left output unread, as `ECONNRESET`, rather than `EPIPE`, and the command failed with `Error: write ENOTCONN` or `Error: write ECONNRESET`.
+- On macOS, `run` no longer takes seconds to stop after Esc, Ctrl-C, or a closed terminal. Before, it removed its window's profile and printed `Stopped.` only once every process that held the output of the window's Chrome had closed it, with no time limit, and on a busy Mac that took more than 10 s. It now waits only for the processes Chrome started, kills any left once Chrome exits, and kills a Chrome still running 2 s after it was asked to close.
 
 ## [0.0.4](https://github.com/aksheyd/threejam/compare/v0.0.3...v0.0.4) - 2026-10-06
 
