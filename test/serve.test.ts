@@ -696,6 +696,44 @@ test("a CHROME_PATH that's missing or a folder gets run's window to say it could
   )
 })
 
+test("closing run's window removes Chrome's socket folder even once Chrome has taken away its profile's link to it, as a Chrome killed while it closes can", { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {
+  const dir = mkdtempSync(join(TMP, 'unlinking-'))
+  made.push(dir)
+  // The system's temporary folder, since one deep in a checkout can be too long for the socket on Linux.
+  const temp = mkdtempSync(join(tmpdir(), 'threejam-unlinking-'))
+  made.push(temp)
+  // It links its profile to a socket in a folder of its own, as Chrome does, and when asked to close it removes the links and exits, leaving the folder.
+  const chrome = join(dir, 'chrome')
+  const lines = [
+    '#!/bin/sh',
+    'for arg in "$@"; do case $arg in --user-data-dir=*) profile=${arg#--user-data-dir=} ;; esac; done',
+    'folder=$(mktemp -d "$TMPDIR/com.google.Chrome.XXXXXX")',
+    ': > "$folder/SingletonSocket"',
+    ': > "$folder/SingletonCookie"',
+    'ln -s "$folder/SingletonSocket" "$profile/SingletonSocket"',
+    'ln -s "$folder/SingletonCookie" "$profile/SingletonCookie"',
+    `trap 'rm "$profile/SingletonSocket" "$profile/SingletonCookie"; : > ${sh(join(dir, 'unlinked'))}; exit 0' TERM`,
+    `: > ${sh(join(dir, 'started'))}`,
+    'sleep 30 & wait $!',
+  ]
+  writeFileSync(chrome, `${lines.join('\n')}\n`, { mode: 0o755 })
+  const { CHROME_PATH, TMPDIR } = process.env
+  process.env.CHROME_PATH = chrome
+  process.env.TMPDIR = temp
+  const app = openWindow('http://127.0.0.1:9/')
+  for (const [name, value] of Object.entries({ CHROME_PATH, TMPDIR })) {
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
+  assert.ok(app)
+  let closed = false
+  void app.closed.then(() => (closed = true))
+  await until('the stand-in Chrome to start', () => existsSync(join(dir, 'started')))
+  app.close()
+  await until("run's window to close", () => closed)
+  assert.deepEqual({ unlinked: existsSync(join(dir, 'unlinked')), left: readdirSync(temp) }, { unlinked: true, left: [] })
+})
+
 test("run's window kills a Chrome still running when the time it has to close is up, with every process it started, and removes its profile", wrapped, async () => {
   const dir = mkdtempSync(join(TMP, 'wrapper-'))
   made.push(dir)

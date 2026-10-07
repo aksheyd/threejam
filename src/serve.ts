@@ -475,10 +475,12 @@ export function openWindow(url: string, { grace = 2000 }: { grace?: number } = {
     process.stderr.write(`Couldn't start ${chrome} (${error.message}), so the default browser opens the game.\n`)
     openBrowser(url)
   })
+  // Read before Chrome is asked to close, which takes the link to it away.
+  let socket: string | undefined
   const closed = new Promise<void>((done) =>
     child.once('close', async () => {
       await endGroup(child)
-      removeProfile(profile)
+      removeProfile(profile, socket)
       done()
     }),
   )
@@ -488,6 +490,7 @@ export function openWindow(url: string, { grace = 2000 }: { grace?: number } = {
     close: () => {
       if (closing) return
       closing = true
+      socket = socketFolder(profile)
       child.kill()
       if (!GROUPS || child.exitCode !== null || child.signalCode !== null) return
       const late = setTimeout(() => void endGroup(child), grace).unref()
@@ -514,19 +517,29 @@ async function endGroup(chrome: ChildProcess): Promise<void> {
   }
 }
 
-// Chrome on macOS and Linux keeps its socket in a folder of its own in the temporary folder, linked from its profile, and removes it when it closes but not when it's killed or sent a signal; a TMPDIR of ours would lengthen the socket's path, and past 107 bytes Chrome on Linux won't start.
-export function removeProfile(profile: string): void {
-  try {
-    const folder = dirname(resolve(profile, readlinkSync(join(profile, 'SingletonSocket'))))
-    for (const name of ['SingletonSocket', 'SingletonCookie']) rmSync(join(folder, name), { force: true })
-    rmdirSync(folder)
-  } catch {
-    // Without the link, Chrome removed its socket or made none, as on Windows; a folder that holds anything else stays.
+// Chrome on macOS and Linux keeps its socket in a folder of its own in the temporary folder, linked from its profile, and removes it when it closes but not when it's killed or sent a signal; a TMPDIR of ours would lengthen the socket's path, and past 107 bytes Chrome on Linux won't start. Chrome removes the link before the folder, so one killed while it closes can leave the folder with nothing linking to it, and socket is the folder as the link named it while Chrome ran.
+export function removeProfile(profile: string, socket = socketFolder(profile)): void {
+  if (socket !== undefined) {
+    try {
+      for (const name of ['SingletonSocket', 'SingletonCookie']) rmSync(join(socket, name), { force: true })
+      rmdirSync(socket)
+    } catch {
+      // Chrome removed the folder itself, or it holds something else, which stays.
+    }
   }
   try {
     rmSync(profile, { recursive: true, force: true, maxRetries: 5 })
   } catch {
     // A file that Chrome's helpers still hold, as Windows can keep one a moment, is left for the OS.
+  }
+}
+
+// The folder that a Chrome running with this profile keeps its socket in, if it made one; Chrome on Windows has no socket.
+export function socketFolder(profile: string): string | undefined {
+  try {
+    return dirname(resolve(profile, readlinkSync(join(profile, 'SingletonSocket'))))
+  } catch {
+    return undefined
   }
 }
 

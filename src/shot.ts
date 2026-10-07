@@ -9,7 +9,7 @@ import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { LimitError, STOPS, endBy, gameFailure, isSystemError, timeLimit } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
-import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, removeProfile, removeSocketFolders, serve, socketFolders, tmpdirHint, type Server } from './serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, findChrome, removeProfile, removeSocketFolders, serve, socketFolder, socketFolders, tmpdirHint, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
 export interface ShotOptions {
@@ -139,13 +139,15 @@ async function drawFrames({ dir, at, out, seed, press, hold, pointer, driver, se
   let server: Server | undefined
   let browser: Browser | undefined
   let stuck = false
-  // A profile of shot's own, so that it and the socket it links to go after Chrome, however Chrome stopped.
+  // A profile of shot's own, so that it and the socket it links to go after Chrome, however Chrome stopped, and that socket's folder as the link named it once Chrome had started.
   let profile: string | undefined
+  let socket: string | undefined
   try {
     const { PuppeteerError } = await import('puppeteer-core')
     server = await serve({ page })
     profile = mkdtempSync(join(tmpdir(), 'threejam-chrome-'))
     browser = await launchChrome(chrome, { profile, protocolTimeout: callLimit(timeout), signal: killer.signal })
+    socket = socketFolder(profile)
     const tab = await unlessKilled(killer.signal, browser.newPage())
     await tab.setViewport({ width: 800, height: 600, deviceScaleFactor: 1 })
     const crashed = pageFailure(tab)
@@ -194,7 +196,7 @@ async function drawFrames({ dir, at, out, seed, press, hold, pointer, driver, se
     await closeChrome(browser, killer, { stuck: stuck || killer.signal.aborted })
     server?.close()
     await page.dispose()
-    if (profile !== undefined) removeProfile(profile)
+    if (profile !== undefined) removeProfile(profile, socket)
   }
 }
 
