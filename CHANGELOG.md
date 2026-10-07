@@ -8,6 +8,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - The package ships the agent skill, as `node_modules/threejam/skills/threejam/SKILL.md`, and the docs' `npx skills add` installs it from the latest release's tag instead of from `main`, so the skill describes the version npm installs.
 - `AGENTS.md` says that keys are places on the keyboard, so a game's W, A, S, and D are the keys marked Z, Q, S, and D on a French AZERTY keyboard.
 - `AGENTS.md` and the commands guide name `run --serve-only`, which serves the page without opening a window, and `--out`, the long form of `-o`.
+- The example games play in the browser at https://aksheyd.github.io/threejam/, and the README and the guides link to them.
 - On Linux, when Chrome exits as it starts because `TMPDIR` is too long for the socket it makes there, `shot` and `run` say to set a shorter one, like `/tmp`, and remove the empty folder Chrome made there for the socket.
 
 ### Fixed

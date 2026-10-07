@@ -30,7 +30,7 @@ In a project that depends on ThreeJam, `npx threejam` runs the copy installed th
 
 ## The example games
 
-The example games are in this repo. To play them, clone it:
+Play the example games in your browser from the [gallery](https://aksheyd.github.io/threejam/), with a keyboard. They're in this repo, so to run them yourself and change them, clone it:
 
 ```bash
 git clone https://github.com/aksheyd/threejam

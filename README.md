@@ -10,12 +10,12 @@
 [![Three.js](https://img.shields.io/badge/Three.js-black?style=flat-square&logo=threedotjs&logoColor=white)](https://threejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
-[Features](#features) • [Quick start](#quick-start) • [Docs](docs/README.md)
+[Play the examples](https://aksheyd.github.io/threejam/) • [Features](#features) • [Quick start](#quick-start) • [Docs](docs/README.md)
 
-<a href="games/asteroids"><img src="docs/images/asteroids.png" alt="Asteroids, played with the mouse by its autopilot driver" width="24%"></a>
-<a href="games/invaders"><img src="docs/images/invaders.png" alt="Space Invaders, played by its autopilot driver" width="24%"></a>
-<a href="games/flappy"><img src="docs/images/flappy.png" alt="Flappy flying through the first gap" width="24%"></a>
-<a href="games/tetris"><img src="docs/images/tetris.png" alt="Tetris just before a row clears" width="24%"></a>
+<a href="https://aksheyd.github.io/threejam/asteroids.html"><img src="docs/images/asteroids.png" alt="Asteroids, played with the mouse by its autopilot driver" width="24%"></a>
+<a href="https://aksheyd.github.io/threejam/invaders.html"><img src="docs/images/invaders.png" alt="Space Invaders, played by its autopilot driver" width="24%"></a>
+<a href="https://aksheyd.github.io/threejam/flappy.html"><img src="docs/images/flappy.png" alt="Flappy flying through the first gap" width="24%"></a>
+<a href="https://aksheyd.github.io/threejam/tetris.html"><img src="docs/images/tetris.png" alt="Tetris just before a row clears" width="24%"></a>
 
 </div>
 
@@ -51,7 +51,7 @@ One set of command definitions gives you a CLI, MCP tools, agent skills, and an 
 - **Runs repeat exactly.** The engine owns the clock, input, and seeded random numbers, and swaps `Math.sin` and similar functions for portable versions, so `sim` and the page in the browser reach exactly the same state and play the same sounds.
 - **Tests without a window.** `sim` runs exact ticks with scripted keys, mouse, and pointer or a bot, and prints the state and the sounds played, and `simulate()` does the same inside a test.
 - **Frames on demand.** `shot` renders the page players see in headless Chrome, at the ticks you pick.
-- **One file to share.** `export` writes a game as a single HTML file, images and sounds included, that plays offline.
+- **One file to share.** `export` writes a game as a single HTML file, images and sounds included, that plays offline. The [example games](https://aksheyd.github.io/threejam/) are online as these files, to play in the browser.
 - **Mistakes point at the line.** `check` type-checks the game and runs its first tick, and bad assignments, like an undeclared field, `NaN`, an unknown color, an image the folder lacks, or an item that doesn't fit its list, fail where they happen with the file, line, and tick.
 - **One definition, every interface.** The CLI, the MCP tools, the generated skills, and `--llms` all come from [`src/cli.ts`](src/cli.ts), built with [incur](https://github.com/wevm/incur).
 

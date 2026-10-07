@@ -1,14 +1,16 @@
 # Example games
 
+Play them in the browser from the [gallery](https://aksheyd.github.io/threejam/), where each one is the HTML file `npx threejam export` writes for it. They need a keyboard. Asteroids also plays with the mouse, and on a touch screen a tap starts it and a held finger aims and fires.
+
 | Game | How to play | Worth reading for |
 | --- | --- | --- |
-| [Pong](../games/pong) | W and S move the left paddle, Up and Down the right. Space starts; first to 7 wins. | The smallest game; `view.ts` draws the net |
-| [Breakout](../games/breakout) | Left and Right (or A and D) move the paddle, and Space serves. Three lives to clear every brick. | A `grid` of bricks, and tests that play single-brick variants |
-| [Snake](../games/snake) | An arrow key starts the snake, and the arrow keys turn it. Space plays again after a crash. | A `group` of hidden segments, since entities can't be added during a run |
-| [Flappy](../games/flappy) | Space starts a run, and each press flaps through the gaps. | Pipe pairs and a beak made of parts, and a `view.ts` that paints the skyline, pipes, ground, and bird over plain boxes |
-| [Invaders](../games/invaders) | Space starts; Left and Right move the cannon, and Space fires (hold it to keep firing). | Pixel-art sprites, and an [autopilot](../games/invaders/autopilot.ts) driver |
-| [Tetris](../games/tetris) | Space starts; Left and Right move the piece, Up rotates it, and Down drops it faster. | A [driver](../games/tetris/plan.ts) that plays seed 0's first seven pieces into two cleared rows |
-| [Asteroids](../games/asteroids) | Space or a click starts; Left and Right (or A and D) turn, Up (or W) thrusts, and Space fires. Or hold the mouse to aim at the pointer and fire, and the right button to thrust. | SVG rocks that spin and split, bullets and rocks pooled with `spawn`, a ship of turned parts, sounds, and a [driver](../games/asteroids/autopilot.ts) that plays with the mouse |
+| [Pong](../games/pong) ([play](https://aksheyd.github.io/threejam/pong.html)) | W and S move the left paddle, Up and Down the right. Space starts; first to 7 wins. | The smallest game; `view.ts` draws the net |
+| [Breakout](../games/breakout) ([play](https://aksheyd.github.io/threejam/breakout.html)) | Left and Right (or A and D) move the paddle, and Space serves. Three lives to clear every brick. | A `grid` of bricks, and tests that play single-brick variants |
+| [Snake](../games/snake) ([play](https://aksheyd.github.io/threejam/snake.html)) | An arrow key starts the snake, and the arrow keys turn it. Space plays again after a crash. | A `group` of hidden segments, since entities can't be added during a run |
+| [Flappy](../games/flappy) ([play](https://aksheyd.github.io/threejam/flappy.html)) | Space starts a run, and each press flaps through the gaps. | Pipe pairs and a beak made of parts, and a `view.ts` that paints the skyline, pipes, ground, and bird over plain boxes |
+| [Invaders](../games/invaders) ([play](https://aksheyd.github.io/threejam/invaders.html)) | Space starts; Left and Right move the cannon, and Space fires (hold it to keep firing). | Pixel-art sprites, and an [autopilot](../games/invaders/autopilot.ts) driver |
+| [Tetris](../games/tetris) ([play](https://aksheyd.github.io/threejam/tetris.html)) | Space starts; Left and Right move the piece, Up rotates it, and Down drops it faster. | A [driver](../games/tetris/plan.ts) that plays seed 0's first seven pieces into two cleared rows |
+| [Asteroids](../games/asteroids) ([play](https://aksheyd.github.io/threejam/asteroids.html)) | Space or a click starts; Left and Right (or A and D) turn, Up (or W) thrusts, and Space fires. Or hold the mouse to aim at the pointer and fire, and the right button to thrust. | SVG rocks that spin and split, bullets and rocks pooled with `spawn`, a ship of turned parts, sounds, and a [driver](../games/asteroids/autopilot.ts) that plays with the mouse |
 
 Keys are places on the keyboard, named for what a US keyboard has there, so on a French AZERTY keyboard W, A, S, and D are the keys marked Z, Q, S, and D. In a clone of this repo, play any of them with `npx threejam run games/<name>`. The frames at the top of the [README](../README.md) come from `shot`, three of them played by those drivers:
 

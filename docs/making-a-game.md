@@ -63,7 +63,7 @@ cta:
 
 ## Look at it, play it, and share it
 
-This `shot` writes `frames/catch-001.png` and `frames/catch-098.png` from one run, and `export` writes one HTML file, images and sounds included, that plays the game offline for anyone you send it to:
+This `shot` writes `frames/catch-001.png` and `frames/catch-098.png` from one run, and `export` writes one HTML file, images and sounds included, that plays the game offline for anyone you send it to, or online, as the [example games](https://aksheyd.github.io/threejam/) do:
 
 ```bash
 npx threejam shot games/catch --at 1,98 --press Space@1 --hold Right@2-40 -o frames/catch.png
