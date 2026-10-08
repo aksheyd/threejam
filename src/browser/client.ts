@@ -43,6 +43,8 @@ export interface PageEngine {
 declare global {
   interface Window {
     THREEJAM: unknown
+    // A run page's HTML sets it when Esc comes before this script runs.
+    THREEJAM_ESCAPED?: boolean
     engine: PageEngine
     advanceTime(ms: number): Promise<void>
     render_game_to_text(): string
@@ -80,8 +82,7 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
   // First, so the page of a game that fails below still reloads when a fix is saved, and still quits with Esc.
   if (config.mode === 'run') {
     new EventSource(`/events?token=${encodeURIComponent(config.token)}&build=${config.build}`).onmessage = () => location.reload()
-    addEventListener('keydown', (event) => {
-      if (event.code !== 'Escape') return
+    const end = () => {
       stopped = true
       // run saves the playtest as it stops, so the rest of it goes first.
       const quit = () => fetch(`/quit?token=${encodeURIComponent(config.token)}`, { method: 'POST' })
@@ -90,7 +91,12 @@ export async function play(page: PageModules & { assets: unknown; config: unknow
         .catch(() => {})
         .finally(() => window.close())
       notice('Session ended.')
+    }
+    addEventListener('keydown', (event) => {
+      if (event.code === 'Escape') end()
     })
+    // An Esc noted before this ran ends the session too, after the page says why a save didn't build, as a later Esc would.
+    if (window.THREEJAM_ESCAPED === true) queueMicrotask(end)
   }
   const hooks = config.mode === 'shot' ? undefined : answerHooks()
   // Before the game runs, a failure shows on the page too, except in shot, which reads the page's error instead.

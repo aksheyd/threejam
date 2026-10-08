@@ -1340,6 +1340,43 @@ test("run serves the game at its seed, says on the page why a save doesn't build
   assert.deepEqual({ code: await exited, out, ended }, { code: 0, out: `Playing ${shown} with seed 5 at ${url}\nStopped.\n`, ended: 'Session ended.' })
 })
 
+test("an Esc that comes before run's page has run its script, as one can while the page reloads after a save, still ends the session once the page says why the save didn't build", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'run-'))
+  made.push(dir)
+  const game = "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n"
+  writeFileSync(join(dir, 'game.ts'), game)
+  const shown = relative(ROOT, dir).replaceAll(sep, '/')
+  const run = spawnCli(['run', shown, '--serve-only', '--seed', '5'], t.signal)
+  let [out, errors] = ['', '']
+  run.stdout.on('data', (chunk) => (out += chunk))
+  run.stderr.on('data', (chunk) => (errors += chunk))
+  const exited = new Promise((done) => run.once('close', done))
+  await until('run to serve the page', () => out.includes('\n'))
+  const url = out.slice(out.lastIndexOf(' ') + 1, -1)
+  writeFileSync(join(dir, 'game.ts'), game.replace('update() {}', 'update() {'))
+  await until("run to print the save that doesn't build", () => errors.includes('\n'))
+  const tab = await newTab(t)
+  // The page's script waits until Esc has come, so only what the page's HTML runs is there to catch it.
+  await tab.setRequestInterception(true)
+  let release = () => {}
+  const held = new Promise<void>((done) => (release = done))
+  tab.on('request', (request) => {
+    const go = () => request.continue().catch(() => {})
+    void (request.url().endsWith('/bundle.js') ? held.then(go) : go())
+  })
+  const loaded = openPage(tab, url)
+  await tab.waitForFunction(() => window.THREEJAM !== undefined, { polling: 20 })
+  await tab.keyboard.press('Escape')
+  release()
+  await loaded
+  await until('the Esc from before the script ran to end the session', () => run.exitCode !== null)
+  const notices = await tab.$$eval('pre', (boxes) => boxes.map((box) => box.textContent))
+  assert.deepEqual(
+    { code: await exited, out, notices },
+    { code: 0, out: `Playing ${shown} with seed 5 at ${url}\nStopped.\n`, notices: [`${errors.trim()}\n\nFix the game and save; the page reloads.`, 'Session ended.'] },
+  )
+})
+
 test("run's page ends on the newest save even when that save builds while the page is still reloading for the one before, whether it builds or not", { skip: !chrome && 'needs Chrome' }, async (t) => {
   const dir = mkdtempSync(join(TMP, 'run-'))
   made.push(dir)

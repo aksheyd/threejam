@@ -168,6 +168,9 @@ export function formatMessage(message: esbuild.Message): string {
 
 type Script = { readonly kind: 'file'; readonly src: string } | { readonly kind: 'inline'; readonly code: string }
 
+// A run page notes an Esc that comes before its script runs, as one can while the page reloads after a save, so the script can still end the session.
+const EARLY_ESCAPE = "addEventListener('keydown', (event) => { if (event.code === 'Escape') window.THREEJAM_ESCAPED = true })"
+
 // With touch-action none, a finger dragged on the canvas stays the game's instead of the browser taking it over to pan or zoom the page.
 // Each of scripts loads async, so the game never waits on the network, and after the rest of the body, so one that adds to the body, as a jam's widget does, finds it there.
 export function html({ title, config, script, scripts = [] }: { title: string; config: Config; script: Script; scripts?: readonly string[] }): string {
@@ -181,7 +184,7 @@ export function html({ title, config, script, scripts = [] }: { title: string; c
 </head>
 <body>
 <canvas></canvas>
-<script>window.THREEJAM = ${configJson(config)}</script>
+<script>window.THREEJAM = ${configJson(config)}${config.mode === 'run' ? `\n${EARLY_ESCAPE}` : ''}</script>
 ${scriptTag(script)}
 ${scripts.map((src) => `<script async src="${src.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"></script>\n`).join('')}</body>
 </html>
