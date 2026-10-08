@@ -27,7 +27,7 @@ npx skills add aksheyd/threejam
 
 </div>
 
-ThreeJam is a 2D game engine on [Three.js](https://threejs.org) made for coding agents, built around one promise: the agent can prove what its game does. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run, in `sim` and in the browser. An agent checks its game from exact numbers and frames instead of watching a window:
+ThreeJam is a 2D game engine on [Three.js](https://threejs.org) made for coding agents, built around one promise: the agent can prove what its game does. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run, in `sim` and in the browser. An agent checks its game from exact numbers and frames instead of watching a window, as in this run of the game of catch that `npx threejam new games/catch` writes:
 
 ```console
 $ npx threejam sim games/catch --ticks 120 --press Space@1 --hold Right@2-40 --filter-output log

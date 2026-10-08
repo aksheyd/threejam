@@ -7,6 +7,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 ### Docs
 
 - The README's first screen and Quick start give the skill's install line, `npx skills add aksheyd/threejam`, which takes the skill from `main`. Quick start's note gives the tag command as the way to pin a release, and the others that name a GitHub address still name the latest release's tag.
+- The README's first example names the command that writes its game of catch, `npx threejam new games/catch`, since the repo has no `games/catch`.
 
 ### Fixed
 
