@@ -4,6 +4,10 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 
 ## Unreleased
 
+### Docs
+
+- The README's first screen and Quick start give the skill's install line, `npx skills add aksheyd/threejam`, which takes the skill from `main`. Quick start's note gives the tag command as the way to pin a release, and the others that name a GitHub address still name the latest release's tag.
+
 ### Fixed
 
 - On macOS and Linux, when Chrome exits as it starts, `shot` kills the processes Chrome started before it removes Chrome's profile. Before, on a busy machine, one that was still starting could make the profile's folder again after `shot` removed it, and the folder stayed in the temporary folder.

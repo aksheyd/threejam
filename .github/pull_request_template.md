@@ -8,5 +8,5 @@
 
 - [ ] `npm test` and `npx tsc -p .` pass, and every game in `games/` passes `check`
 - [ ] `npm run test:package` passes, if the change touches the package or `scripts/`
-- [ ] `AGENTS.md`, the guide in `docs/` that covers it, and the skill say what changed, if agents can see it
+- [ ] `AGENTS.md` and the guide in `docs/` that covers it say what changed, if agents can see it; a change to the skill's steps waits for the release that ships it
 - [ ] `CHANGELOG.md` has a line under Unreleased, if users can see it

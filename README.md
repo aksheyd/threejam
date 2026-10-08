@@ -19,6 +19,12 @@
 <a href="https://aksheyd.github.io/threejam/flappy.html"><img src="docs/images/flappy.png" alt="Flappy flying through the first gap" width="19%"></a>
 <a href="https://aksheyd.github.io/threejam/tetris.html"><img src="docs/images/tetris.png" alt="Tetris just before a row clears" width="19%"></a>
 
+Give your coding agent the skill, then ask it for a game:
+
+```bash
+npx skills add aksheyd/threejam
+```
+
 </div>
 
 ThreeJam is a 2D game engine on [Three.js](https://threejs.org) made for coding agents, built around one promise: the agent can prove what its game does. The engine owns the loop, time, input, and random numbers, so the same files, flags, and seed always give the same run, in `sim` and in the browser. An agent checks its game from exact numbers and frames instead of watching a window:
@@ -63,12 +69,16 @@ Install ThreeJam in your project, and give your coding agent the skill that teac
 
 ```bash
 npm install -D threejam
-npx skills add https://github.com/aksheyd/threejam/tree/v0.0.5/skills/threejam
+npx skills add aksheyd/threejam
 ```
 
 Then ask your agent for a game. Starting from an empty folder instead? `npx threejam new my-game` writes a project of its own; see [getting started](docs/getting-started.md).
 
-A skill installed from a tag stays on that version, so after you upgrade ThreeJam, run `npx skills add` again with the new tag.
+The short `npx skills add aksheyd/threejam` takes the skill from `main`, where it matches the latest release. To pin it to a release, add it from that release's tag instead. A skill installed from a tag stays on that version, so after you upgrade ThreeJam, run `npx skills add` again with the new tag:
+
+```bash
+npx skills add https://github.com/aksheyd/threejam/tree/v0.0.5/skills/threejam
+```
 
 ## Docs
 
