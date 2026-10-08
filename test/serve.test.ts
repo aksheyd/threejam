@@ -3,6 +3,7 @@ import { spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_proce
 import { once } from 'node:events'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer, request, type IncomingHttpHeaders } from 'node:http'
+import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
@@ -83,6 +84,52 @@ test('the run server answers only its own page, and /quit, /events, and /record 
     assert.equal(quits, 1)
   } finally {
     server.close()
+    await page.dispose()
+  }
+})
+
+test("closing the run server closes every connection to it, even one the browser opened ahead of a request, so an /events that comes on it after the page asked to quit can't keep run from exiting, and one with a request in progress, like a playtest's /record, once that has its answer", async () => {
+  const token = 'session-token'
+  const page = await buildPage({ dir: folder({ 'game.ts': GAME }), config: { mode: 'run', seed: 0, token, record: true } })
+  const recording = new Recording()
+  const server = await serve({ page, token, recording })
+  const { host, port } = new URL(server.url)
+  // A connection with what the server answers on it, and whether the server has closed it.
+  const open = () => {
+    const connection = { socket: connect(Number(port), '127.0.0.1'), answered: '', closed: false }
+    connection.socket.on('data', (chunk) => (connection.answered += chunk)).on('close', () => (connection.closed = true)).on('error', () => {})
+    return connection
+  }
+  const [early, recorder] = [open(), open()]
+  const part = '[[1, ["W"]]]'
+  const events = `GET /events?token=${token}&build=${page.build} HTTP/1.1\r\nHost: ${host}\r\nSec-Fetch-Site: same-origin\r\n\r\n`
+  try {
+    try {
+      await Promise.all([once(early.socket, 'connect'), once(recorder.socket, 'connect')])
+      // Node answers 100 Continue once it has a request's headers, so the /record is in progress when the server closes.
+      recorder.socket.write(`POST /record?token=${token}&build=${page.build}&session=a&seed=0&from=0&ticks=1 HTTP/1.1\r\nHost: ${host}\r\nSec-Fetch-Site: same-origin\r\nContent-Length: ${part.length}\r\nExpect: 100-continue\r\n\r\n`)
+      await until('the server to take the /record', () => recorder.answered.includes('100 Continue'))
+      // The server takes connections in the order they come, so once it has answered a later one, it has taken the early one.
+      await call(server.url)
+    } finally {
+      server.close()
+    }
+    early.socket.write(events)
+    recorder.socket.write(part)
+    await until(() => `the server to answer the /record; it answered ${JSON.stringify(recorder.answered)}`, () => recorder.answered.includes('204 No Content') || recorder.closed)
+    // The page's EventSource can reconnect on the connection that its /record had.
+    recorder.socket.write(events)
+    await until(
+      () => `the server to close both connections; it answered ${JSON.stringify(early.answered)} on the one it took before it closed, and ${JSON.stringify(recorder.answered)} on the /record's`,
+      () => early.closed && recorder.closed,
+    )
+    assert.deepEqual(
+      { early: early.answered, recorder: recorder.answered.split('\r\n').filter((line) => line.startsWith('HTTP/')), recorded: recording.latest(page.build) },
+      { early: '', recorder: ['HTTP/1.1 100 Continue', 'HTTP/1.1 204 No Content'], recorded: { build: page.build, id: 'a', seed: 0, changes: [[1, ['W']]], ticks: 1 } },
+    )
+  } finally {
+    early.socket.destroy()
+    recorder.socket.destroy()
     await page.dispose()
   }
 })

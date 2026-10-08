@@ -2,6 +2,13 @@
 
 Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest first. Until 1.0, a release can break a game or a script that worked with the one before, and each one that does says how under Breaking changes.
 
+## Unreleased
+
+### Fixed
+
+- On Node 22 and 24, `run` exits when it stops, even when the page's request to follow saves reaches it afterwards, on a connection the browser had opened ahead of it. Before, `run` printed `Stopped.` and went on running.
+- `run --record` exits when Ctrl-C, SIGTERM, or a closed terminal stops it while its page is sending part of the playtest. Before, if the page's next request came on that part's connection, `run` printed `Stopped.` and went on running.
+
 ## [0.0.6](https://github.com/aksheyd/threejam/compare/v0.0.5...v0.0.6) - 2026-10-08
 
 The README, and so the npm page, gives the skill's install line and a skills.sh badge on its first screen, and the skill sends agents to the manual of the release it comes with. `shot` no longer leaves Chrome's profile folder behind when Chrome exits as it starts on a busy machine. From [#27](https://github.com/aksheyd/threejam/pull/27) through [#31](https://github.com/aksheyd/threejam/pull/31).

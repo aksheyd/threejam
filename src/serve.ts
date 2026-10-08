@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
 import { accessSync, constants, existsSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, rmdirSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import type { Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { constants as vmConstants, createContext } from 'node:vm'
@@ -225,6 +226,10 @@ const RECORDED: Readonly<Record<Taken, number>> = { taken: 204, stale: 409, inva
 // The server answers only the page itself, and /events, /quit, and /record only with the token that run gives its page; without one, as for shot, it refuses them. /record is there only while run records the playtest.
 export function serve({ page, token, onQuit = () => {}, recording }: { page: Page; token?: string; onQuit?: () => void; recording?: Recording }): Promise<Server> {
   const listeners = new Set<ServerResponse>()
+  // Every connection, and those with a request in progress, which still gets its answer once the server has closed, as a playtest's /record under way does.
+  const connections = new Set<Socket>()
+  const answering = new Set<Socket>()
+  let closed = false
   const secret = token === undefined ? undefined : Buffer.from(token)
   const granted = (given: string | null) => {
     const offered = Buffer.from(given ?? '')
@@ -232,6 +237,12 @@ export function serve({ page, token, onQuit = () => {}, recording }: { page: Pag
   }
   let hosts: readonly string[] = []
   const server = createServer((request, response) => {
+    const { socket } = request
+    answering.add(socket)
+    response.once('close', () => {
+      answering.delete(socket)
+      if (closed) socket.destroy()
+    })
     const target = request.url ?? '/'
     const mark = target.indexOf('?')
     const path = mark < 0 ? target : target.slice(0, mark)
@@ -291,6 +302,10 @@ export function serve({ page, token, onQuit = () => {}, recording }: { page: Pag
     response.writeHead(200, { ...HEADERS, ...headers })
     response.end(name === 'bundle.js' ? page.bundle : page.index)
   })
+  server.on('connection', (socket) => {
+    connections.add(socket)
+    socket.once('close', () => connections.delete(socket))
+  })
   return new Promise((ready, fail) => {
     server.listen(0, '127.0.0.1', () => {
       const address = server.address()
@@ -305,8 +320,11 @@ export function serve({ page, token, onQuit = () => {}, recording }: { page: Pag
           for (const listener of listeners) listener.write('data: reload\n\n')
         },
         close() {
+          closed = true
           for (const listener of listeners) listener.end()
           server.close()
+          // Node 22 and 24 keep a connection the browser opened ahead of a request, and every Node keeps one whose request was in progress, and each serves an /events that comes on it after a quit, which would hold run open for good. So a connection goes now, or once the request on it has its answer.
+          for (const socket of connections) if (!answering.has(socket)) socket.destroy()
         },
       })
     })
