@@ -1316,10 +1316,15 @@ test("run serves the game at its seed, says on the page why a save doesn't build
   await until("run to print the save that doesn't build", () => errors.includes('\n'))
   assert.ok(errors.startsWith(`${shown}/game.ts:3: `) && errors.includes('</script><b>') && errors.indexOf('\n') === errors.length - 1, errors)
   const why = `${errors.trim()}\n\nFix the game and save; the page reloads.`
-  const notice = async () => (await tab.waitForSelector('pre'))?.evaluate((box) => box.textContent)
-  assert.equal(await notice(), why)
+  // esbuild can catch a save between its truncate and its write and build an empty game.ts first, whose page says why that can't run until the save's own page replaces it, so this waits for the notice that's due.
+  const shows = (notice: string) =>
+    tab.waitForFunction((text) => document.querySelector('pre')?.textContent === text, { timeout: 10_000 }, notice).catch(async () => {
+      assert.equal(await tab.$eval('pre', (box) => box.textContent).catch(() => 'no notice'), notice)
+    })
+  await shows(why)
   await tab.reload()
-  assert.deepEqual([await notice(), await tab.evaluate(() => typeof window.engine)], [why, 'undefined'])
+  await shows(why)
+  assert.equal(await tab.evaluate(() => typeof window.engine), 'undefined')
 
   const reloaded = tab.waitForNavigation()
   writeFileSync(join(dir, 'game.ts'), version(2))
@@ -1328,7 +1333,8 @@ test("run serves the game at its seed, says on the page why a save doesn't build
   assert.deepEqual(await playing(), [5, 2])
 
   writeFileSync(join(dir, 'game.ts'), version(2).replace('update() {}', 'update() {'))
-  await tab.waitForSelector('pre')
+  await until("run to print why the last save doesn't build", () => errors.split('\n').length > 2)
+  await shows(`${errors.trim().split('\n').at(-1)}\n\nFix the game and save; the page reloads.`)
   await tab.keyboard.press('Escape')
   // Giving up says what run printed and what the page shows, which tells an Esc that never reached run from a run slow to stop.
   await until('Esc on the page that says why to end the session', () => run.exitCode !== null).catch(async (error: Error) => {
