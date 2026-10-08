@@ -2,12 +2,15 @@
 
 Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest first. Until 1.0, a release can break a game or a script that worked with the one before, and each one that does says how under Breaking changes.
 
-## Unreleased
+## [0.0.6](https://github.com/aksheyd/threejam/compare/v0.0.5...v0.0.6) - 2026-10-08
+
+The README, and so the npm page, gives the skill's install line and a skills.sh badge on its first screen, and the skill sends agents to the manual of the release it comes with. `shot` no longer leaves Chrome's profile folder behind when Chrome exits as it starts on a busy machine. From [#27](https://github.com/aksheyd/threejam/pull/27) through [#31](https://github.com/aksheyd/threejam/pull/31).
 
 ### Docs
 
 - The README's first screen and Quick start give the skill's install line, `npx skills add aksheyd/threejam`, which takes the skill from `main`. Quick start's note gives the tag command as the way to pin a release, and the others that name a GitHub address still name the latest release's tag.
 - The README's first example names the command that writes its game of catch, `npx threejam new games/catch`, since the repo has no `games/catch`.
+- The skill sends agents to the manual of the release it comes with, `AGENTS.md` at the `v0.0.6` tag on GitHub, instead of main's, which can describe changes no release has yet.
 
 ### Fixed
 
