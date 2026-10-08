@@ -17,18 +17,23 @@ mkdirSync(TMP, { recursive: true })
 const made: string[] = []
 after(() => made.forEach((dir) => rmSync(dir, { recursive: true, force: true })))
 
+// The skill on main is the one the latest release shipped, and the next release brings it up to date, so it's held to AGENTS.md and the code only when nothing waits under Unreleased in CHANGELOG.md, as when a release is cut.
+const SKILL_DUE = !/^## Unreleased\r?\n(?:(?!## ).*\r?\n)*?- /m.test(readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8'))
+// Ends the message of a failed skill check, which right after a release can come from a change that left out its CHANGELOG.md line.
+const SKILL_WHY = "; the skill is checked because nothing is under Unreleased in CHANGELOG.md, as at a release, so add this change's line under Unreleased, or update the skill if this is the release"
+
 // The inline code a doc gives for shuffling a list, found by the step that makes it Fisher-Yates.
-function shuffle(doc: string): string {
+function shuffle(doc: string, why = ''): string {
   const text = readFileSync(join(ROOT, doc), 'utf8')
   const found = /`(for \(let i = list\.length - 1;[^`]*ctx\.random\(\) \* \(i \+ 1\)[^`]*)`/.exec(text)
-  assert.ok(found, `${doc} gives no Fisher-Yates shuffle`)
-  assert.match(text, /sort\(\(\) => ctx\.random\(\) - 0\.5\)/, `${doc} doesn't warn against shuffling with sort`)
+  assert.ok(found, `${doc} gives no Fisher-Yates shuffle${why}`)
+  assert.match(text, /sort\(\(\) => ctx\.random\(\) - 0\.5\)/, `${doc} doesn't warn against shuffling with sort${why}`)
   return found[1]
 }
 
-test('AGENTS.md and the skill give one shuffle, Fisher-Yates on ctx.random(), which passes check and orders by the seed alone', async () => {
+test('AGENTS.md gives one shuffle, Fisher-Yates on ctx.random(), which passes check and orders by the seed alone, and the skill gives the same one once a release brings it up to date', async () => {
   const snippet = shuffle('AGENTS.md')
-  assert.equal(shuffle(join('skills', 'threejam', 'SKILL.md')), snippet)
+  if (SKILL_DUE) assert.equal(shuffle(join('skills', 'threejam', 'SKILL.md'), SKILL_WHY), snippet, `the skill should give the shuffle AGENTS.md does${SKILL_WHY}`)
   const dir = mkdtempSync(join(TMP, 'shuffle-'))
   made.push(dir)
   const file = join(dir, 'game.ts')
@@ -126,12 +131,14 @@ test('AGENTS.md names exactly the keys, the built-in sounds, and the image and s
   same(items(between(MANUAL, 'so a game needs no files, or a ', ' file next to `game.ts`, by its file name')), taken.sounds, 'sound file extensions')
 })
 
-test("AGENTS.md and the skill give the most rows, and pixels to a row, that a sprite may have, and the most pixels a game's sprites may have in all", () => {
+test("AGENTS.md gives the most rows, and pixels to a row, that a sprite may have, and the most pixels a game's sprites may have in all, and the skill gives them once a release brings it up to date", () => {
   const skill = readFileSync(join(ROOT, 'skills', 'threejam', 'SKILL.md'), 'utf8')
   const total = SPRITE_TOTAL.toLocaleString('en-US')
-  for (const [doc, text] of [['AGENTS.md', MANUAL], ['the skill', skill]]) {
-    assert.ok(text.includes(`more than ${SPRITE_SIDE} rows or pixels to a row`), `${doc} should say a sprite has at most ${SPRITE_SIDE} rows, and pixels to a row`)
-    assert.ok(text.includes(`more than ${total} pixels in all`), `${doc} should say a game's sprites have at most ${total} pixels in all`)
+  const docs: [string, string, string][] = [['AGENTS.md', MANUAL, '']]
+  if (SKILL_DUE) docs.push(['the skill', skill, SKILL_WHY])
+  for (const [doc, text, why] of docs) {
+    assert.ok(text.includes(`more than ${SPRITE_SIDE} rows or pixels to a row`), `${doc} should say a sprite has at most ${SPRITE_SIDE} rows, and pixels to a row${why}`)
+    assert.ok(text.includes(`more than ${total} pixels in all`), `${doc} should say a game's sprites have at most ${total} pixels in all${why}`)
   }
 })
 
@@ -197,12 +204,12 @@ test('AGENTS.md and the commands guide show every command and name each of its f
   }
 })
 
-test('AGENTS.md, the agents guide, and the skill name the same MCP tools, which are every command but the one for people', () => {
+test('AGENTS.md and the agents guide name the same MCP tools, which are every command but the one for people, and so does the skill once a release brings it up to date', () => {
   const tools = items(between(MANUAL, '`npx threejam --mcp` serves ', ' as MCP tools'))
   const forPeople = between(MANUAL, 'as MCP tools. `', '` is for people')
   same([...tools, forPeople], commands().map((command) => command.name), 'commands')
   assert.deepEqual(items(between(readFileSync(join(ROOT, 'docs', 'agents.md'), 'utf8'), '# serve ', ' as MCP tools')), tools, 'docs/agents.md should name the MCP tools AGENTS.md does')
-  assert.deepEqual(items(between(readFileSync(join(ROOT, 'skills', 'threejam', 'SKILL.md'), 'utf8'), 'registers ', ' as tools')), tools, 'the skill should name the MCP tools AGENTS.md does')
+  if (SKILL_DUE) assert.deepEqual(items(between(readFileSync(join(ROOT, 'skills', 'threejam', 'SKILL.md'), 'utf8'), 'registers ', ' as tools')), tools, `the skill should name the MCP tools AGENTS.md does${SKILL_WHY}`)
 })
 
 const GAMES = readdirSync(join(ROOT, 'games'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
