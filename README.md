@@ -13,11 +13,11 @@
 
 [Play the examples](https://aksheyd.github.io/threejam/) • [Features](#features) • [Quick start](#quick-start) • [Docs](docs/README.md)
 
-<a href="https://aksheyd.github.io/threejam/racer.html"><img src="docs/images/racer.png" alt="Racer, its 2D rules drawn in 3D, played by its autopilot driver" width="19%"></a>
-<a href="https://aksheyd.github.io/threejam/asteroids.html"><img src="docs/images/asteroids.png" alt="Asteroids, played with the mouse by its autopilot driver" width="19%"></a>
-<a href="https://aksheyd.github.io/threejam/invaders.html"><img src="docs/images/invaders.png" alt="Space Invaders, played by its autopilot driver" width="19%"></a>
-<a href="https://aksheyd.github.io/threejam/flappy.html"><img src="docs/images/flappy.png" alt="Flappy flying through the first gap" width="19%"></a>
-<a href="https://aksheyd.github.io/threejam/tetris.html"><img src="docs/images/tetris.png" alt="Tetris just before a row clears" width="19%"></a>
+<a href="https://aksheyd.github.io/threejam/racer.html"><img src="docs/images/racer.png" alt="Racer, its 2D rules drawn in 3D, played by its autopilot driver" width="18%"></a>
+<a href="https://aksheyd.github.io/threejam/asteroids.html"><img src="docs/images/asteroids.png" alt="Asteroids, played with the mouse by its autopilot driver" width="18%"></a>
+<a href="https://aksheyd.github.io/threejam/invaders.html"><img src="docs/images/invaders.png" alt="Space Invaders, played by its autopilot driver" width="18%"></a>
+<a href="https://aksheyd.github.io/threejam/flappy.html"><img src="docs/images/flappy.png" alt="Flappy flying through the first gap" width="18%"></a>
+<a href="https://aksheyd.github.io/threejam/tetris.html"><img src="docs/images/tetris.png" alt="Tetris just before a row clears" width="18%"></a>
 
 Give your coding agent the skill, then ask it for a game:
 
