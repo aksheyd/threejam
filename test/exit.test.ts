@@ -365,6 +365,23 @@ test("a command that exits partway through a bundle takes esbuild's service with
   assert.deepEqual({ status: result.status, stdout: result.stdout, stderr: result.stderr }, { status: 0, stdout: '', stderr: '' })
 })
 
+test("a command that exits ends only its own esbuild's service, not another child whose arguments look like a service's", ESBUILD_UNTIED, () => {
+  // A child with the --service argument of another esbuild version.
+  const lines = [
+    "import { spawn } from 'node:child_process'",
+    "const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30_000)', '--', '--service=0.0.0'], { stdio: 'ignore' })",
+    'child.unref()',
+    "child.once('spawn', () => console.log(child.pid))",
+  ]
+  const { ended, printed } = isolated(lines)
+  const pid = Number(printed)
+  try {
+    assert.deepEqual({ ended, running: Number.isInteger(pid) && pid > 0 && reached(pid, 0) }, { ended: 0, running: true })
+  } finally {
+    if (Number.isInteger(pid) && pid > 0) reached(pid, 'SIGKILL')
+  }
+})
+
 test("a run that crashes takes esbuild's service, which watches the game, with it, so nothing holds run's stderr once it has exited, even with one of the service's pings unanswered", ESBUILD_UNTIED, async (t) => {
   // On SIGUSR2, run is busy for 1.5 s, then throws, as a crash would.
   const crash = "process.on('SIGUSR2', () => { for (const end = Date.now() + 1500; Date.now() < end; ); throw new Error('crashed') })"

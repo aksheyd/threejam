@@ -673,7 +673,7 @@ subscribe('child_process', (message) => {
   if (typeof message !== 'object' || message === null || !('process' in message) || !(message.process instanceof ChildProcess)) return
   const child = message.process
   child.once('spawn', () => {
-    if (child.spawnargs.some((arg) => arg.startsWith('--service='))) service = child
+    if (child.spawnargs.includes(`--service=${esbuild.version}`)) service = child
   })
 })
 
