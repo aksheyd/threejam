@@ -1,15 +1,15 @@
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { setMaxListeners } from 'node:events'
-import { accessSync, constants, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { accessSync, closeSync, constants, existsSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { SourceMap } from 'node:module'
 import { availableParallelism, constants as osConstants, tmpdir, totalmem } from 'node:os'
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getSystemErrorMap } from 'node:util'
 import * as esbuild from 'esbuild'
-import { isImageFile, isSoundFile } from './assets.ts'
+import { FILE_HEAD, fileProblem, isImageFile, isSoundFile } from './assets.ts'
 import { confinePlugin, confineRoots, real, within } from './confine.ts'
-import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, type Phase } from './errors.ts'
+import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, show, type Phase } from './errors.ts'
 import { ENGINE, NAME, ROOT, TYPES, engineFile, manifestsAbove } from './package.ts'
 import { SANDBOX, type Failure, type Place, type Reply, type Request, type Stage, type Thrown } from './sandbox.ts'
 import type { LogEntry, Snapshot, SoundEntry } from './types.ts'
@@ -66,6 +66,28 @@ export function named(path: string): string {
 export function assetsIn(folder: string): string[] {
   const files = readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isFile() && (isImageFile(entry.name) || isSoundFile(entry.name)))
   return files.map((entry) => entry.name).sort()
+}
+
+// The page loads every image and sound file in the game's folder, so check refuses one that can't be read, then names every one that doesn't start like a file of a type the page takes.
+export function checkAssets(folder: string): void {
+  const problems: string[] = []
+  for (const name of assetsIn(folder)) {
+    const head = new Uint8Array(FILE_HEAD)
+    let length: number
+    try {
+      const file = openSync(join(folder, name), 'r')
+      try {
+        length = readSync(file, head, 0, FILE_HEAD, 0)
+      } finally {
+        closeSync(file)
+      }
+    } catch (error) {
+      throw new IoError(`couldn't read ${isSoundFile(name) ? 'sound' : 'image'} ${show(name)} in the game's folder: ${reasonOf(error)}`)
+    }
+    const problem = fileProblem(name, head.subarray(0, length))
+    if (problem !== undefined) problems.push(problem)
+  }
+  if (problems.length > 0) throw new GameError(problems.join('; '))
 }
 
 // TIMEOUT and OUTPUT_TOO_LARGE: limits the sandbox put on a run, whatever the game does.

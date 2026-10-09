@@ -9,7 +9,7 @@ export const made: string[] = []
 after(() => made.forEach((dir) => rmSync(dir, { recursive: true, force: true })))
 
 // Inside the repo, so messages name the files by short relative paths.
-export function folder(files: Record<string, string>): string {
+export function folder(files: Record<string, string | Uint8Array>): string {
   const dir = mkdtempSync(join(TMP, 'game-'))
   made.push(dir)
   for (const [name, source] of Object.entries(files)) writeFileSync(join(dir, name), source)

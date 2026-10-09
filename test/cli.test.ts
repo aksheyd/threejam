@@ -341,6 +341,50 @@ test('check names an image the folder lacks, and sim takes --pointer, prints the
   assert.ok(cta.commands[0].command.endsWith(' --at 3 --press Mouse@2 --pointer -1.5,0.5@2'), cta.commands[0].command)
 })
 
+// The first bytes of a PNG and an MP3, which is all check reads of a file.
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52])
+const MP3 = Buffer.from([0xff, 0xfb, 0x90, 0x64, 0, 0, 0, 0])
+
+test("check reads the start of every image and sound file in the folder, which the page loads, and names each one that doesn't start like a type the page takes, while a raster image passes under any raster name, since browsers read its own type", () => {
+  const good = {
+    'game.ts': game({ update: 'world.ball.x += 1' }),
+    'tile.jpg': PNG,
+    'art.gif': 'GIF89a\x01\x00\x01\x00',
+    'pic.webp': 'RIFF\x1a\x00\x00\x00WEBPVP8L',
+    'logo.svg': '\uFEFF\n  <svg xmlns="http://www.w3.org/2000/svg"/>',
+    'beep.wav': 'RIFF\x24\x00\x00\x00WAVEfmt ',
+    'tune.mp3': MP3,
+    'loop.ogg': 'OggS\x00\x02',
+  }
+  assert.deepEqual(threejam('check', folder(good)), { code: 0, out: 'ok: true\nentities: 1\n' })
+  const bad = {
+    'game.ts': good['game.ts'],
+    'tile.png': 'version https://git-lfs.github.com/spec/v1\n',
+    'photo.png': '\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic',
+    'logo.svg': PNG,
+    'beep.wav': '',
+    'drum.ogg': 'FORM\x00\x00\x00\x1eAIFFCOMM',
+    'tune.mp3': '<!doctype html>',
+  }
+  const { code, out } = threejam('check', folder(bad), '--format', 'json')
+  const message = [
+    `sound "beep.wav" in the game's folder is empty, so the page can't play it`,
+    `sound "drum.ogg" in the game's folder doesn't start like a WAV, MP3, Ogg, FLAC, MP4, or WebM sound`,
+    `image "logo.svg" in the game's folder isn't an SVG image, which starts with "<", so the page can't draw it`,
+    `image "photo.png" in the game's folder doesn't start like a PNG, JPEG, GIF, WebP, AVIF, BMP, ICO, or CUR image`,
+    `image "tile.png" in the game's folder doesn't start like a PNG, JPEG, GIF, WebP, AVIF, BMP, ICO, or CUR image`,
+    `sound "tune.mp3" in the game's folder doesn't start like a WAV, MP3, Ogg, FLAC, MP4, or WebM sound`,
+  ].join('; ')
+  assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'GAME_ERROR', message } })
+})
+
+test("check fails with IO_ERROR on an image or sound file in the folder it can't read, which the page couldn't load either", { skip: (process.platform === 'win32' && "a file's mode doesn't stop Windows reading it") || (process.getuid?.() === 0 && 'root reads any file') }, () => {
+  const dir = folder({ 'game.ts': game({ update: 'world.ball.x += 1' }), 'tune.mp3': MP3 })
+  chmodSync(join(ROOT, dir, 'tune.mp3'), 0)
+  const { code, out } = threejam('check', dir, '--format', 'json')
+  assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'IO_ERROR', message: `couldn't read sound "tune.mp3" in the game's folder: permission denied` } })
+})
+
 test("check names a sprite with ragged rows, or sprites with more pixels than a game's may have, as it names a missing image, and a misspelled field of a sprite as a type error", () => {
   const sprite = (fields: string) =>
     [

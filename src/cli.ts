@@ -5,7 +5,7 @@ import { basename } from 'node:path'
 import { Cli, Errors, Formatter, z } from 'incur'
 import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, quote, shellWord, show, type Code } from './errors.ts'
 import { exportGame, exportPath, scriptAddress } from './export.ts'
-import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, describe, gameFiles, isSystemError, runGame, runSeeds, typecheck, type SeedRun } from './load.ts'
+import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, checkAssets, describe, gameFiles, isSystemError, runGame, runSeeds, typecheck, type SeedRun } from './load.ts'
 import { createGame } from './new.ts'
 import { NAME, VERSION, mcpCommand } from './package.ts'
 import { playtestFile } from './playtest.ts'
@@ -315,7 +315,8 @@ const cli = Cli.create('threejam', {
     },
   })
   .command('check', {
-    description: "Check a game: TypeScript types of game.ts and view.ts, the imports its page bundles, entities, sprites, and the images they name, then start and the first tick in a sandbox",
+    description:
+      "Check a game: TypeScript types of game.ts and view.ts, the imports its page bundles, entities, sprites, and the images they name, start and the first tick in a sandbox, then that each image and sound file in its folder can be read and starts like an image or sound of a type the page takes",
     args,
     options: z.object({ timeout }),
     examples: [{ args: { dir: 'games/pong' }, description: 'Check Pong after an edit' }],
@@ -328,6 +329,7 @@ const cli = Cli.create('threejam', {
         await bundlePage(c.args.dir)
         if (errors.length > 0) return c.error(failed('TYPE_ERROR', errors.join('; ')))
         const { snapshots } = await runGame(c.args.dir, { ticks: 1, timeout: c.options.timeout })
+        checkAssets(files.folder)
         return { ok: true, entities: snapshots[0].entities.length }
       } catch (error) {
         return c.error(failure(error))

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { ChildProcess } from 'node:child_process'
 import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 import { once } from 'node:events'
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
@@ -13,7 +13,8 @@ import pong from '../games/pong/game.ts'
 import { parseGame, simulate } from '../src/engine.ts'
 import { RunError } from '../src/errors.ts'
 import { exportGame } from '../src/export.ts'
-import { runGame } from '../src/load.ts'
+import { isSoundFile } from '../src/assets.ts'
+import { checkAssets, runGame } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { buildPage, serve } from '../src/serve.ts'
 import { openPage, shoot } from '../src/shot.ts'
@@ -1286,6 +1287,53 @@ test("a played page decodes each of the game's sound files on its own, telling t
       ],
     },
   )
+})
+
+// A small real file of each type check takes by how it starts, made with ffmpeg, each named for its type with the extension of another, since the page reads a file's own type; CUR is the ICO with its type set to 2.
+const SAMPLES = join(ROOT, 'test', 'samples')
+const SAMPLE_FILES = ['png.jpg', 'jpg.png', 'gif.webp', 'webp.gif', 'avif.png', 'avis.jpeg', 'bmp.png', 'ico.gif', 'cur.webp', 'id3.ogg', 'frames.wav', 'vorbis.mp3', 'opus.wav', 'flac.ogg', 'm4a.mp3', 'webm.wav']
+
+test('every type of image and sound file check takes, by how it starts, is one a played page draws or plays, even under the name of another type', { skip: !chrome && 'needs Chrome' }, async (t) => {
+  assert.deepEqual(readdirSync(SAMPLES).toSorted(), SAMPLE_FILES.toSorted())
+  const dir = mkdtempSync(join(TMP, 'samples-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), "import { defineGame } from 'threejam'\n\nexport default defineGame({ entities: { dot: { w: 0.1, h: 0.1 } }, update() {} })\n")
+  for (const name of SAMPLE_FILES) copyFileSync(join(SAMPLES, name), join(dir, name))
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="red"/></svg>'
+  writeFileSync(join(dir, 'plain.svg'), svg)
+  writeFileSync(join(dir, 'spaced.svg'), `\n  ${svg}`)
+  writeFileSync(join(dir, 'declared.svg'), `\uFEFF<?xml version="1.0" encoding="UTF-8"?>\n<!-- a comment -->\n${svg}`)
+  writeFileSync(join(dir, 'wide.svg'), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(svg, 'utf16le')]))
+  writeFileSync(join(dir, 'wav.mp3'), wav(0.05))
+  checkAssets(dir)
+  await exportGame({ dir, out: join(dir, 'samples.html') })
+  const sounds = readdirSync(dir).filter(isSoundFile).length
+  const tab = await newTab(t)
+  // How many sound files the page has decoded, and how many it couldn't.
+  await tab.evaluateOnNewDocument(() => {
+    const audio = { decoded: 0, failed: 0 }
+    const decode = BaseAudioContext.prototype.decodeAudioData
+    BaseAudioContext.prototype.decodeAudioData = function (...args: Parameters<typeof decode>) {
+      return decode.apply(this, args).then(
+        (buffer) => {
+          audio.decoded += 1
+          return buffer
+        },
+        (error: unknown) => {
+          audio.failed += 1
+          throw error
+        },
+      )
+    }
+    Reflect.set(window, 'audio', audio)
+  })
+  const seen = watch(tab)
+  await openPage(tab, pathToFileURL(join(dir, 'samples.html')).href)
+  // The page loads every image before its first tick, and says why on the page when one won't load.
+  await tab.waitForFunction(() => (window.engine?.tick ?? 0) > 0 || document.querySelector('pre') !== null)
+  assert.equal(await tab.evaluate(() => document.querySelector('pre')?.textContent), undefined)
+  await tab.waitForFunction((count) => Reflect.get(window, 'audio').decoded + Reflect.get(window, 'audio').failed === count, {}, sounds)
+  assert.deepEqual({ audio: await tab.evaluate(() => Reflect.get(window, 'audio')), errors: seen.errors }, { audio: { decoded: sounds, failed: 0 }, errors: [] })
 })
 
 async function until(what: string, check: () => boolean): Promise<void> {

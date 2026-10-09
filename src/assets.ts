@@ -31,6 +31,65 @@ function extension(name: string): string {
   return dot > 0 ? name.slice(dot).toLowerCase() : ''
 }
 
+// How much of the start of each image and sound file fileProblem reads.
+export const FILE_HEAD = 256
+
+// Why an image or sound file that starts with head isn't one the page takes, if it isn't. Chrome reads a raster image's own type, whatever its extension says, and a sound's too, so any type it draws or plays passes under any of the names, but an SVG must be text that starts with "<", after any byte order mark and space.
+export function fileProblem(name: string, head: Uint8Array): string | undefined {
+  const [kind, use] = isSoundFile(name) ? ['sound', 'play'] : ['image', 'draw']
+  const named = `${kind} ${show(name)} in the game's folder`
+  if (head.length === 0) return `${named} is empty, so the page can't ${use} it`
+  if (isSoundFile(name)) return isSound(head) ? undefined : `${named} doesn't start like a WAV, MP3, Ogg, FLAC, MP4, or WebM sound`
+  if (extension(name) === '.svg') return isSvg(head) ? undefined : `${named} isn't an SVG image, which starts with "<", so the page can't draw it`
+  return isRaster(head) ? undefined : `${named} doesn't start like a PNG, JPEG, GIF, WebP, AVIF, BMP, ICO, or CUR image`
+}
+
+function has(head: Uint8Array, at: number, bytes: string | readonly number[]): boolean {
+  const wanted = typeof bytes === 'string' ? [...bytes].map((char) => char.charCodeAt(0)) : bytes
+  return wanted.every((byte, i) => head[at + i] === byte)
+}
+
+// ISO media files, like AVIF and MP4, start with an ftyp box that names the brands they follow: the main one, then any they're compatible with.
+function brands(head: Uint8Array): string[] {
+  if (head.length < 16 || !has(head, 4, 'ftyp')) return []
+  const end = Math.min(head.length, new DataView(head.buffer, head.byteOffset, head.byteLength).getUint32(0))
+  const starts = [8, ...Array.from({ length: Math.max(0, Math.floor((end - 16) / 4)) }, (_, i) => 16 + i * 4)]
+  return starts.map((at) => String.fromCharCode(...head.subarray(at, at + 4)))
+}
+
+// ICO and CUR files start with the same header but for their type, 1 for an icon and 2 for a cursor.
+function isRaster(head: Uint8Array): boolean {
+  return (
+    has(head, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
+    has(head, 0, [0xff, 0xd8, 0xff]) ||
+    has(head, 0, 'GIF87a') ||
+    has(head, 0, 'GIF89a') ||
+    (has(head, 0, 'RIFF') && has(head, 8, 'WEBP')) ||
+    brands(head).some((brand) => brand === 'avif' || brand === 'avis') ||
+    has(head, 0, 'BM') ||
+    has(head, 0, [0, 0, 1, 0]) ||
+    has(head, 0, [0, 0, 2, 0])
+  )
+}
+
+function isSvg(head: Uint8Array): boolean {
+  const encoding = has(head, 0, [0xff, 0xfe]) ? 'utf-16le' : has(head, 0, [0xfe, 0xff]) ? 'utf-16be' : 'utf-8'
+  return new TextDecoder(encoding).decode(head).trimStart().startsWith('<')
+}
+
+// An MP3 starts with its ID3 tag, or with the 11 set bits that begin each of its frames, and a WebM with the header of Matroska, which it is.
+function isSound(head: Uint8Array): boolean {
+  return (
+    (has(head, 0, 'RIFF') && has(head, 8, 'WAVE')) ||
+    has(head, 0, 'ID3') ||
+    (head[0] === 0xff && (head[1] & 0xe0) === 0xe0) ||
+    has(head, 0, 'OggS') ||
+    has(head, 0, 'fLaC') ||
+    brands(head).length > 0 ||
+    has(head, 0, [0x1a, 0x45, 0xdf, 0xa3])
+  )
+}
+
 // What an image may name: a file in the game's folder, or a sprite the game declares, whose name has no dot.
 export interface Images {
   // The image and sound files in the game's folder; without them, as when a test imports a game, any file name of the right type passes.

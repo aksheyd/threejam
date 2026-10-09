@@ -5,7 +5,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 | Command | What it does |
 | --- | --- |
 | `npx threejam new <dir>` | Writes a small playable game and its test into a new folder, plus a `package.json` and `tsconfig.json` outside a project |
-| `npx threejam check <dir>` | Type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks the game's sprites and that the images entities name are in the folder or among its sprites, then runs `start` and the first tick |
+| `npx threejam check <dir>` | Type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks the game's sprites and that the images entities name are in the folder or among its sprites, runs `start` and the first tick, then reads the start of every image and sound file in the folder and fails on one it can't read, or that doesn't start like an image or a sound of a type the page takes |
 | `npx threejam sim <dir> --ticks N` | Runs N ticks, 60 to a second, without a window and prints the entities, or with `--seeds`, runs them once for each seed and sums up how often and how soon `--until` held |
 | `npx threejam shot <dir> --at T,T,...` | Saves an 800x600 PNG at each tick, drawn by the same page players see, to the `.png` file `-o` or `--out` names |
 | `npx threejam run <dir>` | Checks that the game starts, then opens it in a window for a person to play, with sound after the first key press or click; Esc quits, `--serve-only` serves the page and prints its address without opening a window, `--port N` and `--host ADDRESS` choose where it's served, and `--record FILE` saves what the person plays, as a driver that replays it exactly |
@@ -75,7 +75,7 @@ Output is [TOON](https://toonformat.dev) by default, `--format json` switches it
 | `USAGE` | The command was called wrong: a missing or malformed flag, a value out of range, or a folder or file that isn't there |
 | `BUILD_ERROR` | The game's files couldn't be bundled: a syntax error, or an import that doesn't resolve or comes from outside the folder |
 | `TYPE_ERROR` | `check` found type errors |
-| `GAME_ERROR` | The game's or driver's code threw or broke an engine rule, in the sandbox or in the page, or ran out of memory |
+| `GAME_ERROR` | The game's or driver's code threw or broke an engine rule, in the sandbox or in the page, or ran out of memory, or `check` found an image or sound file in the game's folder that's empty or doesn't start like a type the page takes |
 | `TIMEOUT` | The game's code, its page in `shot`, or the type check ran past `--timeout` |
 | `OUTPUT_TOO_LARGE` | A run printed more than its reply can hold, or `check`'s type check more than 1 MB |
 | `BROWSER_ERROR` | Chrome is missing, didn't start, or failed while drawing |
