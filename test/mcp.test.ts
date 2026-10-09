@@ -42,7 +42,7 @@ test('the MCP instructions say the tools run game code and that a game\'s output
   }
 })
 
-test("a failed MCP call's text starts with its code, which an MCP client has no other way to read", async (t) => {
+test("a failed MCP call's text starts with its code, which an MCP client has no other way to read, even when the MCP SDK refuses an argument that doesn't fit the tool's schema", async (t) => {
   const typo = folder({ 'game.ts': game({ update: 'world.ball.vxx = 2' }) })
   const syntax = folder({ 'game.ts': game({ update: 'world.ball.x += ;' }) })
   const server = mcp(t.signal)
@@ -56,6 +56,8 @@ test("a failed MCP call's text starts with its code, which an MCP client has no 
     assert.match(await failure('check', { dir: typo }), /^TYPE_ERROR: test\/\.tmp\/game-\w+\/game\.ts:6: Property 'vxx' does not exist/)
     assert.match(await failure('sim', { dir: syntax, ticks: 1 }), /^BUILD_ERROR: test\/\.tmp\/game-\w+\/game\.ts:6: Unexpected ";"$/)
     assert.match(await failure('sim', { dir: 'games/pong', ticks: 1, press: ['Nope@1'] }), /^USAGE: --press "Nope@1": unknown key/)
+    assert.equal(await failure('sim', { dir: 'games/pong', ticks: 1.5 }), 'USAGE: ticks: expected a whole number from 0 up, got 1.5')
+    assert.equal(await failure('sim', { ticks: -1, seed: 1.5 }), 'USAGE: dir: required; ticks: expected a whole number from 0 up, got -1; seed: expected a whole number, got 1.5')
   } finally {
     server.close()
   }

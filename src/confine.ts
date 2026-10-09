@@ -8,7 +8,7 @@
 import { realpathSync } from 'node:fs'
 import { isAbsolute, relative, sep } from 'node:path'
 import type * as esbuild from 'esbuild'
-import { UsageError, quote } from './errors.ts'
+import { BuildError, quote } from './errors.ts'
 import { ENGINE, NAME, engineFile } from './package.ts'
 
 export type Role = 'engine' | 'game' | 'driver'
@@ -45,8 +45,8 @@ export function within(root: string, path: string): boolean {
 // Realpaths the engine, the game's folder, and a driver's, and refuses a game or driver that sits inside the engine, which would otherwise borrow the engine's trust.
 export function confineRoots({ engine, game, driver }: { engine?: string; game: string; driver: string | undefined }): Roots {
   const roots: Roots = { engine: real(engine ?? ENGINE), game: real(game), driver: driver === undefined ? undefined : real(driver) }
-  if (within(roots.engine, roots.game)) throw new UsageError("the game's folder can't be inside ThreeJam's own files")
-  if (roots.driver !== undefined && within(roots.engine, roots.driver)) throw new UsageError("a --driver file can't be inside ThreeJam's own files")
+  if (within(roots.engine, roots.game)) throw new BuildError("the game's folder can't be inside ThreeJam's own files")
+  if (roots.driver !== undefined && within(roots.engine, roots.driver)) throw new BuildError("a --driver file can't be inside ThreeJam's own files")
   return roots
 }
 
@@ -102,7 +102,7 @@ export function confinePlugin({ roots, seeds }: ConfineOptions): esbuild.Plugin 
     const resolved = real(seed)
     // A game.ts, view.ts, or --driver that is a link out of its folder would otherwise smuggle the whole target tree in as the game or driver.
     if (!within(roots.game, resolved) && !(roots.driver !== undefined && within(roots.driver, resolved))) {
-      throw new UsageError(`can't bundle ${quote(shown(seed))}, which is ${resolved.replaceAll(sep, '/')}: a game.ts, view.ts, or --driver must be a file in its own folder, not a link elsewhere`)
+      throw new BuildError(`can't bundle ${quote(shown(seed))}, which is ${resolved.replaceAll(sep, '/')}: a game.ts, view.ts, or --driver must be a file in its own folder, not a link elsewhere`)
     }
     seedFiles.add(resolved)
   }

@@ -72,8 +72,8 @@ Output is [TOON](https://toonformat.dev) by default, `--format json` switches it
 
 | Code | What went wrong |
 | --- | --- |
-| `USAGE` | The command was called wrong: a missing or malformed flag, a value out of range, or a folder or file that isn't there |
-| `BUILD_ERROR` | The game's files couldn't be bundled: a syntax error, or an import that doesn't resolve or comes from outside the folder |
+| `USAGE` | The command was called wrong: a misspelled command, a missing or malformed flag, a value out of range, or a folder or file that isn't there |
+| `BUILD_ERROR` | The game's files couldn't be bundled: a syntax error, or an import that doesn't resolve or comes from outside the folder, even through a `game.ts`, `view.ts`, or driver that links outside it |
 | `TYPE_ERROR` | `check` found type errors |
 | `GAME_ERROR` | The game's or driver's code threw or broke an engine rule, in the sandbox or in the page, or ran out of memory, or `check` found an image or sound file in the game's folder that's empty or doesn't start like a type the page takes |
 | `TIMEOUT` | The game's code, its page in `shot`, or the type check ran past `--timeout` |

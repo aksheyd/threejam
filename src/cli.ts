@@ -3,11 +3,12 @@ import { randomInt } from 'node:crypto'
 import { isIP } from 'node:net'
 import { basename } from 'node:path'
 import { Cli, Errors, Formatter, z } from 'incur'
+import { FORMATS, commandLineRefusal } from './commandline.ts'
 import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, quote, shellWord, show, type Code } from './errors.ts'
 import { exportGame, exportPath, scriptAddress } from './export.ts'
 import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, checkAssets, describe, gameFiles, isSystemError, runGame, runSeeds, typecheck, type SeedRun } from './load.ts'
 import { createGame } from './new.ts'
-import { NAME, VERSION, mcpCommand } from './package.ts'
+import { VERSION, mcpCommand } from './package.ts'
 import { playtestFile } from './playtest.ts'
 import { parseSeeds, summarize, type SeedRow, type Summary } from './seeds.ts'
 import { bundlePage, play } from './serve.ts'
@@ -102,6 +103,33 @@ const MCP_REPLY_LIMIT = 100_000
 const serving = process.argv.slice(2).includes('--mcp')
 // A stdio MCP client shuts its server down by closing the pipe that is the server's stdin, as a batch piped into the server does once it's written. The calls still running get 2 s to finish and reply: once they're done, nothing holds the process, which exits by itself, and the timer, which holds nothing either, ends any call still running after that.
 if (serving) process.stdin.once('close', () => setTimeout(shutDown, 2000).unref())
+
+// The MCP SDK refuses a call whose arguments don't fit the tool's schema before ThreeJam runs, with an answer of its own that has no code, and writes each answer to stdout whole, so that one gets the code every other failure starts with as it's written.
+const SDK_REFUSAL = 'Input validation error: '
+if (serving) {
+  const write = process.stdout.write.bind(process.stdout)
+  process.stdout.write = (chunk: string | Uint8Array, ...rest: unknown[]): boolean => Reflect.apply(write, process.stdout, [typeof chunk === 'string' ? coded(chunk) : chunk, ...rest])
+}
+
+function coded(json: string): string {
+  if (!json.includes(SDK_REFUSAL)) return json
+  try {
+    const message: unknown = JSON.parse(json)
+    const result = isRecord(message) ? message.result : undefined
+    const content: unknown = isRecord(result) && result.isError === true && Array.isArray(result.content) ? result.content[0] : undefined
+    if (!isRecord(content) || typeof content.text !== 'string' || !content.text.startsWith(SDK_REFUSAL)) return json
+    // The SDK joins the issues, each a field's name and what was wrong, with commas, which ThreeJam's messages hold too, so a comma joins two only before a name and its colon.
+    const issues = content.text.slice(SDK_REFUSAL.length).replace(/^Invalid arguments for tool [^:]+: /, '').split(/, (?=[A-Za-z][\w.]*: )/)
+    content.text = `USAGE: ${issues.join('; ')}`
+    return `${JSON.stringify(message)}\n`
+  } catch {
+    return json
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 function failure(error: unknown) {
   return failed(codeOf(error), describe(error))
@@ -514,52 +542,34 @@ const cli = Cli.create('threejam', {
     },
   })
 
-// incur's global flags, which it reads wherever they stand; the valued ones take the next word when there is one.
-const GLOBAL = new Set(['--full-output', '--llms', '--llms-full', '--mcp', '--help', '-h', '--update', '--incur-update-check', '--version', '--schema', '--json', '--token-count'])
-const VALUED = new Set(['--format', '--filter-output', '--token-limit', '--token-offset'])
-
-// What mcp add's own flags take after them, as its help shows them.
-const MCP_ADD_VALUES: ReadonlyMap<string, string> = new Map([
-  ['--agent', "an agent's name, like --agent claude-code"],
-  ['--command', 'the command agents will run, like --command "npx threejam --mcp"'],
-  ['-c', 'the command agents will run, like -c "npx threejam --mcp"'],
-])
-
-// incur's mcp add reads its flags from the command line itself and skips any word it doesn't know, or a flag that lacks its value, so it could register ThreeJam with every agent it finds; it takes only what its help shows.
-function mcpAddRefusal(argv: readonly string[]): string | undefined {
-  const words: string[] = []
-  for (let i = 0; i < argv.length; i++) {
-    if (VALUED.has(argv[i]) && argv[i + 1]) i++
-    else if (!GLOBAL.has(argv[i])) words.push(argv[i])
-  }
-  const at = words[0] === NAME ? 1 : 0
-  if (words[at] !== 'mcp' || words[at + 1] !== 'add') return undefined
-  const rest = words.slice(at + 2)
-  for (let i = 0; i < rest.length; i++) {
-    if (rest[i] === '--no-global') continue
-    const needs = MCP_ADD_VALUES.get(rest[i])
-    if (needs === undefined) return `mcp add takes --agent NAME, --command CMD or -c CMD, and --no-global, not ${quote(rest[i])}`
-    const value = rest[i + 1]
-    if (value === undefined || value === '' || value.startsWith('-')) return `${rest[i]} needs ${needs}`
-    i++
-  }
-  return undefined
+// A refusal printed as incur prints a failure: one line for a person at a terminal, and otherwise in the format the command line asks for.
+function printRefusal(message: string, argv: readonly string[]): void {
+  const at = argv.indexOf('--format')
+  const format = argv.includes('--json') ? 'json' : FORMATS.find((name) => at !== -1 && name === argv[at + 1])
+  process.stdout.write(process.stdout.isTTY && format === undefined ? `Error (USAGE): ${message}\n` : `${Formatter.format({ code: 'USAGE', message }, format ?? 'toon')}\n`)
+  process.exitCode = 1
 }
 
-const FORMATS: readonly Formatter.Format[] = ['toon', 'json', 'yaml', 'md', 'jsonl']
-
-function formatIn(argv: readonly string[]): Formatter.Format {
-  if (argv.includes('--json')) return 'json'
-  const at = argv.indexOf('--format')
-  return FORMATS.find((format) => at !== -1 && format === argv[at + 1]) ?? 'toon'
+// incur names a flag's value in help by its schema's type, and reads a number flag with Number(), which takes 0x10 and 1e2, so ThreeJam's number flags read their own digits and have a type incur names <value>; their help names them <number>, as the manifest does, in the table laid out again.
+function numbered(text: string): string {
+  const lines = text.split('\n')
+  const start = lines.indexOf('Options:')
+  if (start === -1) return text
+  const end = lines.findIndex((line, i) => i > start && line === '')
+  const rows = lines.slice(start + 1, end === -1 ? undefined : end).map((line) => /^ {2}(\S.*?) {2,}(.*)$/.exec(line))
+  if (rows.length === 0 || !rows.every((row) => row !== null)) return text
+  const flags = rows.map(([, flag]) => flag.replace(/ <value>$/, ' <number>'))
+  const width = Math.max(...flags.map((flag) => flag.length))
+  const table = rows.map(([, , description], i) => `  ${flags[i].padEnd(width)}  ${description}`)
+  return [...lines.slice(0, start + 1), ...table, ...(end === -1 ? [] : lines.slice(end))].join('\n')
 }
 
 const commandLine = process.argv.slice(2)
-const refused = mcpAddRefusal(commandLine)
-if (refused === undefined) cli.serve()
-else {
-  process.stdout.write(`${Formatter.format({ code: 'USAGE', message: refused }, formatIn(commandLine))}\n`)
-  process.exitCode = 1
-}
+// incur's completion scripts call back at each Tab as COMPLETE=<shell> threejam -- <words>, which incur answers before it looks up any command.
+const refused = process.env.COMPLETE ? undefined : commandLineRefusal(commandLine)
+const helping = commandLine.includes('--help') || commandLine.includes('-h')
+if (refused !== undefined) printRefusal(refused, commandLine)
+else if (helping) cli.serve(commandLine, { stdout: (text) => process.stdout.write(numbered(text)) })
+else cli.serve()
 
 export default cli

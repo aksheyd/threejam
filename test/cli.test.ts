@@ -6,9 +6,10 @@ import { join, relative, sep } from 'node:path'
 import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import pong from '../games/pong/game.ts'
+import { commandLineRefusal } from '../src/commandline.ts'
 import { simulate } from '../src/engine.ts'
 import { crashed, describe } from '../src/load.ts'
-import { ENGINE, ROOT, VERSION } from '../src/package.ts'
+import { ENGINE, NAME, ROOT, VERSION } from '../src/package.ts'
 import { playtestSource } from '../src/playtest.ts'
 import { findChrome } from '../src/serve.ts'
 import { callLimit, framePaths } from '../src/shot.ts'
@@ -61,6 +62,75 @@ test("incur's own refusals print one line with the code USAGE: a missing or frac
     assert.equal(code, 1, out)
     assert.match(out, /^code: USAGE\nmessage: [^\n]+\n$/)
     assert.ok(out.includes(named), out)
+  }
+})
+
+test("what incur would refuse with codes of its own, a misspelled command, a subcommand or shell incur lacks, a flag before the command, and a bad value for one of incur's flags, fails as USAGE in ThreeJam's words, while help, the version, and completions still print", () => {
+  const commands = 'new, check, sim, shot, run, export, mcp, skills, and completions'
+  const refused: ReadonlyArray<readonly [readonly string[], string]> = [
+    [['siim', 'games/pong'], `threejam has no command "siim"; did you mean sim? Its commands are ${commands}`],
+    [['nope'], `threejam has no command "nope"; its commands are ${commands}`],
+    [['threejam', 'sim', 'games/pong'], `threejam has no command "threejam"; its commands are ${commands}`],
+    [['--seed', '5', 'sim', 'games/pong'], `threejam takes its command first, before "--seed"; its commands are ${commands}`],
+    [['mcp', 'ad'], 'mcp has no command "ad"; did you mean add? Its commands are add and doctor'],
+    [['skills', 'nope'], 'skills has no command "nope"; its commands are add and list'],
+    [['completions', 'powershell'], 'completions takes bash, fish, nushell, or zsh, not "powershell"'],
+    [['sim', 'games/pong', '--ticks', '1', '--format', 'xml'], '--format: expected toon, json, yaml, md, or jsonl, got "xml"'],
+    [['sim', 'games/pong', '--ticks', '1', '--token-limit', 'many'], '--token-limit: expected a number, got "many"'],
+  ]
+  for (const [args, message] of refused) {
+    const { code, out } = threejam(...args, '--json')
+    assert.deepEqual({ code, failure: JSON.parse(out) }, { code: 1, failure: { code: 'USAGE', message } }, args.join(' '))
+  }
+  assert.match(threejam('siim', '--help').out, /^threejam@\S+ — /)
+  assert.deepEqual(threejam('siim', '--version'), { code: 0, out: `${VERSION}\n` })
+  assert.match(threejam('completions', 'bash').out, /complete/)
+})
+
+test("a shell's tab completion, which calls back as COMPLETE=bash threejam -- threejam si, gets sim, as incur gives it", () => {
+  const { code, out } = threejamWith({ COMPLETE: 'bash', _COMPLETE_INDEX: '1' }, '--', NAME, 'si')
+  assert.deepEqual({ code, candidates: out.split('\v') }, { code: 0, candidates: ['sim'] })
+})
+
+test("every command, built-in, subcommand, alias, shell, and global flag that incur's own help and manifest list gets past the check ThreeJam makes before incur reads the command line", () => {
+  // The rows of a help section, like Commands:, each a name, or flags, and a description.
+  const rows = (help: string, title: string) => {
+    const start = help.split('\n').indexOf(`${title}:`)
+    assert.notEqual(start, -1, `help has no ${title} section: ${help}`)
+    const lines = help.split('\n').slice(start + 1)
+    return lines.slice(0, lines.indexOf('')).map((line) => line.trim().split(/ {2,}/)[0])
+  }
+  const passes = (...words: string[]) => assert.equal(commandLineRefusal(words), undefined, words.join(' '))
+  const { commands } = JSON.parse(threejam('--llms-full', '--format', 'json').out)
+  for (const { name, schema } of commands) {
+    passes(name, 'games/pong')
+    for (const option of Object.keys(schema.options?.properties ?? {})) passes(name, 'games/pong', `--${option.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, '1')
+  }
+  const root = threejam('--help').out
+  for (const row of rows(root, 'Integrations')) {
+    const help = threejam(row, '--help').out
+    const names = [row, ...(/^Aliases: (.+)$/m.exec(help)?.[1].split(', ') ?? [])]
+    const usage = /^Usage: \S+ \S+ <([^>]+)>$/m.exec(help)?.[1] ?? ''
+    const takes = usage === 'command' ? rows(help, 'Commands') : usage.split('|')
+    for (const name of names) for (const next of [undefined, ...takes]) for (const words of [[name], [NAME, name]]) passes(...words, ...(next === undefined ? [] : [next]))
+  }
+  // Each global flag goes before the command, where the check would take one it doesn't know for the command, with a value for its placeholder, then a flag, which is how incur tells --version from a command's own.
+  const values: Readonly<Record<string, string>> = { n: '5', keys: 'log' }
+  for (const row of rows(root, 'Global Options')) {
+    const placeholder = /<([^>]+)>$/.exec(row)?.[1]
+    const value = placeholder === undefined ? [] : [values[placeholder] ?? placeholder.split('|')[0]]
+    for (const flag of row.split(/, | <[^>]*>$/).filter((part) => part.startsWith('--'))) passes(flag, ...value, '--format', 'toon', 'sim', 'games/pong', '--ticks', '1')
+  }
+})
+
+test("--help names the value of every number flag <number>, as the manifest's types say, and no flag's value <value>", () => {
+  const { commands } = JSON.parse(threejam('--llms-full', '--format', 'json').out)
+  for (const { name, schema } of commands) {
+    const help = threejam(name, '--help').out
+    assert.doesNotMatch(help, /<value>/, `${name} --help`)
+    const properties: Record<string, { type?: string }> = schema.options?.properties ?? {}
+    const numbers = Object.entries(properties).filter(([, { type }]) => type === 'number' || type === 'integer').map(([key]) => `--${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)} <number>`)
+    assert.deepEqual([...help.matchAll(/^ {2}(--[a-z-]+ <number>)/gm)].map((match) => match[1]), numbers, `${name} --help`)
   }
 })
 

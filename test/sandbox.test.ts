@@ -171,12 +171,14 @@ test('a game or driver placed inside the engine directory cannot import a file o
   const byDriver = threejam(['sim', normal.dir, '--ticks', '1', '--driver', relative(ROOT, join(probe, 'driver.ts'))])
   assert.equal(byDriver.code, 1, byDriver.out)
   assert.match(String(byDriver.json.message), /can't be inside ThreeJam's own files/)
+  assert.equal(byDriver.json.code, 'BUILD_ERROR')
   assert.ok(!byDriver.out.includes('CANARY-ENGINE-TRUST'))
 
   writeFileSync(join(probe, 'game.ts'), `import { defineGame } from 'threejam'\n${importOutside}\nexport default defineGame({ entities: { ball: { x: 0, w: 0.1, tag: '' } }, update(world) { world.ball.tag = tag } })\n`)
   const byGame = threejam(['sim', relative(ROOT, probe), '--ticks', '1', '--fields', 'tag'])
   assert.equal(byGame.code, 1, byGame.out)
   assert.match(String(byGame.json.message), /can't be inside ThreeJam's own files/)
+  assert.equal(byGame.json.code, 'BUILD_ERROR')
   assert.ok(!byGame.out.includes('CANARY-ENGINE-TRUST'))
 })
 
@@ -279,6 +281,7 @@ test('game.ts cannot be a symlink to a file elsewhere, but a sibling import in t
   const link = threejam(['sim', linked.dir, '--ticks', '1'])
   assert.equal(link.code, 1)
   assert.match(String(link.json.message), /must be a file in its own folder, not a link elsewhere/)
+  assert.equal(link.json.code, 'BUILD_ERROR')
 
   const ok = folder({ 'game.ts': `import { vx } from './helper.ts'\n${game('', 'x: 0, w: 0.1, vx')}`.replace('world.ball.x += 0.01', 'world.ball.x += world.ball.vx'), 'helper.ts': 'export const vx = 2\n' })
   const run = threejam(['sim', ok.dir, '--ticks', '3', '--fields', 'x'])
