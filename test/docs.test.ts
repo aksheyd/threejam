@@ -64,7 +64,7 @@ test('AGENTS.md gives one shuffle, Fisher-Yates on ctx.random(), which passes ch
   assert.deepEqual([...shuffled].sort((a, b) => Number(a) - Number(b)), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 })
 
-test("the docs install the skill from the newest release's tag, and CHANGELOG.md has an entry for the version in package.json", () => {
+test("the docs install the skill from the newest release's tag, the skill sends agents to the manual at that tag, and CHANGELOG.md has an entry for the version in package.json", () => {
   const released = [...readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8').matchAll(/^## \[(\d+\.\d+\.\d+)\]/gm)].map((match) => match[1])
   assert.ok(released.includes(VERSION), `CHANGELOG.md has no entry for ${VERSION}, the version in package.json`)
   const [root] = manifestsAbove(ROOT)
@@ -74,6 +74,10 @@ test("the docs install the skill from the newest release's tag, and CHANGELOG.md
     const sources = [...readFileSync(join(ROOT, doc), 'utf8').replaceAll('<wbr>', '').matchAll(/npx skills add (https:[^\s<]+)/g)].map((match) => match[1])
     assert.deepEqual(sources, [source], `${doc} should install the skill from ${source}`)
   }
+  // The skill changes only with a release, which points it at that release's manual, so this holds even with changes under Unreleased.
+  const manual = `${String(root.json.homepage)}/blob/v${released[0]}/AGENTS.md`
+  const links = [...readFileSync(join(ROOT, 'skills', 'threejam', 'SKILL.md'), 'utf8').matchAll(/https:\S*?\/AGENTS\.md/g)].map((match) => match[0])
+  assert.ok(links.length > 0 && links.every((link) => link === manual), `the skill should send agents to the manual at the newest release's tag, ${manual}, and it links ${links.join(', ') || 'none'}`)
 })
 
 const MANUAL = readFileSync(join(ROOT, 'AGENTS.md'), 'utf8')
