@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url'
 import type { BoundingBox, HTTPRequest, KeyInput, Page } from 'puppeteer-core'
 import asteroids from '../games/asteroids/game.ts'
 import pong from '../games/pong/game.ts'
+import { PITCH_RANGE } from '../src/assets.ts'
 import { parseGame, simulate } from '../src/engine.ts'
 import { RunError } from '../src/errors.ts'
 import { exportGame } from '../src/export.ts'
@@ -1336,6 +1337,60 @@ test('every type of image and sound file check takes, by how it starts, is one a
   assert.deepEqual({ audio: await tab.evaluate(() => Reflect.get(window, 'audio')), errors: seen.errors }, { audio: { decoded: sounds, failed: 0 }, errors: [] })
 })
 
+const PITCH_BOUNDS = [
+  "import { SOUNDS, defineGame } from 'threejam'",
+  '',
+  'export default defineGame({',
+  '  entities: { dot: { w: 0.1, h: 0.1 } },',
+  '  update(world, ctx) {',
+  `    if (ctx.input.pressed('Space')) for (const sound of [...SOUNDS, 'beep.wav'] as const) for (const pitch of [${PITCH_RANGE.lowest}, ${PITCH_RANGE.highest}]) ctx.play(sound, { pitch })`,
+  '  },',
+  '})',
+  '',
+].join('\n')
+
+test('a played page plays every built-in sound and a sound file at the lowest and highest pitch the engine takes without an error, and plays on', { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const dir = mkdtempSync(join(TMP, 'pitch-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), PITCH_BOUNDS)
+  writeFileSync(join(dir, 'beep.wav'), wav(0.25))
+  await exportGame({ dir, out: join(dir, 'pitch.html') })
+  const tab = await newTab(t)
+  // The page's audio context, how many files it has decoded, and the rate each quarter-second buffer, the file's, plays at.
+  await tab.evaluateOnNewDocument(() => {
+    const audio = { decoded: 0, contexts: new Array<AudioContext>(), rates: new Array<number>() }
+    const decode = BaseAudioContext.prototype.decodeAudioData
+    BaseAudioContext.prototype.decodeAudioData = function (...args: Parameters<typeof decode>) {
+      return decode.apply(this, args).then((buffer) => {
+        audio.decoded += 1
+        return buffer
+      })
+    }
+    window.AudioContext = class extends AudioContext {
+      constructor(...args: ConstructorParameters<typeof AudioContext>) {
+        super(...args)
+        audio.contexts.push(this)
+      }
+    }
+    const start = AudioBufferSourceNode.prototype.start
+    AudioBufferSourceNode.prototype.start = function (...args: Parameters<typeof start>) {
+      if (this.buffer?.duration === 0.25) audio.rates.push(this.playbackRate.value)
+      return start.apply(this, args)
+    }
+    Reflect.set(window, 'audio', audio)
+  })
+  const seen = watch(tab)
+  await openPage(tab, pathToFileURL(join(dir, 'pitch.html')).href)
+  await tab.waitForFunction(() => window.engine !== undefined && Reflect.get(window, 'audio').decoded === 1)
+  await tab.keyboard.press('Enter')
+  await tab.waitForFunction(() => Reflect.get(window, 'audio').contexts[0].state === 'running')
+  await tab.keyboard.press('Space')
+  await tab.waitForFunction(() => Reflect.get(window, 'audio').rates.length === 2)
+  const played = await tab.evaluate(() => window.engine.tick)
+  await tab.waitForFunction((tick) => window.engine.tick > tick + 30, {}, played)
+  assert.deepEqual({ rates: await tab.evaluate(() => Reflect.get(window, 'audio').rates), errors: seen.errors }, { rates: [PITCH_RANGE.lowest, PITCH_RANGE.highest], errors: [] })
+})
+
 async function until(what: string, check: () => boolean): Promise<void> {
   for (const deadline = Date.now() + 10_000; !check(); await new Promise((wait) => setTimeout(wait, 20))) {
     if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}`)
@@ -1697,6 +1752,7 @@ test("a played page that fails as it runs, or whose image won't load, stops and 
   const token = 'session-token'
   const cases: ReadonlyArray<readonly [Record<string, string | Buffer>, RegExp, number | null]> = [
     [{ 'game.ts': stops }, /^no tick 3\n\nFix the game and save; the page reloads\.$/, 3],
+    [{ 'game.ts': game("if (ctx.tick === 3) ctx.play('blip', { pitch: 17 })") }, /^pitch must be from 1\/16 to 16, four octaves down to four up, got 17\n\nFix the game and save; the page reloads\.$/, 3],
     [{ 'game.ts': game(''), 'view.ts': draw }, /^view\.ts: no frame today \(in draw at tick \d+\)\n\nFix the game and save; the page reloads\.$/, null],
     [{ 'game.ts': game('', "w: 1, h: 1, image: 'rock.png'"), 'rock.png': 'not a png' }, /^the image rock\.png couldn't be loaded; check that the file is a whole image of its type\n\nFix the file and save; the page reloads\.$/, null],
   ]

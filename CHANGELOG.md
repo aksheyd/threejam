@@ -4,6 +4,10 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 
 ## Unreleased
 
+### Breaking changes
+
+- `ctx.play` takes a `pitch` from 1/16 to 16, four octaves down to four up, and any other pitch is an error at the call, as a `volume` outside 0 to 1 is, in `sim`, `check`, and the page alike. So a game whose pitch grows past 16 now stops at that call. Before, any finite pitch above 0 passed `sim` and `check`, but one far outside that range, like `1e40` or `1e-50`, made the page's Web Audio throw, which stopped the game in the browser.
+
 ### Added
 
 - `run --port N` serves the page at the port you name, and `run --host ADDRESS` on another IP address of the machine, like `0.0.0.0`, so the page opens from another machine or from the host of a Docker container. `run` warns when other machines can reach the page, and it still answers only its own page, with the session's token.

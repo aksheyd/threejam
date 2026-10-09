@@ -200,6 +200,9 @@ export function soundEntry({ tick, sound, options, files }: { tick: number; soun
   return { tick, name: sound, ...soundOptions(options) }
 }
 
+// The lowest and highest pitch a sound may play at, four octaves down and four up. Far past them, Web Audio refuses the frequencies and playback rates a sound needs and throws, which would stop the page where sim plays on.
+export const PITCH_RANGE = { lowest: 1 / 16, highest: 16 } as const
+
 function soundOptions(options: unknown): { volume: number; pitch: number } {
   if (options === undefined) return { volume: 1, pitch: 1 }
   if (typeof options !== 'object' || options === null || Array.isArray(options)) {
@@ -210,7 +213,7 @@ function soundOptions(options: unknown): { volume: number; pitch: number } {
   const volume = ('volume' in options ? options.volume : undefined) ?? 1
   const pitch = ('pitch' in options ? options.pitch : undefined) ?? 1
   if (typeof volume !== 'number' || !(volume >= 0 && volume <= 1)) throw new GameError(`volume must be from 0 to 1, got ${show(volume)}`)
-  if (typeof pitch !== 'number' || !(pitch > 0 && Number.isFinite(pitch))) throw new GameError(`pitch must be a finite number greater than 0, got ${show(pitch)}`)
+  if (typeof pitch !== 'number' || !(pitch >= PITCH_RANGE.lowest && pitch <= PITCH_RANGE.highest)) throw new GameError(`pitch must be from 1/16 to 16, four octaves down to four up, got ${show(pitch)}`)
   return { volume, pitch }
 }
 

@@ -695,11 +695,18 @@ test('ctx.play records each sound with its tick, volume, and pitch, and an unkno
   // @ts-expect-error a misspelled built-in sound fails check
   assert.match(playing('explod'), /unknown sound "explod"; play a built-in sound \(blip, coin, explode, hit, jump, lose, score, shoot\) or a \.wav, \.mp3, or \.ogg file/)
   assert.match(playing('coin', { volume: 2 }), /volume must be from 0 to 1, got 2/)
-  assert.match(playing('coin', { pitch: 0 }), /pitch must be a finite number greater than 0, got 0/)
+  assert.match(playing('coin', { pitch: 0 }), /pitch must be from 1\/16 to 16, four octaves down to four up, got 0/)
   // @ts-expect-error ctx.play's options are volume and pitch
   assert.match(playing('coin', { speed: 2 }), /ctx\.play has no option "speed"; its options are volume and pitch/)
   const missing = defineGame({ entities: { ball }, update: (_, ctx) => ctx.play('pew.wav') })
   assert.throws(() => simulate(missing, { ticks: 1, assets }), /no sound "pew\.wav" in the game's folder, which has laser\.wav$/)
+})
+
+test('a sound plays at a pitch from 1/16 to 16, four octaves down to four up, and any pitch past them fails at the call, since Web Audio throws far past them and would stop the page', () => {
+  const game = defineGame({ entities: { ball }, update: (_, ctx) => ctx.play('explode', { pitch: ctx.tick === 1 ? 1 / 16 : 16 }) })
+  assert.deepEqual(simulate(game, { ticks: 2 }).sounds.map((sound) => sound.pitch), [1 / 16, 16])
+  const pitched = (pitch: number) => failure(defineGame({ entities: { ball }, update: (_, ctx) => ctx.play('blip', { pitch }) }))
+  for (const pitch of [0.0624, 16.001, 1e-320, 1e306, Number.NaN]) assert.match(pitched(pitch), new RegExp(`pitch must be from 1/16 to 16, four octaves down to four up, got ${String(pitch).replace(/[.+]/g, '\\$&')}`))
 })
 
 test('state lists x, y, and visible for drawn entities plus declared fields, and --only matches names', () => {

@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, wr
 import { join, relative } from 'node:path'
 import { after, test } from 'node:test'
 import { pathToFileURL } from 'node:url'
-import { SPRITE_SIDE, SPRITE_TOTAL, isImageFile, isSoundFile } from '../src/assets.ts'
+import { PITCH_RANGE, SPRITE_SIDE, SPRITE_TOTAL, isImageFile, isSoundFile } from '../src/assets.ts'
 import { parseGame, simulate } from '../src/engine.ts'
 import type { Code } from '../src/errors.ts'
 import { glyph } from '../src/font.ts'
@@ -140,6 +140,11 @@ test("AGENTS.md gives the most rows, and pixels to a row, that a sprite may have
     assert.ok(text.includes(`more than ${SPRITE_SIDE} rows or pixels to a row`), `${doc} should say a sprite has at most ${SPRITE_SIDE} rows, and pixels to a row${why}`)
     assert.ok(text.includes(`more than ${total} pixels in all`), `${doc} should say a game's sprites have at most ${total} pixels in all${why}`)
   }
+})
+
+test('AGENTS.md gives the lowest and highest pitch a sound may play at', () => {
+  const range = `from 1/${1 / PITCH_RANGE.lowest} to ${PITCH_RANGE.highest}`
+  assert.ok(MANUAL.includes(`pitch\` scales how high it sounds, speeding a file up too, ${range}`), `AGENTS.md should say pitch is ${range}`)
 })
 
 // A Record over a type fails the typecheck once the type gains or loses a member, so these lists change with the code.
