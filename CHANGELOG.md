@@ -25,6 +25,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - When something other than Esc stops `run --record` while its page is sending part of the playtest, `run` waits up to a second for that part, so the playtest has it. Before, `run` could save the playtest without it, and a part whose body stopped halfway kept `run` running.
 - `shot` works when `DISPLAY` names a display that's gone or that refuses it, as over SSH or in a container. Before, its headless Chrome tried that display, and `shot` failed with `GAME_ERROR`, saying it couldn't create a WebGL context.
 - esbuild's service ends with the command that started it when `run` crashes, or when a command exits partway through bundling a game. Before, it could stay, polling the game's folder and keeping the command's stderr open until the next save, or print "fatal error: all goroutines are asleep - deadlock!" after the command had exited.
+- On macOS and Linux, when Chrome itself crashes during `shot`, `shot` kills the processes Chrome started before it removes Chrome's profile. Before, it waited up to 10 s for them to exit on their own, and on a busy machine, where they could take longer, it then removed the profile while they could still write to it.
 
 ## [0.0.6](https://github.com/aksheyd/threejam/compare/v0.0.5...v0.0.6) - 2026-10-08
 

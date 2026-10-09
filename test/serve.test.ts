@@ -507,7 +507,7 @@ test('on Windows, Chrome keeps its temporary files in its profile, so those a ki
   assert.deepEqual(readdirSync(temp).filter((name) => name !== basename(profile)), [])
 })
 
-test('closing a Chrome that crashed waits for the processes it started, which outlive it a moment and can still write to its profile', { skip: !chrome && 'needs Chrome', timeout: 60_000 }, async () => {
+test("closing a Chrome that crashed ends the processes it started, which outlive it and can still write to its profile, even ones too slow to notice it's gone", { skip: !chrome && 'needs Chrome', timeout: 60_000 }, async () => {
   const profile = folder({})
   const killer = new AbortController()
   const browser = await launchChrome(chrome ?? 'no Chrome', { profile, signal: killer.signal })
@@ -517,6 +517,8 @@ test('closing a Chrome that crashed waits for the processes it started, which ou
     await browser.newPage()
     const exited = once(crashed, 'exit')
     const closed = once(crashed, 'close')
+    // On macOS and Linux Chrome leads a process group, and stopping it stands in for helpers too slow to notice Chrome is gone, which only a kill then ends.
+    if (process.platform !== 'win32') process.kill(-crashed.pid, 'SIGSTOP')
     // Chrome's own process alone, as when it crashes.
     process.kill(crashed.pid, 'SIGKILL')
     await exited
@@ -531,6 +533,8 @@ test('closing a Chrome that crashed waits for the processes it started, which ou
     assert.ok(took < 1000, `closing again took ${took} ms`)
   } finally {
     killer.abort()
+    // Puppeteer kills Chrome's group only while Chrome runs, so stopped helpers that closing failed to end are ended here.
+    if (crashed?.pid && process.platform !== 'win32') reached(-crashed.pid, 'SIGKILL')
     removeProfile(profile)
   }
 })

@@ -574,15 +574,21 @@ export function openWindow(url: string, { grace = 2000 }: { grace?: number } = {
   }
 }
 
+// Kills what is left of the process group that Chrome leads, and says whether anything was.
+export function killGroup(chrome: ChildProcess): boolean {
+  if (!GROUPS || chrome.pid === undefined) return false
+  try {
+    process.kill(-chrome.pid, 'SIGKILL')
+    return true
+  } catch {
+    return false
+  }
+}
+
 // Kills what is left of the process group that Chrome leads, then waits for all of it to be gone, for at most 2 s, since a process that a busy disk holds up, or that no one reaps, can outlast the kill.
 export async function endGroup(chrome: ChildProcess): Promise<void> {
   const group = chrome.pid
-  if (!GROUPS || group === undefined) return
-  try {
-    process.kill(-group, 'SIGKILL')
-  } catch {
-    return
-  }
+  if (group === undefined || !killGroup(chrome)) return
   for (const deadline = Date.now() + 2000; Date.now() < deadline; await new Promise((wait) => setTimeout(wait, 10))) {
     try {
       process.kill(-group, 0)

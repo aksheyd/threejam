@@ -9,7 +9,7 @@ import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { LimitError, STOPS, endBy, gameFailure, isSystemError, timeLimit } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
-import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, endGroup, findChrome, removeProfile, removeSocketFolders, serve, socketFolder, socketFolders, tmpdirHint, type Server } from './serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, endGroup, findChrome, killGroup, removeProfile, removeSocketFolders, serve, socketFolder, socketFolders, tmpdirHint, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
 export interface ShotOptions {
@@ -216,6 +216,8 @@ export async function closeChrome(browser: Browser | undefined, killer: AbortCon
   const ended = gone(chrome)
   // Aborting has Puppeteer kill Chrome's process group, or its process tree on Windows; on Linux that leaves only Chrome's crash handlers, which exit once Chrome is gone.
   if (running && (stuck || !(await within(wait, browser.close().catch(() => {}))))) killer.abort()
+  // Puppeteer kills the group only while Chrome itself runs, so this ends a crashed Chrome's helpers, which can take longer than the wait below to notice it's gone; that wait, unlike endGroup's, ends once they've exited, even where no one reaps them.
+  killGroup(chrome)
   await within(10_000, ended)
 }
 
