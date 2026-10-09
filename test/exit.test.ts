@@ -293,6 +293,31 @@ test("after a signal stops the shots, the commands the CLI and the MCP server ru
   assert.deepEqual({ ...isolated(lines), made: readdirSync(parent) }, { ended: TERMINATED, printed: `${VERSION}\n`, made: [] })
 })
 
+test("after a signal stops the shots, an MCP server answers nothing while they clean up, not even what the MCP SDK answers before ThreeJam runs: a call whose arguments don't fit the tool's schema, a call to a tool it lacks, the list of its tools, or a ping", async (t) => {
+  // Loaded before the server: a shot that takes 1.5 s to clean up, which a signal stops as the server writes its first refusal, so every request after that one comes after the signal.
+  const stop = [
+    `import { interruptible } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'shot.ts')).href)}`,
+    "void interruptible((killer) => new Promise((done) => killer.signal.addEventListener('abort', () => setTimeout(done, 1500))))",
+    'const write = process.stdout.write.bind(process.stdout)',
+    'process.stdout.write = (chunk, ...rest) => {',
+    '  const written = write(chunk, ...rest)',
+    `  if (String(chunk).includes('USAGE: ')) ${TERM}`,
+    '  return written',
+    '}',
+  ].join('\n')
+  const preload = join(ROOT, folder({ 'stop.mjs': stop }), 'stop.mjs')
+  const server = mcp(t.signal, ROOT, { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(preload).href}` })
+  await server.ready
+  const misfit = { name: 'sim', arguments: { dir: 'games/pong', ticks: 1.5 } }
+  assert.equal((await server.request('tools/call', misfit)).result?.content?.[0]?.text, 'USAGE: ticks: expected a whole number from 0 up, got 1.5')
+  const unanswered = server.exited.then(() => 'unanswered')
+  const late = [server.request('tools/call', misfit), server.request('tools/call', { name: 'run', arguments: {} }), server.request('tools/list', {}), server.request('ping', {})]
+  assert.deepEqual(
+    { late: await Promise.all(late.map((reply) => Promise.race([reply, unanswered]))), exited: await server.exited },
+    { late: ['unanswered', 'unanswered', 'unanswered', 'unanswered'], exited: process.platform === 'win32' ? [143, null] : [null, 'SIGTERM'] },
+  )
+})
+
 test('the exit an MCP server begins once its stdin has closed and its calls had their 2 s stops each shot, and none settles, even while another still cleans up, and no call starts', () => {
   const cleaning = (name: string, ms: number) => `void interruptible((killer) => new Promise((done) => killer.signal.addEventListener('abort', () => setTimeout(() => done(console.log('${name} cleaned up')), ${ms})))).finally(() => console.log('${name} settled'))`
   const lines = [

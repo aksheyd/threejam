@@ -12,7 +12,7 @@ import { VERSION, mcpCommand } from './package.ts'
 import { playtestFile } from './playtest.ts'
 import { parseSeeds, summarize, type SeedRow, type Summary } from './seeds.ts'
 import { bundlePage, play } from './serve.ts'
-import { endShots, framePaths, parseTicks, shoot, unlessStopped } from './shot.ts'
+import { endShots, framePaths, halted, parseTicks, shoot, unlessStopped } from './shot.ts'
 import type { EntityState, Value } from './types.ts'
 
 // Exiting ends the sandboxes and type checks of calls still running, once shots still running have had up to 2 s to close their Chrome and remove its folders.
@@ -104,11 +104,11 @@ const serving = process.argv.slice(2).includes('--mcp')
 // A stdio MCP client shuts its server down by closing the pipe that is the server's stdin, as a batch piped into the server does once it's written. The calls still running get 2 s to finish and reply: once they're done, nothing holds the process, which exits by itself, and the timer, which holds nothing either, ends any call still running after that.
 if (serving) process.stdin.once('close', () => setTimeout(shutDown, 2000).unref())
 
-// The MCP SDK refuses a call whose arguments don't fit the tool's schema before ThreeJam runs, with an answer of its own that has no code, and writes each answer to stdout whole, so that one gets the code every other failure starts with as it's written.
+// The MCP SDK writes each answer to stdout whole, and gives some before ThreeJam runs, which unlessStopped never sees: a list of the tools, a ping, a call to a tool it lacks, and a refusal of a call whose arguments don't fit the tool's schema, which has no code. So that refusal gets the code every other failure starts with as it's written, and once shots are stopping nothing is written, as no call answers then.
 const SDK_REFUSAL = 'Input validation error: '
 if (serving) {
   const write = process.stdout.write.bind(process.stdout)
-  process.stdout.write = (chunk: string | Uint8Array, ...rest: unknown[]): boolean => Reflect.apply(write, process.stdout, [typeof chunk === 'string' ? coded(chunk) : chunk, ...rest])
+  process.stdout.write = (chunk: string | Uint8Array, ...rest: unknown[]): boolean => halted() || Reflect.apply(write, process.stdout, [typeof chunk === 'string' ? coded(chunk) : chunk, ...rest])
 }
 
 function coded(json: string): string {
