@@ -5,6 +5,7 @@ import { connect } from 'node:net'
 import { join } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 import { Recorder } from '../src/browser/playtest.ts'
+import { CENTER } from '../src/input.ts'
 import { typecheck } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { Recording, playtestSource, type Change } from '../src/playtest.ts'
@@ -130,6 +131,28 @@ test("a page's recorder sends run its session in parts of at most 1000 changes, 
       '10 changes: 204',
       ...['1000 changes: 409', '1000 changes: 204', '1000 changes: 204', '1000 changes: 204', '1000 changes: 204'],
     ])
+  } finally {
+    globalThis.fetch = fetching
+    await close()
+  }
+})
+
+test("a page's recorder starts each session with every key up, so a key still held from the session before is the new session's first change", async () => {
+  const { page, kept, url, close } = await recording()
+  const fetching = globalThis.fetch
+  globalThis.fetch = (input: string | URL | Request, init?: RequestInit) => fetching(new URL(String(input), url), init)
+  try {
+    const recorder = new Recorder({ token: TOKEN, build: page.build })
+    recorder.start(1)
+    recorder.add(1, ['W'], CENTER)
+    recorder.add(2, ['W'], CENTER)
+    // The pointer stays in the middle, where a session starts it, so only the keys can make the new session's first tick a change.
+    recorder.start(2)
+    recorder.add(1, ['W'], CENTER)
+    recorder.add(2, ['W'], CENTER)
+    await recorder.flush()
+    const session = kept.latest(page.build)
+    assert.deepEqual({ seed: session?.seed, changes: session?.changes, ticks: session?.ticks }, { seed: 2, changes: [[1, ['W']]], ticks: 2 })
   } finally {
     globalThis.fetch = fetching
     await close()
