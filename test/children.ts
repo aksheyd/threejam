@@ -18,6 +18,16 @@ if (process.platform !== 'win32') {
   }
 }
 
+// The CLI run to its end, with what it printed. spawnSync holds up the test's own timeout, so a run that never ends, like a run that starts serving, is killed here.
+export function threejamWith(env: Record<string, string>, ...args: string[]) {
+  const result = spawnSync(process.execPath, [CLI, ...args], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, ...env }, timeout: 60_000, killSignal: 'SIGKILL' })
+  return { code: result.status, out: result.stdout + result.stderr }
+}
+
+export function threejam(...args: string[]) {
+  return threejamWith({}, ...args)
+}
+
 // The CLI in a child process, stopped with every process it started once signal aborts, as a test's does when the test ends or times out.
 export function spawnCli(args: readonly string[], signal: AbortSignal, cwd = ROOT, env = process.env): ChildProcessWithoutNullStreams {
   // On macOS and Linux the child leads a process group of its own, which every process it starts joins, apart from a sandbox or a type check, which end with the CLI by themselves.
