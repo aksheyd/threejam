@@ -10,7 +10,7 @@ import { MAX_SEEDS, parseSeeds, summarize, type SeedRow } from '../src/seeds.ts'
 import { CLI, mcp } from './children.ts'
 import { folder, game } from './games.ts'
 
-// The CLI's JSON reply. stderr is left out, since the esbuild that sim starts holds it a moment after the CLI exits.
+// The CLI's JSON reply.
 async function threejam(signal: AbortSignal, ...args: string[]) {
   const child = spawn(process.execPath, [CLI, ...args, '--format', 'json'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'], signal, killSignal: 'SIGKILL' })
   let out = ''
