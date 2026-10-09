@@ -95,9 +95,21 @@ function rasterized(image: HTMLImageElement): HTMLCanvasElement {
   return canvas
 }
 
-export async function loadSounds(assets: Assets, context: BaseAudioContext): Promise<ReadonlyMap<string, AudioBuffer>> {
+// Each sound file loads on its own, so one that can't be loaded or decoded is left out, with why passed to failed, and the others still play.
+export async function loadSounds(assets: Assets, context: BaseAudioContext, failed: (error: unknown) => void): Promise<ReadonlyMap<string, AudioBuffer>> {
   const sounds = Object.entries(assets).filter(([name]) => isSoundFile(name))
-  return new Map(await Promise.all(sounds.map(async ([name, url]) => [name, await loadSound(name, url, context)] as const)))
+  const loaded = await Promise.all(
+    sounds.map(([name, url]) =>
+      loadSound(name, url, context).then(
+        (buffer) => [[name, buffer] as const],
+        (error: unknown) => {
+          failed(error)
+          return []
+        },
+      ),
+    ),
+  )
+  return new Map(loaded.flat())
 }
 
 async function loadSound(name: string, url: string, context: BaseAudioContext): Promise<AudioBuffer> {

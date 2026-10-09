@@ -11,6 +11,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 ### Fixed
 
 - `mcp add` registers the server with the Node that ran it, by its absolute path, or by a name on the PATH that leads to that Node, like Homebrew's `/opt/homebrew/bin/node`, which an upgrade keeps. Before, it registered a bare `node`, which an agent finds on its own PATH, where it can be an older Node that can't run a clone's TypeScript, or none, as for an app started from a desktop.
+- A sound file the page can't load or decode no longer silences the game's other sound files: each loads on its own, and the browser's console names each one that fails. Before, one bad file left every sound file silent, and the console named only the first that failed.
 - Esc quits `run` even when it comes while the page reloads after a save, before the page has run its script. Before, the page missed it, and the session went on.
 - On Node 22 and 24, `run` exits when it stops, even when the page's request to follow saves reaches it afterwards, on a connection the browser had opened ahead of it. Before, `run` printed `Stopped.` and went on running.
 - `run --record` exits when Ctrl-C, SIGTERM, or a closed terminal stops it while its page is sending part of the playtest. Before, if the page's next request came on that part's connection, `run` printed `Stopped.` and went on running.

@@ -1232,12 +1232,12 @@ const SOUND_FILES = [
   '',
 ].join('\n')
 
-test("a played page decodes the game's sound files and plays one at its pitch once a key wakes its audio, and tells the console of a file it can't decode", { skip: !chrome && 'needs Chrome' }, async (t) => {
-  const page = async (sound: string, contents: Buffer) => {
+test("a played page decodes each of the game's sound files on its own, telling the console of each one it can't decode, and plays the others at their pitch once a key wakes its audio", { skip: !chrome && 'needs Chrome' }, async (t) => {
+  const page = async (sounds: Record<string, Buffer>) => {
     const dir = mkdtempSync(join(TMP, 'sound-'))
     made.push(dir)
     writeFileSync(join(dir, 'game.ts'), SOUND_FILES)
-    writeFileSync(join(dir, sound), contents)
+    for (const [name, contents] of Object.entries(sounds)) writeFileSync(join(dir, name), contents)
     await exportGame({ dir, out: join(dir, 'sound.html') })
     const tab = await newTab(t)
     // What the page's audio does: how many files it decodes, its context, and each buffer it plays, by length and rate.
@@ -1269,18 +1269,23 @@ test("a played page decodes the game's sound files and plays one at its pitch on
     return { tab, errors: seen.errors }
   }
 
-  const { tab, errors } = await page('beep.wav', wav(0.25))
+  const { tab, errors } = await page({ 'beep.wav': wav(0.25), 'bad.ogg': Buffer.from('not a sound'), 'worse.mp3': Buffer.from('nor this') })
   await tab.waitForFunction(() => Reflect.get(window, 'audio').decoded === 1)
+  await until("the page to report both files it can't decode", () => errors.length === 2)
   await tab.keyboard.press('Enter')
   await tab.waitForFunction(() => Reflect.get(window, 'audio').contexts[0].state === 'running')
   await tab.keyboard.press('Space')
   await tab.waitForFunction(() => Reflect.get(window, 'audio').played.length > 0)
-  assert.deepEqual({ played: await tab.evaluate(() => Reflect.get(window, 'audio').played), errors }, { played: [[0.25, 2]], errors: [] })
-
-  const broken = await page('beep.ogg', Buffer.from('not a sound'))
-  await until("the page to report the file it can't decode", () => broken.errors.length > 0)
-  assert.deepEqual(broken.errors, ["Error: the sound beep.ogg couldn't be decoded; check that the file is a whole sound of its type"])
-  await broken.tab.waitForFunction(() => window.engine.tick > 30)
+  assert.deepEqual(
+    { played: await tab.evaluate(() => Reflect.get(window, 'audio').played), errors: errors.toSorted() },
+    {
+      played: [[0.25, 2]],
+      errors: [
+        "Error: the sound bad.ogg couldn't be decoded; check that the file is a whole sound of its type",
+        "Error: the sound worse.mp3 couldn't be decoded; check that the file is a whole sound of its type",
+      ],
+    },
+  )
 })
 
 async function until(what: string, check: () => boolean): Promise<void> {

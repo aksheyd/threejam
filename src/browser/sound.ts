@@ -36,10 +36,7 @@ export class Speaker {
 
   constructor(assets: Assets) {
     this.#out.connect(this.#context.destination)
-    loadSounds(assets, this.#context).then(
-      (files) => (this.#files = files),
-      (error: unknown) => console.error(error),
-    )
+    void loadSounds(assets, this.#context, (error) => console.error(error)).then((files) => (this.#files = files))
   }
 
   // Browsers keep a page silent until a key or button press.
