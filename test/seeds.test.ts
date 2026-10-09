@@ -4,7 +4,7 @@ import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 import { join, sep } from 'node:path'
 import { test } from 'node:test'
 import { UsageError } from '../src/errors.ts'
-import { SEEDS_AT_ONCE, Slots, poolSize, runGame, runSeeds, usableMemory } from '../src/load.ts'
+import { SEEDS_AT_ONCE, Slots, eachSeed, poolSize, runGame, runSeeds, usableMemory, type SeedRun } from '../src/load.ts'
 import { ROOT } from '../src/package.ts'
 import { MAX_SEEDS, parseSeeds, summarize, type SeedRow } from '../src/seeds.ts'
 import { CLI, mcp } from './children.ts'
@@ -118,6 +118,32 @@ test("a pool gives a freed place to the runner that has waited longest, and a ru
   assert.deepEqual(order, ['stopped false', 'first true', 'last true'])
   slots.give()
   assert.equal(await slots.take(going), true)
+})
+
+test("a call ends with its last seed, though another call's seeds hold every place, since its runners still waiting for a place leave the queue once that seed is handed out", async () => {
+  const slots = new Slots(2)
+  // Each seed runs until the test ends it, by the call's letter and the seed.
+  const running = new Map<string, () => void>()
+  const run = (call: string) => (seed: number) => new Promise<SeedRun>((done) => running.set(`${call}${seed}`, () => done({ seed, tick: 1, reached: true })))
+  const settled = () => new Promise((done) => setImmediate(done))
+  const end = async (key: string) => {
+    const done = running.get(key)
+    assert.ok(done, `${key} isn't running; ${[...running.keys()].join(', ')} are`)
+    running.delete(key)
+    done()
+    await settled()
+  }
+  const long = eachSeed({ slots, seeds: [0, 1, 2, 3], run: run('long'), keep: (seed) => seed })
+  let ended = false
+  const short = eachSeed({ slots, seeds: [0, 1], run: run('short'), keep: (seed) => seed }).then(() => (ended = true))
+  await settled()
+  // A place goes to the short call's first runner. Once its seed ends, its second runner takes the last seed, while the first queues again, behind the long call's runner.
+  await end('long0')
+  await end('short0')
+  await end('short1')
+  assert.equal(ended, true)
+  for (const key of ['long1', 'long2', 'long3']) await end(key)
+  await Promise.all([long, short])
 })
 
 test("each seed's row is what sim --seed prints for that seed, with a driver whose random numbers follow the seed too, and sim suggests rerunning the first seed that didn't reach --until", async (t) => {

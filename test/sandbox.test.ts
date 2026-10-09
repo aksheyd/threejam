@@ -308,11 +308,14 @@ test('an endless loop in a game fails with TIMEOUT, naming where it was, instead
   assert.ok(Date.now() - started < 8000, 'the loop was not stopped near its budget')
 })
 
-test('a game that keeps more than the 1 GB a sandbox may grow to runs out of memory with GAME_ERROR on any machine', () => {
+test('a game that keeps more than the 1 GB a sandbox may grow to runs out of memory with GAME_ERROR on any machine, and with --every, the message says the snapshots it keeps count toward that', () => {
   // 8 MB more every tick: 1.6 GB by tick 200, which V8's own limit would allow on a machine with 16 GB.
   const { dir } = folder({ 'game.ts': game('const kept: number[][] = []').replace('world.ball.x += 0.01', 'kept.push(new Array(1_000_000).fill(ctx.tick + 0.5))') })
   const sim = threejam(['sim', dir, '--ticks', '200'])
   assert.deepEqual({ code: sim.code, json: sim.json }, { code: 1, json: { code: 'GAME_ERROR', message: 'the game ran out of memory; look for a list or a loop that keeps growing' } })
+  const every = threejam(['sim', dir, '--ticks', '200', '--every', '50'])
+  const message = 'the game ran out of memory, and the snapshots --every 50 keeps count toward it; keep fewer with --only, a larger --every, or --until, or look for a list or a loop that keeps growing'
+  assert.deepEqual({ code: every.code, json: every.json }, { code: 1, json: { code: 'GAME_ERROR', message } })
 })
 
 // Each load is a process of its own that shares only the temporary folder with the next, so what a long run of loads would leave there, as an MCP server's would, shows after two.

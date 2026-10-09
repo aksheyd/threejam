@@ -143,7 +143,7 @@ async function loadGame(dir: string, options: RunOptions & { readonly outcome?: 
   const timeout = Math.min(Math.ceil(seconds * 1000), 2 ** 32 - 1)
   return async (seed, cancel) => {
     const request: Request = { ticks, press, hold, pointer, set, seed, every, until, only, clip, outcome, assets: files.assets, driver: options.driver }
-    const reply = parseReply(await inChild({ code, request: JSON.stringify(request), timeout, cancel }))
+    const reply = parseReply(await inChild({ code, request: JSON.stringify(request), timeout, cancel, every }))
     if (reply.ok) return reply
     throw failed(reply.failure, map, seconds)
   }
@@ -163,10 +163,12 @@ export function poolSize({ threads, memory, heap }: { readonly threads: number; 
 
 // A pool's free places, and the runners waiting for one, in the order they asked.
 export class Slots {
+  readonly size: number
   #free: number
   readonly #waiting = new Set<() => void>()
 
   constructor(size: number) {
+    this.size = size
     this.#free = size
   }
 
@@ -205,13 +207,27 @@ export class Slots {
 export const SEEDS_AT_ONCE = poolSize({ threads: availableParallelism(), memory: usableMemory(totalmem(), process.constrainedMemory()), heap: HEAP_MB * 2 ** 20 })
 const seedSlots = new Slots(SEEDS_AT_ONCE)
 
-// Runs a game once for each seed from one bundle, so each seed's run is the run sim --seed gives it, with its own time limit. As each seed ends, keep turns its run into what the call keeps, in the order of the seeds, so a failed seed's error is dropped once it's been read. A game that fails on a seed is that seed's outcome. Any other failure, like flags that are wrong for every seed, or one that keep throws, ends the runs still going and fails the whole call.
+// Runs a game once for each seed from one bundle, so each seed's run is the run sim --seed gives it, with its own time limit. A game that fails on a seed is that seed's outcome.
 export async function runSeeds<T>(dir: string, options: Omit<RunOptions, 'seed'>, seeds: readonly number[], keep: (run: SeedRun) => T): Promise<T[]> {
   const run = await loadGame(dir, { ...options, outcome: true })
+  const outcome = async (seed: number, stop: AbortSignal): Promise<SeedRun> => {
+    try {
+      const { tick, reached } = await run(seed, stop)
+      return { seed, tick, reached }
+    } catch (error) {
+      if (error instanceof RunError || error instanceof GameError || error instanceof LimitError) return { seed, failure: error }
+      throw error
+    }
+  }
+  return eachSeed({ slots: seedSlots, seeds, run: outcome, keep })
+}
+
+// Runs each seed, a place in slots at a time. As each seed ends, keep turns its run into what the call keeps, in the order of the seeds, so a failed seed's error is dropped once it's been read. A run or a keep that throws, like one for flags that are wrong for every seed, ends the runs still going and fails the whole call.
+export async function eachSeed<T>({ slots, seeds, run, keep }: { slots: Slots; seeds: readonly number[]; run: (seed: number, stop: AbortSignal) => Promise<SeedRun>; keep: (run: SeedRun) => T }): Promise<T[]> {
   const kept = new Array<T>(seeds.length)
   const stop = new AbortController()
   // A runner listens to stop while its seed runs, or to drained while it waits for a place, and drained listens to stop.
-  const runners = Math.min(SEEDS_AT_ONCE, seeds.length)
+  const runners = Math.min(slots.size, seeds.length)
   setMaxListeners(runners + 1, stop.signal)
   // Aborts once the last seed is handed out, or the call stops, so runners still waiting for a place leave the queue.
   const drained = new AbortController()
@@ -219,24 +235,15 @@ export async function runSeeds<T>(dir: string, options: Omit<RunOptions, 'seed'>
   stop.signal.addEventListener('abort', () => drained.abort(), { once: true })
   let fatal: unknown
   let next = 0
-  const outcome = async (seed: number): Promise<SeedRun> => {
-    try {
-      const { tick, reached } = await run(seed, stop.signal)
-      return { seed, tick, reached }
-    } catch (error) {
-      if (error instanceof RunError || error instanceof GameError || error instanceof LimitError) return { seed, failure: error }
-      throw error
-    }
-  }
   // A runner takes a place in the pool for each seed and gives it back after, so another call's runner waiting for one gets its turn.
   const runner = async () => {
-    while (next < seeds.length && (await seedSlots.take(drained.signal))) {
+    while (next < seeds.length && (await slots.take(drained.signal))) {
       try {
         // The last seed may have gone to another runner, or the call may have stopped, while this one waited.
         if (next >= seeds.length || stop.signal.aborted) return
         const at = next++
         if (next === seeds.length) drained.abort()
-        const ended = await outcome(seeds[at])
+        const ended = await run(seeds[at], stop.signal)
         if (!stop.signal.aborted) kept[at] = keep(ended)
       } catch (error) {
         if (!stop.signal.aborted) {
@@ -244,7 +251,7 @@ export async function runSeeds<T>(dir: string, options: Omit<RunOptions, 'seed'>
           stop.abort()
         }
       } finally {
-        seedSlots.give()
+        slots.give()
       }
     }
   }
@@ -383,7 +390,7 @@ function runnable(file: string): boolean {
   }
 }
 
-function inChild({ code, request, timeout, cancel }: { code: string; request: string; timeout: number; cancel?: AbortSignal }): Promise<string> {
+function inChild({ code, request, timeout, cancel, every }: { code: string; request: string; timeout: number; cancel?: AbortSignal; every?: number }): Promise<string> {
   return new Promise((done, fail) => {
     if (cancel?.aborted) return fail(new Error('the run was cancelled'))
     const runner = spawnTied(process.execPath, [...SANDBOX_FLAGS, '-e', CHILD], { env: sandboxEnv() })
@@ -415,15 +422,18 @@ function inChild({ code, request, timeout, cancel }: { code: string; request: st
       cancel?.removeEventListener('abort', cancelled)
       if (stopped !== undefined) fail(stopped)
       else if (status === 0 && bytes > 0) done(Buffer.concat(out).toString('utf8'))
-      else fail(crashed(Buffer.concat(errors).toString('utf8'), signal ?? `exit code ${status}`))
+      else fail(crashed(Buffer.concat(errors).toString('utf8'), signal ?? `exit code ${status}`, every))
     })
     runner.stdin.end(JSON.stringify({ code, request, timeout }))
   })
 }
 
-// V8 says why it stopped a process before printing its native stack, whose lines mean nothing to a game's author.
-export function crashed(stderr: string, how: string): Error {
-  if (stderr.includes('JavaScript heap out of memory')) return gameFailure('the game ran out of memory; look for a list or a loop that keeps growing')
+// V8 says why it stopped a process before printing its native stack, whose lines mean nothing to a game's author. With --every, the heap also holds the snapshots the run keeps, which may be what filled it.
+export function crashed(stderr: string, how: string, every?: number): Error {
+  if (stderr.includes('JavaScript heap out of memory')) {
+    if (every === undefined) return gameFailure('the game ran out of memory; look for a list or a loop that keeps growing')
+    return gameFailure(`the game ran out of memory, and the snapshots --every ${every} keeps count toward it; keep fewer with --only, a larger --every, or --until, or look for a list or a loop that keeps growing`)
+  }
   const last = stderr.split('----- Native stack trace -----', 1)[0].split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1)
   return new Error(`the sandbox running the game stopped with ${how}${last ? `: ${last.slice(0, 300)}` : ''}`)
 }

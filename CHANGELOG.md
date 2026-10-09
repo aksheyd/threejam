@@ -14,6 +14,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 
 ### Fixed
 
+- A run with `--every` that runs out of memory says the snapshots `--every` keeps count toward that, and to keep fewer with `--only`, a larger `--every`, or `--until`. Before, it said only to look for a list or a loop that keeps growing.
 - `mcp add` registers the server with the Node that ran it, by its absolute path, or by a name on the PATH that leads to that Node, like Homebrew's `/opt/homebrew/bin/node`, which an upgrade keeps. Before, it registered a bare `node`, which an agent finds on its own PATH, where it can be an older Node that can't run a clone's TypeScript, or none, as for an app started from a desktop.
 - A sound file the page can't load or decode no longer silences the game's other sound files: each loads on its own, and the browser's console names each one that fails. Before, one bad file left every sound file silent, and the console named only the first that failed.
 - `check` reads the start of every image and sound file in the game's folder, which the page loads: it fails with `IO_ERROR` on one it can't read, and with `GAME_ERROR`, naming each, on one that's empty or doesn't start like an image or a sound of a type the page takes, like a Git LFS pointer saved as `logo.png`. Before, `check` passed such a file, and only the page found it couldn't draw or play it.

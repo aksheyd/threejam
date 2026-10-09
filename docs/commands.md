@@ -82,6 +82,6 @@ Output is [TOON](https://toonformat.dev) by default, `--format json` switches it
 | `IO_ERROR` | A file or folder couldn't be read, made, or written |
 | `INTERNAL_ERROR` | ThreeJam itself failed, which is a bug to report |
 
-Because loading a game runs its code, `check`, `sim`, `shot`, and `export` run `game.ts` and any `--driver` in a sandbox with no files, processes, or network. A run that passes `--timeout` seconds stops with the `TIMEOUT` code, a run whose heap grows past 1 GB, the same on every machine, fails with `GAME_ERROR`, and an MCP `sim` reply too large for a client is refused with `OUTPUT_TOO_LARGE` and how to narrow it. A run and `check`'s type check also stop as soon as the command or MCP server that started them ends, even by SIGKILL.
+Because loading a game runs its code, `check`, `sim`, `shot`, and `export` run `game.ts` and any `--driver` in a sandbox with no files, processes, or network. A run that passes `--timeout` seconds stops with the `TIMEOUT` code, a run whose heap grows past 1 GB, the same on every machine, fails with `GAME_ERROR`, which with `--every` says the snapshots it keeps count toward that, and an MCP `sim` reply too large for a client is refused with `OUTPUT_TOO_LARGE` and how to narrow it. A run and `check`'s type check also stop as soon as the command or MCP server that started them ends, even by SIGKILL.
 
 [`AGENTS.md`](../AGENTS.md#testing) has every flag in detail, and [For coding agents](agents.md) covers the same commands as MCP tools and skills.
