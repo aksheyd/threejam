@@ -691,6 +691,12 @@ function given(dir: string): { env: string[]; args: string[]; profile: string | 
   return { env: readFileSync(join(dir, 'env'), 'utf8').split('\n'), args, profile }
 }
 
+// The process ID written to file, or undefined while it's missing or empty, as it is until its writer gets to it: Number('') is 0, and process.kill(0) signals this test's own process group.
+function pidIn(file: string): number | undefined {
+  const pid = Number(existsSync(file) ? readFileSync(file, 'utf8') : '')
+  return Number.isInteger(pid) && pid > 0 ? pid : undefined
+}
+
 const wrapped = { skip: (!chrome && 'needs Chrome') || (process.platform === 'win32' && 'wrapper scripts are for macOS and Linux'), timeout: 60_000 }
 
 // An X display with nothing behind it, as SSH or a container can leave one. Chrome given a Wayland display too draws even when neither works, so the tests give it none.
@@ -808,8 +814,8 @@ async function windowed(dir: string, chrome: string, test: (window: { app: AppWi
     const { profile } = given(dir)
     assert.ok(profile)
     const socket = dirname(readlinkSync(join(profile, 'SingletonSocket')))
-    const group = Number(readFileSync(join(dir, 'pid'), 'utf8'))
-    assert.ok(reached(-group, 0), `Chrome, process ${group}, leads no process group of its own`)
+    const group = pidIn(join(dir, 'pid'))
+    assert.ok(group !== undefined && reached(-group, 0), `Chrome, process ${group}, leads no process group of its own`)
     await test({ app, closed: () => closed, profile, socket, group })
   } finally {
     app?.close()
@@ -836,14 +842,16 @@ async function lateWriter(byName: boolean): Promise<void> {
       app.close()
       await until("run's window to close", closed)
       await new Promise((wait) => setTimeout(wait, 500))
+      const held = pidIn(holder)
       assert.deepEqual(
-        { group: alive(group), holder: alive(Number(readFileSync(holder, 'utf8'))), profile: existsSync(profile), socket: existsSync(socket) },
+        { group: alive(group), holder: held !== undefined && alive(held), profile: existsSync(profile), socket: existsSync(socket) },
         { group: false, holder: true, profile: false, socket: false },
       )
     })
   } finally {
     process.env.PATH = PATH
-    if (existsSync(holder)) process.kill(Number(readFileSync(holder, 'utf8')), 'SIGKILL')
+    const held = pidIn(holder)
+    if (held !== undefined) process.kill(held, 'SIGKILL')
   }
 }
 
@@ -989,8 +997,9 @@ async function runWindowed(t: TestContext, name: string): Promise<{ run: ChildPr
   const run = spawnCli(['run', folder({ 'game.ts': GAME, 'view.ts': view })], t.signal, ROOT, env)
   await until('the window to load the game', () => loaded)
   const { profile } = given(dir)
-  assert.ok(profile)
-  return { run, window: Number(readFileSync(join(dir, 'pid'), 'utf8')), profile, socket: dirname(readlinkSync(join(profile, 'SingletonSocket'))) }
+  const window = pidIn(join(dir, 'pid'))
+  assert.ok(profile && window !== undefined)
+  return { run, window, profile, socket: dirname(readlinkSync(join(profile, 'SingletonSocket'))) }
 }
 
 test("closing the terminal that run is in closes its window and removes the window's profile before run stops, as Ctrl-C does", wrapped, async (t) => {
