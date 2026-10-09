@@ -120,19 +120,27 @@ test("a pool gives a freed place to the runner that has waited longest, and a ru
   assert.equal(await slots.take(going), true)
 })
 
-test("a call ends with its last seed, though another call's seeds hold every place, since its runners still waiting for a place leave the queue once that seed is handed out", async () => {
-  const slots = new Slots(2)
-  // Each seed runs until the test ends it, by the call's letter and the seed.
-  const running = new Map<string, () => void>()
-  const run = (call: string) => (seed: number) => new Promise<SeedRun>((done) => running.set(`${call}${seed}`, () => done({ seed, tick: 1, reached: true })))
+// Seeds that run until the test ends them, by their call's name and the seed, each ended by a pause long enough for the pool to hand out the place it frees.
+function heldSeeds() {
+  const running = new Map<string, (error?: Error) => void>()
+  const run = (call: string) => (seed: number) => new Promise<SeedRun>((done, fail) => running.set(`${call}${seed}`, (error) => (error === undefined ? done({ seed, tick: 1, reached: true }) : fail(error))))
   const settled = () => new Promise((done) => setImmediate(done))
-  const end = async (key: string) => {
-    const done = running.get(key)
-    assert.ok(done, `${key} isn't running; ${[...running.keys()].join(', ')} are`)
+  const end = async (key: string, error?: Error) => {
+    const finish = running.get(key)
+    assert.ok(finish, `${key} isn't running; ${[...running.keys()].join(', ')} are`)
     running.delete(key)
-    done()
+    finish(error)
     await settled()
   }
+  const endAll = async () => {
+    for (const [key] of running) await end(key)
+  }
+  return { run, settled, end, endAll }
+}
+
+test("a call ends with its last seed, though another call's seeds hold every place, since its runners still waiting for a place leave the queue once that seed is handed out", async () => {
+  const slots = new Slots(2)
+  const { run, settled, end, endAll } = heldSeeds()
   const long = eachSeed({ slots, seeds: [0, 1, 2, 3], run: run('long'), keep: (seed) => seed })
   let ended = false
   const short = eachSeed({ slots, seeds: [0, 1], run: run('short'), keep: (seed) => seed }).then(() => (ended = true))
@@ -142,8 +150,28 @@ test("a call ends with its last seed, though another call's seeds hold every pla
   await end('short0')
   await end('short1')
   assert.equal(ended, true)
-  for (const key of ['long1', 'long2', 'long3']) await end(key)
+  await endAll()
   await Promise.all([long, short])
+})
+
+test("a call that fails ends at once, though one of its runners waits for a place behind another call's seeds, since stopping the call takes that runner out of the queue", async () => {
+  const slots = new Slots(2)
+  const { run, settled, end, endAll } = heldSeeds()
+  const long = eachSeed({ slots, seeds: [0, 1, 2, 3], run: run('long'), keep: (seed) => seed })
+  let outcome = 'pending'
+  const failing = eachSeed({ slots, seeds: [0, 1, 2], run: run('failing'), keep: (seed) => seed }).then(
+    () => (outcome = 'resolved'),
+    (error: Error) => (outcome = `rejected: ${error.message}`),
+  )
+  await settled()
+  // The failing call runs its seeds 0 and 1 in the places the long call frees; once seed 0 ends, that runner queues again, behind the long call's runners.
+  await end('long0')
+  await end('long1')
+  await end('failing0')
+  await end('failing1', new Error('flags wrong for every seed'))
+  assert.equal(outcome, 'rejected: flags wrong for every seed')
+  await endAll()
+  await Promise.all([long, failing])
 })
 
 test("each seed's row is what sim --seed prints for that seed, with a driver whose random numbers follow the seed too, and sim suggests rerunning the first seed that didn't reach --until", async (t) => {
