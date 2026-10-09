@@ -262,20 +262,24 @@ test('run refuses a link or a FIFO at --record before it runs anything, even a l
   )
 })
 
-test("run checks that it can write the --record file before it runs anything, in its folder too, which the save renames a new file into, so a playtest is never lost as run stops", { skip: (process.platform === 'win32' && "a folder's mode doesn't stop Windows writing in it") || (process.getuid?.() === 0 && 'root writes anywhere') }, () => {
+test("run checks that it can write the --record file before it runs anything, in its folder too, which the save renames a new file into, so a playtest is never lost as run stops, and an earlier playtest it can't write stays as it was", { skip: (process.platform === 'win32' && "a folder's mode doesn't stop Windows writing in it") || (process.getuid?.() === 0 && 'root writes anywhere') }, () => {
   const dir = folder({ 'game.ts': UNSTARTABLE }).replaceAll(sep, '/')
   const locked = join(ROOT, dir, 'locked')
   mkdirSync(locked)
+  const earlier = playtestSource({ seed: 1, ticks: 2, changes: [[1, ['Space']]] })
   // A playtest that can be written, in a folder that can't.
-  writeFileSync(join(locked, 'earlier.ts'), playtestSource({ seed: 1, ticks: 2, changes: [[1, ['Space']]] }))
+  writeFileSync(join(locked, 'earlier.ts'), earlier)
+  // A playtest that can't be written, in a folder that can, where the save's rename would still replace it.
+  writeFileSync(join(ROOT, dir, 'kept.ts'), earlier, { mode: 0o444 })
   chmodSync(locked, 0o555)
   try {
     const refused = (file: string) => ({ code: 1, out: `Error (IO_ERROR): couldn't write ${file} (${join(ROOT, file)}): permission denied\n` })
-    const files = [`${dir}/locked/tests/playtest.ts`, `${dir}/locked/earlier.ts`]
+    const files = [`${dir}/locked/tests/playtest.ts`, `${dir}/locked/earlier.ts`, `${dir}/kept.ts`]
     assert.deepEqual(
       files.map((file) => threejam('run', dir, '--serve-only', '--record', file)),
       files.map(refused),
     )
+    assert.equal(readFileSync(join(ROOT, dir, 'kept.ts'), 'utf8'), earlier)
   } finally {
     chmodSync(locked, 0o755)
   }
