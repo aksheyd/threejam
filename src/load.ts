@@ -726,7 +726,8 @@ function stopChecking(config: string): void {
 
 // paths is only a tsconfig.json setting, so each check writes one for its file, where only this user can read it; a type that never terminates is stopped at the time limit.
 async function runTsc({ compilerOptions, file, timeout }: { compilerOptions: object; file: string; timeout: number }): Promise<Tsc> {
-  const config = mkdtempSync(join(tmpdir(), 'threejam-check-'))
+  // tsc runs in ROOT, where a relative TMPDIR would lead it to another folder.
+  const config = mkdtempSync(join(resolve(tmpdir()), 'threejam-check-'))
   startChecking(config)
   try {
     const project = join(config, 'tsconfig.json')

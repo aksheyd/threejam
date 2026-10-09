@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { test } from 'node:test'
 import { ROOT } from '../src/package.ts'
-import { threejam, threejamWith } from './children.ts'
-import { folder, game, slowCheck } from './games.ts'
+import { CLI, threejam, threejamWith } from './children.ts'
+import { TMP, folder, game, made, slowCheck } from './games.ts'
 
 test('type errors in game.ts and view.ts and runtime errors name the file and line on one line', () => {
   const typo = threejam('check', folder({ 'game.ts': game({ update: 'world.ball.vxx = 2' }) }))
@@ -158,6 +159,15 @@ test("check still type-checks a game when its environment holds what bash, macOS
   const typo = threejamWith(env, 'check', folder({ 'game.ts': game({ update: 'world.ball.vxx = 2' }) }))
   assert.equal(typo.code, 1)
   assert.match(typo.out, /^code: TYPE_ERROR\nmessage: "?test\/\.tmp\/game-\w+\/game\.ts:6: Property 'vxx' does not exist/)
+})
+
+test("check type-checks a game with a relative TMPDIR from a folder other than ThreeJam's own, where TypeScript runs, and leaves nothing in it", () => {
+  const cwd = mkdtempSync(join(TMP, 'cwd-'))
+  made.push(cwd)
+  mkdirSync(join(cwd, 'tmp'))
+  const dir = join(ROOT, folder({ 'game.ts': game({ update: 'world.ball.x += 1' }) }))
+  const result = spawnSync(process.execPath, [CLI, 'check', dir], { cwd, encoding: 'utf8', env: { ...process.env, TMPDIR: 'tmp', TMP: 'tmp', TEMP: 'tmp' }, timeout: 60_000, killSignal: 'SIGKILL' })
+  assert.deepEqual({ status: result.status, out: result.stdout + result.stderr, left: readdirSync(join(cwd, 'tmp')) }, { status: 0, out: 'ok: true\nentities: 1\n', left: [] })
 })
 
 test('a game in a folder outside the repo with no package.json, which TypeScript alone reads as CommonJS, checks and runs without the package installed', () => {
