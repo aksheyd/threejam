@@ -244,8 +244,22 @@ function stop(reason: NodeJS.Signals | 'exiting'): void {
   for (const halt of shots) halt()
 }
 
+// Once an exit has begun, nothing in this process answers a call again, though the shots it stops are done before it ends.
+let ending = false
+
+// Runs a call unless shots are stopping, as a signal or an exit stops them, and settles it only if they still aren't once it's done, so that, as no shot does, no call starts or answers while they clean up before the process ends.
+export function unlessStopped<T>(call: () => Promise<T>): Promise<T> {
+  const halted = () => stopped !== undefined || ending
+  if (halted()) return new Promise<never>(() => {})
+  return new Promise<T>((done) => done(call())).then(
+    (value) => (halted() ? new Promise<never>(() => {}) : value),
+    (error: unknown) => (halted() ? new Promise<never>(() => {}) : Promise.reject(error)),
+  )
+}
+
 // Stops the shots still running as a signal does, so that each kills its Chrome, removes what it made, and answers no call, and waits at most ms milliseconds for them, as an MCP server does before it exits. The time starts before they're stopped, since on Windows Puppeteer kills each Chrome with a taskkill that holds this process until it's done.
 export async function endShots(ms: number): Promise<void> {
+  ending = true
   if (shots.size === 0) return
   const empty = new Promise<void>((done) => (drained = done))
   const waited = within(ms, empty)

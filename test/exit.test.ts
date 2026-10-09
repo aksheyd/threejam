@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { sandboxEnv } from '../src/load.ts'
-import { ROOT } from '../src/package.ts'
+import { ROOT, VERSION } from '../src/package.ts'
 import { findChrome } from '../src/serve.ts'
 import { CLI, mcp, reached, spawnCli, type Reply } from './children.ts'
 import { TMP, folder, game, made, slowCheck } from './games.ts'
@@ -259,6 +259,61 @@ test('a signal stops the running shots and any that start before they are done, 
   const cleaning = (name: string, ms: number) => `(killer) => new Promise((done) => { const clean = () => setTimeout(() => done(console.log('${name} cleaned up')), ${ms}); if (killer.signal.aborted) clean(); else killer.signal.addEventListener('abort', clean) })`
   const shot = (name: string, ms: number) => `void interruptible(${cleaning(name, ms)}).finally(() => console.log('${name} settled'))`
   assert.deepEqual(isolated([shot('first', 50), shot('second', 300), TERM, shot('late', 100)]), { ended: TERMINATED, printed: 'first cleaned up\nlate cleaned up\nsecond cleaned up\n' })
+})
+
+test('after a signal stops the shots, no call starts or answers while they clean up, though one answers before it', () => {
+  const lines = [
+    `import { unlessStopped } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'shot.ts')).href)}`,
+    "console.log(await unlessStopped(async () => 'answered before the signal'))",
+    "void interruptible((killer) => new Promise((done) => killer.signal.addEventListener('abort', () => setTimeout(() => done(console.log('shot cleaned up')), 300))))",
+    "void unlessStopped(() => new Promise((done) => setTimeout(done, 100))).then(() => console.log('running call answered'), () => console.log('running call failed'))",
+    TERM,
+    "void unlessStopped(async () => console.log('late call started')).then(() => console.log('late call answered'))",
+  ]
+  assert.deepEqual(isolated(lines), { ended: TERMINATED, printed: 'answered before the signal\nshot cleaned up\n' })
+})
+
+test("after a signal stops the shots, the commands the CLI and the MCP server run, through the same middleware, neither start nor answer while the shots clean up", () => {
+  const parent = mkdtempSync(join(TMP, 'new-'))
+  made.push(parent)
+  // A sim still running at the signal, whose TIMEOUT comes about half a second later, while the shot cleans up.
+  const loop = folder({ 'game.ts': game({ update: 'for (;;) {}' }) })
+  const lines = [
+    // Without a command, the CLI as it loads would print its help; a script run with -e has no file in argv.
+    "process.argv = [process.execPath, 'threejam', '--version']",
+    `const { default: cli } = await import(${JSON.stringify(pathToFileURL(CLI).href)})`,
+    "void interruptible((killer) => new Promise((done) => killer.signal.addEventListener('abort', () => setTimeout(done, 3000))))",
+    `void cli.serve(['sim', ${JSON.stringify(loop)}, '--ticks', '1', '--timeout', '0.5'], { stdout: () => console.log('sim answered'), exit: () => {} })`,
+    'await new Promise((done) => setTimeout(done, 100))',
+    TERM,
+    `void cli.serve(['new', ${JSON.stringify(join(parent, 'catch'))}], { stdout: () => console.log('new answered'), exit: () => {} })`,
+  ]
+  assert.deepEqual({ ...isolated(lines), made: readdirSync(parent) }, { ended: TERMINATED, printed: `${VERSION}\n`, made: [] })
+})
+
+test('the exit an MCP server begins once its stdin has closed and its calls had their 2 s stops each shot, and none settles, even while another still cleans up, and no call starts', () => {
+  const cleaning = (name: string, ms: number) => `void interruptible((killer) => new Promise((done) => killer.signal.addEventListener('abort', () => setTimeout(() => done(console.log('${name} cleaned up')), ${ms})))).finally(() => console.log('${name} settled'))`
+  const lines = [
+    `import { endShots, unlessStopped } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'shot.ts')).href)}`,
+    cleaning('first', 50),
+    cleaning('second', 300),
+    'const exited = endShots(2000)',
+    "void unlessStopped(async () => console.log('call started'))",
+    'await exited',
+    "console.log('exited')",
+  ]
+  assert.deepEqual(isolated(lines), { ended: 0, printed: 'first cleaned up\nsecond cleaned up\nexited\n' })
+})
+
+test('an exit that begins with no shot running still keeps a call that ends before the process does from answering', () => {
+  const lines = [
+    `import { endShots, unlessStopped } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'shot.ts')).href)}`,
+    "void unlessStopped(() => new Promise((done) => setTimeout(done, 50))).then(() => console.log('call answered'))",
+    'await endShots(2000)',
+    'await new Promise((done) => setTimeout(done, 100))',
+    "console.log('exited')",
+  ]
+  assert.deepEqual(isolated(lines), { ended: 0, printed: 'exited\n' })
 })
 
 test("a shot that a signal stops while it's stuck where killing Chrome doesn't reach holds the process no longer than its grace", () => {

@@ -11,7 +11,7 @@ import { NAME, VERSION, mcpCommand } from './package.ts'
 import { playtestFile } from './playtest.ts'
 import { parseSeeds, summarize, type SeedRow, type Summary } from './seeds.ts'
 import { bundlePage, play } from './serve.ts'
-import { endShots, framePaths, parseTicks, shoot } from './shot.ts'
+import { endShots, framePaths, parseTicks, shoot, unlessStopped } from './shot.ts'
 import type { EntityState, Value } from './types.ts'
 
 // Exiting ends the sandboxes and type checks of calls still running, once shots still running have had up to 2 s to close their Chrome and remove its folders.
@@ -277,6 +277,8 @@ const cli = Cli.create('threejam', {
       `A reply is at most ${MCP_REPLY_LIMIT} characters, so narrow a big sim with only, fields, every, or until, or run fewer seeds.`,
   },
 })
+  // After a stop signal, or once the server's exit has begun, no call starts or answers while the shots it stopped clean up.
+  .use((_c, next) => unlessStopped(next))
   // incur parses the flags inside this, so its parse and validation errors become USAGE failures like every other.
   .use(async (c, next) => {
     try {
