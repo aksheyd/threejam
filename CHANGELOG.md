@@ -36,6 +36,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - When Chrome exits as soon as it starts, `shot`'s error says how it ended, like `(exit code 127)` or `(signal SIGABRT)`, and so does `run`'s warning when a `TMPDIR` too long for Chrome's socket is why. Before, they said only that it exited, and Chrome's own output, which can say why, goes nowhere.
 - Each bundle of a game has a time limit, `--timeout` or 30 s, past which it fails with `TIMEOUT`, so a file it reads that never ends, like a FIFO, no longer holds `sim`, `shot`, `export`, the bundle `check` makes of the page, or `run` as it starts, for good. That's any file esbuild reads: an import, the `game.ts` or `view.ts`, or a `package.json`, `tsconfig.json`, or `jsconfig.json` in a folder it resolves through. Before, they waited on such a file for good, past `--timeout`.
 - `run` stops on Esc, Ctrl-C, SIGTERM, or a closed window even while the bundle it makes after a save waits on a file that never ends, like a FIFO the save brought in. Before, it waited on that bundle for good, and only SIGKILL ended it.
+- A `package.json` that never ends, like a FIFO, in a game's folder or a folder above it no longer holds `check` or `new` for good: `check` fails with `TIMEOUT` at its type check's time limit, since TypeScript waits on that file, and `new` passes over it. Before, both waited on it for good, past `--timeout`.
 
 ## [0.0.6](https://github.com/aksheyd/threejam/compare/v0.0.5...v0.0.6) - 2026-10-08
 

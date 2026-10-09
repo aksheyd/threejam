@@ -413,6 +413,26 @@ test("in an MCP server, a call whose bundle runs past its time limit leaves anot
   }
 })
 
+test("a package.json that isn't a regular file, like a FIFO, in a game's folder or above it leaves check to stop at its type check's time limit, and new to make the game", FIFOS, async () => {
+  const inside = folder({ 'game.ts': game('') })
+  fifo(join(inside.abs, 'package.json'))
+  const above = folder({ 'game/game.ts': game('') })
+  fifo(join(above.abs, 'package.json'))
+  const empty = folder({})
+  fifo(join(empty.abs, 'package.json'))
+  const [checkedInside, checkedAbove, made] = await Promise.all([
+    threejamAside(['check', inside.dir, '--timeout', '1']),
+    threejamAside(['check', join(above.dir, 'game'), '--timeout', '1']),
+    threejamAside(['new', join(empty.dir, 'game')]),
+  ])
+  // TypeScript reads the package.json too, in a type check that has a time limit.
+  const late = { code: 1, out: JSON.stringify({ code: 'TIMEOUT', message: 'the type check ran past the 1 s time limit; a type in the game may not terminate, or allow more time with --timeout' }, null, 2) }
+  assert.deepEqual(
+    { checkedInside, checkedAbove, made: { code: made.code, files: made.code === 0 ? JSON.parse(made.out).files : made.out } },
+    { checkedInside: late, checkedAbove: late, made: { code: 0, files: ['game.ts', 'game.test.ts'] } },
+  )
+})
+
 test('a game that keeps more than the 1 GB a sandbox may grow to runs out of memory with GAME_ERROR on any machine, and with --every, the message says the snapshots it keeps count toward that', () => {
   // 8 MB more every tick: 1.6 GB by tick 200, which V8's own limit would allow on a machine with 16 GB.
   const { dir } = folder({ 'game.ts': game('const kept: number[][] = []').replace('world.ball.x += 0.01', 'kept.push(new Array(1_000_000).fill(ctx.tick + 0.5))') })

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { readFileSync, realpathSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -79,7 +79,8 @@ export interface Manifest {
 export function* manifestsAbove(folder: string): Generator<Manifest> {
   for (let dir = resolve(folder); ; dir = dirname(dir)) {
     const path = join(dir, 'package.json')
-    const json = existsSync(path) ? readManifest(path) : undefined
+    // Reading a FIFO by that name would wait for good.
+    const json = statSync(path, { throwIfNoEntry: false })?.isFile() ? readManifest(path) : undefined
     if (json !== undefined) yield { path, json }
     if (dirname(dir) === dir) return
   }
