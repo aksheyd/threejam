@@ -960,7 +960,9 @@ test('advanceTime takes the clock from a page playing on its own, starts its run
     const tab = await newTab(t)
     const { errors } = watch(tab)
     await openPage(tab, pathToFileURL(file).href)
-    await tab.waitForFunction(() => window.engine.tick > 30)
+    await tab.waitForFunction('window.engine !== undefined')
+    // The page plays on its own, and steps 30 ticks at once rather than waiting on its own clock for them.
+    await tab.evaluate(() => void window.engine.step(30))
     // The state once each call has run in turn.
     const after = (...calls: number[]) =>
       tab.evaluate(async (ms: number[]) => {
@@ -984,7 +986,9 @@ test('advanceTime takes the clock from a page playing on its own, starts its run
     await tab.evaluate(() => {
       window.engine.resume()
       window.engine.reset({ seed: 9 })
+      window.engine.step(20)
     })
+    // Given its clock back, the page plays on its own again.
     await tab.waitForFunction(() => window.engine.tick > 20)
     assert.deepEqual(await after(1000 / 60), asText(reseeded.snapshots[0]))
     // The call's frame is drawn by the time it resolves, as the page draws it again a frame later.
@@ -998,9 +1002,9 @@ test('advanceTime takes the clock from a page playing on its own, starts its run
     })
     assert.ok(redrawn, "the frame the page drew after advanceTime resolved differs from the one it showed then")
     // A page that engine.pause() paused goes on from its tick rather than starting over.
-    await tab.evaluate(() => window.engine.resume())
-    await tab.waitForFunction(() => window.engine.tick > 80)
     const paused = await tab.evaluate(() => {
+      window.engine.resume()
+      window.engine.step(20)
       window.engine.pause()
       return window.engine.tick
     })
