@@ -4,6 +4,10 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 
 ## Unreleased
 
+### Added
+
+- `run --port N` serves the page at the port you name, and `run --host ADDRESS` on another IP address of the machine, like `0.0.0.0`, so the page opens from another machine or from the host of a Docker container. `run` warns when other machines can reach the page, and it still answers only its own page, with the session's token.
+
 ### Fixed
 
 - Esc quits `run` even when it comes while the page reloads after a save, before the page has run its script. Before, the page missed it, and the session went on.

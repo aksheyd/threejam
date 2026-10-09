@@ -8,7 +8,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 | `npx threejam check <dir>` | Type-checks `game.ts` and `view.ts`, bundles the page to check their imports, checks the game's sprites and that the images entities name are in the folder or among its sprites, then runs `start` and the first tick |
 | `npx threejam sim <dir> --ticks N` | Runs N ticks, 60 to a second, without a window and prints the entities, or with `--seeds`, runs them once for each seed and sums up how often and how soon `--until` held |
 | `npx threejam shot <dir> --at T,T,...` | Saves an 800x600 PNG at each tick, drawn by the same page players see, to the `.png` file `-o` or `--out` names |
-| `npx threejam run <dir>` | Checks that the game starts, then opens it in a window for a person to play, with sound after the first key press or click; Esc quits, `--serve-only` serves the page and prints its address without opening a window, and `--record FILE` saves what the person plays, as a driver that replays it exactly |
+| `npx threejam run <dir>` | Checks that the game starts, then opens it in a window for a person to play, with sound after the first key press or click; Esc quits, `--serve-only` serves the page and prints its address without opening a window, `--port N` and `--host ADDRESS` choose where it's served, and `--record FILE` saves what the person plays, as a driver that replays it exactly |
 | `npx threejam export <dir> -o <file>.html` | Writes one HTML file that plays the game offline, with its images and sounds inside; `--seed N` fixes the seed, which is otherwise new each time the page loads, and `--script URL` adds a script for the page to load from the network, like the widget a game jam requires on every entry, while without one the page loads nothing from the network |
 
 ## Input
@@ -59,6 +59,8 @@ The `min`, `median`, and `max` are over the seeds that reached `--until`. A seed
 Every command that loads a game bundles it first, for the sandbox described below and, in `run`, `shot`, and `export`, for the page, and both follow one rule: the game's files may import only `threejam` and files in the game's folder, and a `--driver` file may also import files in its own folder. An import of anything else, even through a link, fails with its `path:line`.
 
 `run` serves that page on `127.0.0.1` to the page alone: another page, even one on another local port or opened from a file, gets 403, and an SVG opened directly downloads instead of running its script.
+
+`run` picks a free port unless `--port N` names one, and fails with `USAGE` when that port is taken. Only this machine reaches `127.0.0.1`, so to play from another machine, or from the host of a Docker container `run` is in, give `--host` an address of the machine, like `0.0.0.0` for all of its IPv4 addresses. `run` warns when it does, since anyone who can reach the page can play the game, read its files, and end the session. A request may then name any IP address, or `localhost`, at `run`'s port, but no other name, so publish a container's port as the same one, as `docker run -p 8000:8000` does with `--port 8000`.
 
 `shot` and `run` start Chrome with no DevTools port and only the environment variables a browser needs. ThreeJam's switches come last and override a wrapper script's, like the `google-chrome` launchers on Linux, but a wrapper can still add switches that have no opposite, like `--no-sandbox`.
 

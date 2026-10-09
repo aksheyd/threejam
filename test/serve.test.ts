@@ -11,10 +11,10 @@ import { pathToFileURL } from 'node:url'
 import { exportGame } from '../src/export.ts'
 import { ROOT } from '../src/package.ts'
 import { Recording } from '../src/playtest.ts'
-import { NO_DEVTOOLS_PORT, buildPage, openWindow, removeProfile, removeSocketFolders, serve, socketFolders, type AppWindow } from '../src/serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, openWindow, pageHosts, removeProfile, removeSocketFolders, serve, socketFolders, type AppWindow } from '../src/serve.ts'
 import { closeChrome, launchChrome, openPage } from '../src/shot.ts'
 import { CHROME as chrome, testChrome } from './chrome.ts'
-import { reached, spawnCli } from './children.ts'
+import { CLI, reached, spawnCli } from './children.ts'
 
 const TMP = join(ROOT, 'test', '.tmp')
 mkdirSync(TMP, { recursive: true })
@@ -86,6 +86,75 @@ test('the run server answers only its own page, and /quit, /events, and /record 
     server.close()
     await page.dispose()
   }
+})
+
+test("the run server takes a Host naming where it listens, or localhost, at its port, which a browser leaves out at 80, and where other machines reach it, any IP address, but never another name", () => {
+  const taken = (host: string, port: number, headers: readonly string[]) => headers.filter(pageHosts(host, port))
+  const headers = ['127.0.0.1:8000', 'localhost:8000', '[::1]:8000', '192.168.1.5:8000', '192.168.1.5:8001', '192.168.1.5', 'evil.example:8000', '192.168.1.5.nip.io:8000', 'localhost.evil.example:8000']
+  assert.deepEqual(
+    {
+      loopback: taken('127.0.0.1', 8000, headers),
+      ipv6: taken('0:0:0:0:0:0:0:1', 8000, headers),
+      everywhere: taken('0.0.0.0', 8000, headers),
+      lan: taken('192.168.1.5', 8000, headers),
+      at80: taken('127.0.0.1', 80, ['127.0.0.1', 'localhost', '127.0.0.1:80', '127.0.0.1:8000', 'evil.example']),
+    },
+    {
+      loopback: ['127.0.0.1:8000', 'localhost:8000'],
+      ipv6: ['localhost:8000', '[::1]:8000'],
+      everywhere: ['127.0.0.1:8000', 'localhost:8000', '[::1]:8000', '192.168.1.5:8000'],
+      lan: ['127.0.0.1:8000', 'localhost:8000', '[::1]:8000', '192.168.1.5:8000'],
+      at80: ['127.0.0.1', 'localhost', '127.0.0.1:80'],
+    },
+  )
+})
+
+// What run prints once it serves its page, and what it writes to stderr meanwhile.
+async function served(run: ChildProcessWithoutNullStreams): Promise<{ out: string; errors: string; url: string }> {
+  let [out, errors] = ['', '']
+  run.stdout.on('data', (chunk) => (out += chunk))
+  run.stderr.on('data', (chunk) => (errors += chunk))
+  await until(() => `run to serve the page: stdout ${JSON.stringify(out)}, stderr ${JSON.stringify(errors)}`, () => out.includes('\n'))
+  return { out, errors, url: out.slice(out.lastIndexOf(' ') + 1, -1) }
+}
+
+test('run serves its page at the port --port names, and fails with USAGE when that port is taken', async (t) => {
+  const dir = folder({ 'game.ts': GAME })
+  const blocker = createServer()
+  await new Promise<void>((ready) => blocker.listen(0, '127.0.0.1', ready))
+  const address = blocker.address()
+  assert.ok(address !== null && typeof address === 'object')
+  const port = String(address.port)
+  try {
+    const taken = spawnSync(process.execPath, [CLI, 'run', dir, '--serve-only', '--port', port], { cwd: ROOT, encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL' })
+    assert.deepEqual({ status: taken.status, out: taken.stdout }, { status: 1, out: `Error (USAGE): port ${port} on 127.0.0.1 is in use; give --port another, or leave it out for a free one\n` }, taken.stderr)
+  } finally {
+    await new Promise((closed) => blocker.close(closed))
+  }
+  const { url } = await served(spawnCli(['run', dir, '--serve-only', '--port', port], t.signal))
+  assert.deepEqual([url, (await call(url)).status], [`http://127.0.0.1:${port}/`, 200])
+})
+
+test('run --host 0.0.0.0 warns that other machines can open the page, prints the loopback address, which browsers open, and still refuses a name or a request without the token', { skip: process.platform !== 'linux' && "serving every address can ask a desktop's firewall to let other machines in" }, async (t) => {
+  const { out, errors, url } = await served(spawnCli(['run', folder({ 'game.ts': GAME }), '--serve-only', '--host', '0.0.0.0'], t.signal))
+  const { port } = new URL(url)
+  const status = async (path: string, headers: Record<string, string> = {}, method = 'GET') => (await call(new URL(path, url).href, { method, headers })).status
+  assert.deepEqual(
+    {
+      printed: out.startsWith('Playing ') && url === `http://127.0.0.1:${port}/`,
+      errors,
+      lan: await status('/', { host: `192.0.2.7:${port}` }),
+      name: await status('/', { host: `threejam.example:${port}` }),
+      quit: await status('/quit', { host: `192.0.2.7:${port}`, origin: `http://192.0.2.7:${port}` }, 'POST'),
+    },
+    {
+      printed: true,
+      errors: "Warning: --host 0.0.0.0 serves the game to other machines: anyone who can reach this one can open the page, read the game's code, images, and sounds, and end the session. Leave out --host to serve this machine alone.\n",
+      lan: 200,
+      name: 403,
+      quit: 403,
+    },
+  )
 })
 
 test("closing the run server closes every connection to it, even one the browser opened ahead of a request, so an /events that comes on it after the page asked to quit can't keep run from exiting, and one with a request in progress, like a playtest's /record, once that has its answer, which the close waits for", async () => {

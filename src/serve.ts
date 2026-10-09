@@ -2,14 +2,14 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto'
 import { accessSync, constants, existsSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, rmdirSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import type { Socket } from 'node:net'
+import { BlockList, isIP, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { constants as vmConstants, createContext } from 'node:vm'
 import * as esbuild from 'esbuild'
 import { mediaType } from './assets.ts'
 import { confinePlugin, confineRoots } from './confine.ts'
-import { BuildError } from './errors.ts'
+import { BuildError, UsageError } from './errors.ts'
 import { STAND_INS } from './guard.ts'
 import { assetsIn, gameFiles, spawnTied, type GameFiles } from './load.ts'
 import { NAME, engineFile } from './package.ts'
@@ -229,8 +229,52 @@ const RECORDED: Readonly<Record<Taken, number>> = { taken: 204, stale: 409, inva
 // How long a request in progress as the server closes, like a part of a playtest on its way, has to get its answer before its connection goes regardless.
 const CLOSING_MS = 1000
 
+// Where the page server listens unless run is given --host: only this machine reaches it.
+const LOOPBACK = '127.0.0.1'
+
+const LOOPBACKS = new BlockList()
+LOOPBACKS.addSubnet('127.0.0.0', 8, 'ipv4')
+LOOPBACKS.addAddress('::1', 'ipv6')
+
+function isLoopback(host: string): boolean {
+  return LOOPBACKS.check(host, isIP(host) === 6 ? 'ipv6' : 'ipv4')
+}
+
+// An IP address as a URL names it, bracketed if it's IPv6, in the one spelling a browser sends.
+function urlHost(host: string): string {
+  return new URL(`http://${isIP(host) === 6 ? `[${host}]` : host}/`).hostname
+}
+
+// What run prints and opens: where the server listens, or for every address of the machine, its loopback one, since browsers refuse 0.0.0.0 and ::.
+function pageUrl(host: string, port: number): string {
+  const name = urlHost(host)
+  const shown = name === '0.0.0.0' ? LOOPBACK : name === '[::]' ? '[::1]' : name
+  return new URL(`http://${shown}:${port}/`).href
+}
+
+// The Host a request may name, which stops DNS rebinding: where the server listens, or localhost, at its port, which a browser leaves out when it's 80. A server other machines reach can be reached at any of its addresses, or one that forwards to it, like a Docker container's published port, so there any IP address passes; only a name can be rebound to another machine, and localhost is the one name that passes.
+export function pageHosts(host: string, port: number): (header: string) => boolean {
+  const names = isLoopback(host) ? [urlHost(host), 'localhost'] : undefined
+  return (header) => {
+    const found = /^(\[[^\]]*\]|[^:[\]]+)(?::(\d+))?$/.exec(header)
+    if (found === null || (found[2] ?? '80') !== String(port)) return false
+    const name = found[1]
+    if (names !== undefined) return names.includes(name)
+    return name === 'localhost' || isIP(name.replace(/^\[(.*)\]$/, '$1')) !== 0
+  }
+}
+
+// What stops the server listening, said as what to change in run's flags.
+function listenFailure(error: Error, host: string, port: number): Error {
+  const code = 'code' in error ? error.code : undefined
+  if (code === 'EADDRINUSE') return new UsageError(`port ${port} on ${host} is in use; give --port another, or leave it out for a free one`)
+  if (code === 'EACCES') return new UsageError(`this user may not serve on port ${port} of ${host}; give --port another${port < 1024 ? ', from 1024 up' : ''}, or leave it out for a free one`)
+  if (code === 'EADDRNOTAVAIL') return new UsageError(`${host} isn't an address of this machine; leave out --host to serve this machine alone, or give 0.0.0.0 to serve every address it has`)
+  return error
+}
+
 // The server answers only the page itself, and /events, /quit, and /record only with the token that run gives its page; without one, as for shot, it refuses them. /record is there only while run records the playtest.
-export function serve({ page, token, onQuit = () => {}, recording }: { page: Page; token?: string; onQuit?: () => void; recording?: Recording }): Promise<Server> {
+export function serve({ page, token, onQuit = () => {}, recording, host = LOOPBACK, port = 0 }: { page: Page; token?: string; onQuit?: () => void; recording?: Recording; host?: string; port?: number }): Promise<Server> {
   const listeners = new Set<ServerResponse>()
   // Every connection, and those with a request in progress, which still gets its answer once the server has closed, as a playtest's /record under way does.
   const connections = new Set<Socket>()
@@ -241,7 +285,7 @@ export function serve({ page, token, onQuit = () => {}, recording }: { page: Pag
     const offered = Buffer.from(given ?? '')
     return secret !== undefined && offered.length === secret.length && timingSafeEqual(offered, secret)
   }
-  let hosts: readonly string[] = []
+  let named: (header: string) => boolean = () => false
   const server = createServer((request, response) => {
     const { socket } = request
     answering.add(socket)
@@ -253,7 +297,7 @@ export function serve({ page, token, onQuit = () => {}, recording }: { page: Pag
     const mark = target.indexOf('?')
     const path = mark < 0 ? target : target.slice(0, mark)
     const query = new URLSearchParams(mark < 0 ? '' : target.slice(mark + 1))
-    if (!fromPage(request, hosts) || ((path === '/quit' || path === '/events' || path === '/record') && !granted(query.get('token')))) {
+    if (!fromPage(request, named) || ((path === '/quit' || path === '/events' || path === '/record') && !granted(query.get('token')))) {
       response.writeHead(403, HEADERS).end()
       return
     }
@@ -313,15 +357,16 @@ export function serve({ page, token, onQuit = () => {}, recording }: { page: Pag
     socket.once('close', () => connections.delete(socket))
   })
   return new Promise((ready, fail) => {
-    server.listen(0, '127.0.0.1', () => {
+    server.once('error', (error) => fail(listenFailure(error, host, port)))
+    server.listen(port, host, () => {
       const address = server.address()
       if (address === null || typeof address === 'string') {
         fail(new Error(`the page server has no port: ${String(address)}`))
         return
       }
-      hosts = [`127.0.0.1:${address.port}`, `localhost:${address.port}`]
+      named = pageHosts(host, address.port)
       ready({
-        url: `http://127.0.0.1:${address.port}/`,
+        url: pageUrl(host, address.port),
         reload() {
           for (const listener of listeners) listener.write('data: reload\n\n')
         },
@@ -342,12 +387,12 @@ export function serve({ page, token, onQuit = () => {}, recording }: { page: Pag
 }
 
 // Host stops DNS rebinding, and Origin and Sec-Fetch-Site stop every other page, even one on another port or opened from a file.
-function fromPage({ headers }: IncomingMessage, hosts: readonly string[]): boolean {
+function fromPage({ headers }: IncomingMessage, named: (header: string) => boolean): boolean {
   const { host, origin } = headers
   const site = headers['sec-fetch-site']
   return (
     host !== undefined &&
-    hosts.includes(host) &&
+    named(host) &&
     (origin === undefined || origin === `http://${host}`) &&
     (site === undefined || site === 'same-origin' || site === 'none')
   )
@@ -582,7 +627,7 @@ function openBrowser(url: string): void {
 }
 
 // With record, the page sends what a person plays as they go, and run saves it there as a driver file once the window and the server are gone.
-export async function* play({ dir, seed = randomInt(2 ** 31), window, record }: { dir: string; seed?: number; window: boolean; record?: string }): AsyncGenerator<string> {
+export async function* play({ dir, seed = randomInt(2 ** 31), window, record, host = LOOPBACK, port = 0 }: { dir: string; seed?: number; window: boolean; record?: string; host?: string; port?: number }): AsyncGenerator<string> {
   let quit = () => {}
   const done = new Promise<void>((resolve) => (quit = resolve))
   let server: Server | undefined
@@ -598,7 +643,11 @@ export async function* play({ dir, seed = randomInt(2 ** 31), window, record }: 
       server?.reload()
     },
   })
-  server = await serve({ page, token, onQuit: () => quit(), recording })
+  server = await serve({ page, token, onQuit: () => quit(), recording, host, port })
+  if (!isLoopback(host)) {
+    const playtest = recording === undefined ? '' : ', or add to the playtest'
+    process.stderr.write(`Warning: --host ${host} serves the game to other machines: anyone who can reach this one can open the page, read the game's code, images, and sounds, and end the session${playtest}. Leave out --host to serve this machine alone.\n`)
+  }
   const app = window ? openWindow(server.url) : undefined
   void app?.exited.then(() => quit())
   process.once('SIGINT', () => quit())

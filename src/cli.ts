@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { randomInt } from 'node:crypto'
+import { isIP } from 'node:net'
 import { basename } from 'node:path'
 import { Cli, Errors, Formatter, z } from 'incur'
 import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, quote, shellWord, show, type Code } from './errors.ts'
@@ -81,6 +82,12 @@ const inputs = {
     .describe('Change a starting value before start runs, like paddle.w=1, bricks[*].points=5, or pipes[*].parts.top.h=2; repeatable'),
   seed: integer().optional().describe('Random seed, a whole number; the same files, flags, and seed give the same run (default 0)'),
 }
+
+const portError = expected('a port from 1 to 65535')
+const port = digits(/^\d+$/, z.number({ error: portError }).int({ error: portError }).min(1, { error: portError }).max(65535, { error: portError }))
+// A URL can't hold an IPv6 zone, like the %eth0 of fe80::1%eth0, so run couldn't print the address.
+const hostError = expected('an IP address, like 127.0.0.1, 0.0.0.0, or ::')
+const host = z.string({ error: hostError }).refine((value) => isIP(value) !== 0 && !value.includes('%'), { error: hostError })
 
 const seconds = expected(`a number of seconds above 0, up to ${MAX_TIMEOUT}`)
 const timeout = digits(/^(\d+\.?\d*|\.\d+)$/, z.number({ error: seconds }).positive({ error: seconds }).max(MAX_TIMEOUT, { error: seconds }))
@@ -441,6 +448,13 @@ const cli = Cli.create('threejam', {
     options: z.object({
       seed: integer().optional().describe('Random seed, a whole number; without one, run picks one and prints it, and reloads replay it'),
       serveOnly: z.boolean().optional().describe('Serve the page and print its address without opening a window'),
+      port: port.optional().describe('Serve the page at this port, from 1 to 65535 (default: a free one)'),
+      host: host
+        .optional()
+        .describe(
+          'Serve the page on this IP address of the machine, like 0.0.0.0 for all of its IPv4 addresses, so other machines, or the host of a Docker container, can open it (default 127.0.0.1, which only this machine reaches); ' +
+            'run warns that anyone who can reach it can open the page and end the session',
+        ),
       record: z
         .string()
         .optional()
@@ -456,7 +470,7 @@ const cli = Cli.create('threejam', {
         const record = c.options.record === undefined ? undefined : playtestFile(c.options.record)
         // A game that can't start would otherwise give its player a page with nothing on it.
         await runGame(c.args.dir, { ticks: 1, seed })
-        yield* play({ dir: c.args.dir, seed, window: !c.options.serveOnly, record })
+        yield* play({ dir: c.args.dir, seed, window: !c.options.serveOnly, record, host: c.options.host, port: c.options.port })
       } catch (error) {
         return c.error(failure(error))
       }
