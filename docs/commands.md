@@ -20,7 +20,7 @@ In a project that has ThreeJam installed, these run that copy; anywhere else, th
 - `--driver FILE` picks the input each tick with code that reads the world, like the Invaders [autopilot](../games/invaders/autopilot.ts), or the Asteroids [one](../games/asteroids/autopilot.ts) that plays with the mouse. A playtest that `run --record` saved is a driver too, which replays a person's play with the seed `run` printed.
 - `--set NAME.FIELD=VALUE` changes a starting value before `start` runs, like `--set paddle.w=1` for a wider Breakout paddle, and NAME can be a pattern such as `bricks[*]`.
 - `--seed N` picks the random numbers, from any whole number; the default is 0.
-- `--timeout N` caps how many seconds the game's code may run before the command stops it with the `TIMEOUT` code; the default is 30 and the most 86400, a day, and `check`, `shot`, and `export` take it too, `shot` for its page's `view.ts` as well.
+- `--timeout N` caps how many seconds the game's code may run before the command stops it with the `TIMEOUT` code; the default is 30 and the most 86400, a day, and `check`, `shot`, and `export` take it too, `shot` for its page's `view.ts` as well. Each bundle of the game, for the sandbox and for the page, has that limit too, 30 s in `run`, so one that reads a file that never ends, like a FIFO, fails with `TIMEOUT`.
 
 Ticks and other whole numbers in flags are plain digits, so `--ticks 1e2` or `--press Space@0x5` fails with `USAGE` instead of meaning 100 or 5.
 
@@ -76,7 +76,7 @@ Output is [TOON](https://toonformat.dev) by default, `--format json` switches it
 | `BUILD_ERROR` | The game's files couldn't be bundled: a syntax error, or an import that doesn't resolve or comes from outside the folder, even through a `game.ts`, `view.ts`, or driver that links outside it |
 | `TYPE_ERROR` | `check` found type errors |
 | `GAME_ERROR` | The game's or driver's code threw or broke an engine rule, in the sandbox or in the page, or ran out of memory, or `check` found an image or sound file in the game's folder that's empty or doesn't start like a type the page takes |
-| `TIMEOUT` | The game's code, its page in `shot`, or the type check ran past `--timeout` |
+| `TIMEOUT` | The game's code, its page in `shot`, the type check, or a bundle of the game ran past `--timeout` |
 | `OUTPUT_TOO_LARGE` | A run printed more than its reply can hold, or `check`'s type check more than 1 MB |
 | `BROWSER_ERROR` | Chrome is missing, didn't start, or failed while drawing |
 | `IO_ERROR` | A file or folder couldn't be read, made, or written |

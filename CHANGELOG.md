@@ -34,6 +34,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - `check` works when the temporary folder is a relative path, like `TMPDIR=tmp`. Before, unless it ran in ThreeJam's own folder, it failed with `TYPE_ERROR`, saying the `tsconfig.json` its type check writes in the temporary folder didn't exist.
 - `check`, or an MCP server, killed with SIGKILL partway through a type check removes the folder the type check reads, on macOS and Linux. Before, a `threejam-check-*` folder stayed in the temporary folder.
 - When Chrome exits as soon as it starts, `shot`'s error says how it ended, like `(exit code 127)` or `(signal SIGABRT)`, and so does `run`'s warning when a `TMPDIR` too long for Chrome's socket is why. Before, they said only that it exited, and Chrome's own output, which can say why, goes nowhere.
+- Each bundle of a game has a time limit, `--timeout` or 30 s, past which it fails with `TIMEOUT`, so a file it reads that never ends, like a FIFO, no longer holds `sim`, `shot`, `export`, the bundle `check` makes of the page, or `run` as it starts, for good. That's any file esbuild reads: an import, the `game.ts` or `view.ts`, or a `package.json`, `tsconfig.json`, or `jsconfig.json` in a folder it resolves through. Before, they waited on such a file for good, past `--timeout`.
 
 ## [0.0.6](https://github.com/aksheyd/threejam/compare/v0.0.5...v0.0.6) - 2026-10-08
 

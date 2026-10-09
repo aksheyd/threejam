@@ -93,7 +93,7 @@ const host = z.string({ error: hostError }).refine((value) => isIP(value) !== 0 
 const seconds = expected(`a number of seconds above 0, up to ${MAX_TIMEOUT}`)
 const timeout = digits(/^(\d+\.?\d*|\.\d+)$/, z.number({ error: seconds }).positive({ error: seconds }).max(MAX_TIMEOUT, { error: seconds }))
   .optional()
-  .describe(`Seconds the game's code may run before the command stops it and fails with TIMEOUT (default ${DEFAULT_TIMEOUT}, at most ${MAX_TIMEOUT})`)
+  .describe(`Seconds the game's code may run, and each bundle of it may take, before the command stops it and fails with TIMEOUT (default ${DEFAULT_TIMEOUT}, at most ${MAX_TIMEOUT})`)
 
 // Loading a game runs its code, and a driver's, so clients should treat these calls as running a program they didn't write.
 const runsGame = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
@@ -356,7 +356,7 @@ const cli = Cli.create('threejam', {
         const files = gameFiles(c.args.dir)
         const errors = [...(await typecheck({ file: files.game, dom: false, timeout: c.options.timeout })), ...(files.view ? await typecheck({ file: files.view, dom: true, timeout: c.options.timeout }) : [])]
         // A syntax error or an import that doesn't resolve fails the bundle as it does in sim, shot, and export, so it's a BUILD_ERROR here too.
-        await bundlePage(c.args.dir)
+        await bundlePage(c.args.dir, c.options.timeout)
         if (errors.length > 0) return c.error(failed('TYPE_ERROR', errors.join('; ')))
         const { snapshots } = await runGame(c.args.dir, { ticks: 1, timeout: c.options.timeout })
         checkAssets(files.folder)
@@ -535,7 +535,7 @@ const cli = Cli.create('threejam', {
         const out = exportPath(c.options.out ?? `${basename(gameFiles(c.args.dir).folder)}.html`)
         const scripts = (c.options.script ?? []).map(scriptAddress)
         await runGame(c.args.dir, { ticks: 1, seed: c.options.seed, timeout: c.options.timeout })
-        return await exportGame({ dir: c.args.dir, out, seed: c.options.seed, scripts })
+        return await exportGame({ dir: c.args.dir, out, seed: c.options.seed, scripts, timeout: c.options.timeout })
       } catch (error) {
         return c.error(failure(error))
       }

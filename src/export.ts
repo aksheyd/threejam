@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import * as esbuild from 'esbuild'
 import { mediaType } from './assets.ts'
 import { BuildError, UsageError, quote } from './errors.ts'
-import { gameFiles } from './load.ts'
+import { bundleWithin, gameFiles, timeLimit } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
 import { formatMessage, html, pageBuild } from './serve.ts'
 
@@ -26,12 +26,13 @@ export function scriptAddress(value: string): string {
 }
 
 // One HTML file that plays the game from disk: the page code, Three.js, the game, its view, and its images and sounds as data URLs, and nothing it loads from the network but the scripts it's given.
-export async function exportGame({ dir, out, seed, scripts = [] }: { dir: string; out: string; seed?: number; scripts?: readonly string[] }): Promise<Exported> {
+export async function exportGame({ dir, out, seed, scripts = [], timeout }: { dir: string; out: string; seed?: number; scripts?: readonly string[]; timeout?: number }): Promise<Exported> {
   exportPath(out)
   const sources = scripts.map(scriptAddress)
   const files = gameFiles(dir)
   const address = (name: string) => dataUrl(join(files.folder, name))
-  const built = await esbuild.build({ ...pageBuild({ files, address }), minify: true, write: false }).catch((failure: esbuild.BuildFailure) => failure)
+  const build = esbuild.build({ ...pageBuild({ files, address }), minify: true, write: false }).catch((failure: esbuild.BuildFailure) => failure)
+  const built = await bundleWithin(build, timeLimit(timeout))
   if (built instanceof Error) throw new BuildError(built.errors.map(formatMessage).join('; '))
   const page = html({ title: basename(files.folder), config: { mode: 'export', seed }, script: { kind: 'inline', code: built.outputFiles[0].text }, scripts: sources })
   makeFolder(dirname(resolve(out)))

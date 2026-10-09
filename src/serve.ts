@@ -11,7 +11,7 @@ import { mediaType } from './assets.ts'
 import { confinePlugin, confineRoots } from './confine.ts'
 import { BuildError, UsageError } from './errors.ts'
 import { STAND_INS } from './guard.ts'
-import { assetsIn, gameFiles, spawnTied, type GameFiles } from './load.ts'
+import { assetsIn, bundleWithin, gameFiles, spawnTied, timeLimit, type GameFiles } from './load.ts'
 import { NAME, engineFile } from './package.ts'
 import { Recording, savePlaytest, type Taken } from './playtest.ts'
 import type { Config } from './browser/client.ts'
@@ -33,9 +33,11 @@ export interface PageOptions {
   readonly config: { readonly mode: 'run'; readonly seed: number; readonly token: string; readonly record?: boolean } | { readonly mode: 'shot' }
   readonly driver?: string
   readonly onRebuild?: (errors: string[]) => void
+  // Seconds the first build may take, DEFAULT_TIMEOUT unless given.
+  readonly timeout?: number
 }
 
-export async function buildPage({ dir, config, driver, onRebuild }: PageOptions): Promise<Page> {
+export async function buildPage({ dir, config, driver, onRebuild, timeout }: PageOptions): Promise<Page> {
   const files = gameFiles(dir)
   const page = pageBuild({ files, driver, address: (name) => `assets/${encodeURIComponent(name)}` })
   let bundle: Uint8Array = new Uint8Array()
@@ -43,7 +45,7 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
   let builds = 0
   let firstEnded: ((errors: esbuild.Message[]) => void) | undefined
   const first = new Promise<esbuild.Message[]>((ended) => (firstEnded = ended))
-  const context = await esbuild.context({
+  const started = esbuild.context({
     ...page,
     // Built in memory, since esbuild deletes a file it wrote when a later build fails, and a folder for one would outlive a run that's killed.
     write: false,
@@ -69,7 +71,9 @@ export async function buildPage({ dir, config, driver, onRebuild }: PageOptions)
     ],
   })
   // A page that follows saves takes its first build from watch mode, since a build before it would leave watch mode a first build of its own, whose end would read as a save.
-  const errors = onRebuild ? await context.watch().then(() => first) : (await context.rebuild().catch((failed: esbuild.BuildFailure) => failed)).errors
+  const built = started.then(async (context) => (onRebuild ? context.watch().then(() => first) : (await context.rebuild().catch((failed: esbuild.BuildFailure) => failed)).errors))
+  const errors = await bundleWithin(built, timeLimit(timeout))
+  const context = await started
   if (errors.length > 0) {
     await context.dispose()
     throw new BuildError(errors.map(formatMessage).join('; '))
@@ -156,8 +160,9 @@ function realmGlobals(): string[] {
 }
 
 // The page that run, shot, and export build, bundled in memory only, so check refuses what they would.
-export async function bundlePage(dir: string): Promise<void> {
-  const built = await esbuild.build({ ...pageBuild({ files: gameFiles(dir), address: (name) => name }), write: false }).catch((failure: esbuild.BuildFailure) => failure)
+export async function bundlePage(dir: string, timeout?: number): Promise<void> {
+  const build = esbuild.build({ ...pageBuild({ files: gameFiles(dir), address: (name) => name }), write: false }).catch((failure: esbuild.BuildFailure) => failure)
+  const built = await bundleWithin(build, timeLimit(timeout))
   if (built instanceof Error) throw new BuildError(built.errors.map(formatMessage).join('; '))
 }
 

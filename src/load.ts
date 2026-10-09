@@ -139,7 +139,7 @@ async function loadGame(dir: string, options: RunOptions & { readonly outcome?: 
   const files = gameFiles(dir)
   const driver = options.driver === undefined ? undefined : driverFile(options.driver)
   const seconds = timeLimit(options.timeout)
-  const { code, map } = await bundle(files, driver)
+  const { code, map } = await bundle(files, driver, seconds)
   const { ticks, press, hold, pointer, set, every, until, only, clip, outcome } = options
   const timeout = Math.min(Math.ceil(seconds * 1000), 2 ** 32 - 1)
   return async (seed, cancel) => {
@@ -270,7 +270,7 @@ function driverFile(path: string): string {
 }
 
 // One script with the engine, the game, and the driver, whose modules load only when the sandbox runs them, after it has fixed the realm's globals.
-async function bundle(files: GameFiles, driver: string | undefined): Promise<{ code: string; map: SourceMap }> {
+async function bundle(files: GameFiles, driver: string | undefined, seconds: number): Promise<{ code: string; map: SourceMap }> {
   const roots = confineRoots({ game: files.folder, driver: driver === undefined ? undefined : dirname(driver) })
   const seeds = [files.game, ...(driver === undefined ? [] : [driver])]
   const load = (file: string) => `() => require(${JSON.stringify(file)})`
@@ -279,7 +279,7 @@ async function bundle(files: GameFiles, driver: string | undefined): Promise<{ c
     `sandbox({ game: ${load(files.game)}, driver: ${driver === undefined ? 'undefined' : load(driver)} })`,
   ].join('\n')
   const plugins = [entryPlugin(entry), confinePlugin({ roots, seeds })]
-  const result = await esbuild
+  const build = esbuild
     .build({
       entryPoints: [ENTRY],
       bundle: true,
@@ -298,6 +298,7 @@ async function bundle(files: GameFiles, driver: string | undefined): Promise<{ c
     .catch((failure: unknown) => {
       throw new BuildError(buildMessage(failure))
     })
+  const result = await bundleWithin(build, seconds)
   const script = result.outputFiles.find((file) => file.path.endsWith('.js'))
   const map = result.outputFiles.find((file) => file.path.endsWith('.map'))
   if (script === undefined || map === undefined) throw new Error(`esbuild made no script and source map for ${files.game}`)
@@ -684,6 +685,46 @@ function stopEsbuild(): void {
 }
 
 process.on('exit', stopEsbuild)
+
+// The bundles esbuild's service has under way, and those of them that have run past their time limit.
+const bundling = new Set<Promise<unknown>>()
+const overdue = new Set<Promise<unknown>>()
+
+// esbuild reads each file a bundle takes in, and the package.json, tsconfig.json, and jsconfig.json files in the folders it resolves through, so one that never ends, like a FIFO nothing writes to, would hold the bundle for good. Past the time limit, the bundle fails, and esbuild's service is killed, which ends it.
+export function bundleWithin<T>(bundle: Promise<T>, seconds: number): Promise<T> {
+  bundling.add(bundle)
+  const ended = () => {
+    bundling.delete(bundle)
+    overdue.delete(bundle)
+    reclaim()
+  }
+  bundle.then(ended, ended)
+  return new Promise((done, fail) => {
+    const late = setTimeout(() => {
+      overdue.add(bundle)
+      fail(new LimitError('TIMEOUT', `bundling the game ran past the ${seconds} s time limit; a file it reads may never end, like a FIFO, or allow more time with --timeout`))
+      reclaim()
+    }, Math.min(Math.ceil(seconds * 1000), 2 ** 31 - 1))
+    bundle.then(
+      (value) => {
+        clearTimeout(late)
+        done(value)
+      },
+      (error: unknown) => {
+        clearTimeout(late)
+        fail(error)
+      },
+    )
+  })
+}
+
+// Killing esbuild's service ends every bundle it has, as an MCP server's calls can share it, so it goes only once each of them has run past its limit; those then never settle.
+function reclaim(): void {
+  if (overdue.size === 0 || [...bundling].some((bundle) => !overdue.has(bundle))) return
+  bundling.clear()
+  overdue.clear()
+  stopEsbuild()
+}
 
 // Ends this process as the signal would have, once what else listens for it, like shots cleaning up after it, is done and calls this again. On macOS and Linux the signal this process sends itself does that. On Windows a process can't send itself SIGHUP, and SIGINT or SIGTERM end it at once with 1, so there what else listens hears the signal from here, and once nothing does, the process exits with the code a shell gives a process the signal ended.
 export function endBy(signal: NodeJS.Signals): void {

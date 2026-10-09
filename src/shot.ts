@@ -140,7 +140,7 @@ async function drawFrames({ dir, at, out, seed, press, hold, pointer, driver, se
   const paths = framePaths(out, at)
   const chrome = findChrome()
   if (!chrome) throw new BrowserError('shot needs Chrome or Chromium, or Edge on Windows; set CHROME_PATH to its executable')
-  const page = await buildPage({ dir, config: { mode: 'shot' }, driver })
+  const page = await buildPage({ dir, config: { mode: 'shot' }, driver, timeout })
   let server: Server | undefined
   let browser: Browser | undefined
   let stuck = false

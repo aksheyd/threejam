@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { closeSync, constants, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, rmSync, symlinkSync, writeFileSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
 import { real, within } from '../src/confine.ts'
+import { exportGame } from '../src/export.ts'
 import { sandboxEnv } from '../src/load.ts'
 import { PORTABLE } from '../src/math.ts'
 import { ROOT } from '../src/package.ts'
-import { CLI } from './children.ts'
+import { buildPage, bundlePage } from '../src/serve.ts'
+import { CLI, mcp } from './children.ts'
 import { PROBE, checkProbe } from './probe.ts'
 
 const TMP = join(ROOT, 'test', '.tmp')
@@ -309,6 +311,106 @@ test('an endless loop in a game fails with TIMEOUT, naming where it was, instead
   assert.equal(sim.json.code, 'TIMEOUT')
   assert.match(String(sim.json.message), /time limit.*in update at tick 2/)
   assert.ok(Date.now() - started < 8000, 'the loop was not stopped near its budget')
+})
+
+const FIFOS = { skip: process.platform === 'win32' && 'FIFOs are made with mkfifo, which Windows lacks' }
+
+// A FIFO nothing writes to, which holds whatever reads it for good.
+function fifo(path: string): void {
+  assert.equal(spawnSync('mkfifo', [path]).status, 0)
+}
+
+// Runs beside other commands, and is bounded here, since a bundle that waits for good would hold the test.
+function threejamAside(args: string[]): Promise<{ code: number | null; out: string }> {
+  return new Promise((done) => {
+    const child = spawn(process.execPath, [CLI, ...args, '--format', 'json'], { cwd: ROOT, timeout: 30_000, killSignal: 'SIGKILL' })
+    let out = ''
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => (out += chunk))
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => (out += chunk))
+    child.once('close', (code) => done({ code, out: out.trim() }))
+  })
+}
+
+const LATE_BUNDLE = 'bundling the game ran past the 1 s time limit; a file it reads may never end, like a FIFO, or allow more time with --timeout'
+
+test("a FIFO that esbuild reads for sim's bundle, as an import, the game.ts, or a package.json, tsconfig.json, or jsconfig.json in a folder it resolves through, fails the bundle with TIMEOUT at --timeout instead of holding it for good", FIFOS, async () => {
+  const cases = {
+    import: folder({ 'game.ts': game("import './stall.ts'") }),
+    game: folder({ 'notes.txt': '' }),
+    package: folder({ 'game.ts': game('') }),
+    tsconfig: folder({ 'game.ts': game('') }),
+    jsconfig: folder({ 'game.ts': game('') }),
+    above: folder({ 'game/game.ts': game('') }),
+    subfolder: folder({ 'game.ts': game("import { size } from './lib/size.ts'\nvoid size"), 'lib/size.ts': 'export const size = 0.1\n' }),
+  }
+  fifo(join(cases.import.abs, 'stall.ts'))
+  fifo(join(cases.game.abs, 'game.ts'))
+  fifo(join(cases.package.abs, 'package.json'))
+  fifo(join(cases.tsconfig.abs, 'tsconfig.json'))
+  fifo(join(cases.jsconfig.abs, 'jsconfig.json'))
+  fifo(join(cases.above.abs, 'package.json'))
+  fifo(join(cases.subfolder.abs, 'lib', 'package.json'))
+  const dirs = Object.entries(cases).map(([name, { dir }]) => [name, name === 'above' ? join(dir, 'game') : dir] as const)
+  const ended = await Promise.all(dirs.map(async ([name, dir]) => [name, await threejamAside(['sim', dir, '--ticks', '1', '--timeout', '1'])] as const))
+  const late = { code: 1, out: JSON.stringify({ code: 'TIMEOUT', message: LATE_BUNDLE }, null, 2) }
+  assert.deepEqual(Object.fromEntries(ended), Object.fromEntries(dirs.map(([name]) => [name, late])))
+})
+
+test("a FIFO that only a page's bundle reads, like a view.ts, fails the page's first build for shot and for run, export's bundle, and check's at the time limit", FIFOS, async () => {
+  const { abs } = folder({ 'game.ts': game('') })
+  fifo(join(abs, 'view.ts'))
+  const late = { name: 'LimitError', message: LATE_BUNDLE }
+  await Promise.all([
+    assert.rejects(buildPage({ dir: abs, config: { mode: 'shot' }, timeout: 1 }), late),
+    assert.rejects(buildPage({ dir: abs, config: { mode: 'run', seed: 0, token: 'token' }, onRebuild: () => {}, timeout: 1 }), late),
+    assert.rejects(exportGame({ dir: abs, out: join(abs, 'game.html'), timeout: 1 }), late),
+    assert.rejects(bundlePage(abs, 1), late),
+  ])
+})
+
+// Writes text to a FIFO, unless nothing has it open to read, as when the esbuild service that read it has been killed: opening it to write then fails at once.
+function fed(path: string, text: string): boolean {
+  try {
+    const file = openSync(path, constants.O_WRONLY | constants.O_NONBLOCK)
+    writeSync(file, text)
+    closeSync(file)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// The esbuild services that parent runs, as ps lists them on macOS and Linux.
+function services(parent: number | undefined): number[] {
+  const { stdout } = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,args='], { encoding: 'utf8' })
+  return stdout.split('\n').flatMap((line) => {
+    const [pid, ppid, ...args] = line.trim().split(/\s+/)
+    return Number(ppid) === parent && args.some((arg) => arg.startsWith('--service=')) ? [Number(pid)] : []
+  })
+}
+
+test("in an MCP server, a call whose bundle runs past its time limit leaves another call's bundle, still within its own, to finish, and esbuild's service goes once no bundle in it is within its limit", FIFOS, async (t) => {
+  const stuck = folder({ 'game.ts': game("import './stall.ts'") })
+  fifo(join(stuck.abs, 'stall.ts'))
+  // Its import is a FIFO the test writes to once the other call has run past its limit.
+  const waiting = folder({ 'game.ts': game("import { size } from './late.ts'\nvoid size") })
+  const late = join(waiting.abs, 'late.ts')
+  fifo(late)
+  const server = mcp(t.signal)
+  try {
+    await server.ready
+    const first = server.request('tools/call', { name: 'sim', arguments: { dir: stuck.dir, ticks: 1, timeout: 1 } })
+    const second = server.request('tools/call', { name: 'sim', arguments: { dir: waiting.dir, ticks: 1, timeout: 30, only: 'ball', fields: 'x' } })
+    const timedOut = (await first).result?.content?.[0]?.text
+    assert.ok(fed(late, 'export const size = 0.1\n'), "nothing had the second game's import open, so its bundle ended with the first one's")
+    const finished = (await second).result?.content?.[0]?.text.split('\n')[0]
+    assert.deepEqual({ timedOut, finished }, { timedOut: `TIMEOUT: ${LATE_BUNDLE}`, finished: '{"tick":1,"entities":[{"name":"ball","x":0.01}]}' })
+    // The service still reading the first game's import is killed as the second bundle ends, a moment before the kill takes.
+    for (const deadline = Date.now() + 2000; services(server.pid).length > 0 && Date.now() < deadline; ) await new Promise((wait) => setTimeout(wait, 50))
+    assert.deepEqual(services(server.pid), [], "esbuild's service, still reading the first game's import, wasn't killed")
+  } finally {
+    server.close()
+  }
 })
 
 test('a game that keeps more than the 1 GB a sandbox may grow to runs out of memory with GAME_ERROR on any machine, and with --every, the message says the snapshots it keeps count toward that', () => {
