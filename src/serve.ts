@@ -213,7 +213,8 @@ function scriptTag(script: Script): string {
 export interface Server {
   readonly url: string
   reload(): void
-  close(): void
+  // Settles once every connection is gone.
+  close(): Promise<void>
 }
 
 // Every response: never cached or read as another type, and never loaded into a page from another origin.
@@ -225,6 +226,8 @@ const ASSET_POLICY = "sandbox; default-src 'none'; frame-ancestors 'none'"
 // The most of a playtest one request may send; a page sends far less at a time.
 const MOST_RECORD_BYTES = 1024 * 1024
 const RECORDED: Readonly<Record<Taken, number>> = { taken: 204, stale: 409, invalid: 400 }
+// How long a request in progress as the server closes, like a part of a playtest on its way, has to get its answer before its connection goes regardless.
+const CLOSING_MS = 1000
 
 // The server answers only the page itself, and /events, /quit, and /record only with the token that run gives its page; without one, as for shot, it refuses them. /record is there only while run records the playtest.
 export function serve({ page, token, onQuit = () => {}, recording }: { page: Page; token?: string; onQuit?: () => void; recording?: Recording }): Promise<Server> {
@@ -232,7 +235,7 @@ export function serve({ page, token, onQuit = () => {}, recording }: { page: Pag
   // Every connection, and those with a request in progress, which still gets its answer once the server has closed, as a playtest's /record under way does.
   const connections = new Set<Socket>()
   const answering = new Set<Socket>()
-  let closed = false
+  let closing: Promise<void> | undefined
   const secret = token === undefined ? undefined : Buffer.from(token)
   const granted = (given: string | null) => {
     const offered = Buffer.from(given ?? '')
@@ -244,7 +247,7 @@ export function serve({ page, token, onQuit = () => {}, recording }: { page: Pag
     answering.add(socket)
     response.once('close', () => {
       answering.delete(socket)
-      if (closed) socket.destroy()
+      if (closing !== undefined) socket.destroy()
     })
     const target = request.url ?? '/'
     const mark = target.indexOf('?')
@@ -323,11 +326,15 @@ export function serve({ page, token, onQuit = () => {}, recording }: { page: Pag
           for (const listener of listeners) listener.write('data: reload\n\n')
         },
         close() {
-          closed = true
+          if (closing !== undefined) return closing
           for (const listener of listeners) listener.end()
-          server.close()
-          // Node 22 and 24 keep a connection the browser opened ahead of a request, and every Node keeps one whose request was in progress, and each serves an /events that comes on it after a quit, which would hold run open for good. So a connection goes now, or once the request on it has its answer.
+          const late = setTimeout(() => {
+            for (const socket of connections) socket.destroy()
+          }, CLOSING_MS)
+          closing = new Promise<void>((done) => server.close(() => done())).finally(() => clearTimeout(late))
+          // Node 22 and 24 keep a connection the browser opened ahead of a request, and every Node keeps one whose request was in progress, and each serves an /events that comes on it after a quit, which would hold run open for good. So a connection goes now, or once the request on it has its answer, or CLOSING_MS later regardless, so that one whose body stops halfway can't hold run open either.
           for (const socket of connections) if (!answering.has(socket)) socket.destroy()
+          return closing
         },
       })
     })
@@ -605,10 +612,12 @@ export async function* play({ dir, seed = randomInt(2 ** 31), window, record }: 
   yield `Playing ${dir} with seed ${seed}${record === undefined ? '' : `, recording to ${record},`} at ${server.url}${window ? `. ${keys}.` : ''}`
   await done
   app?.close()
-  server.close()
+  const closing = server.close()
   await page.dispose()
   // Writing to a terminal that's gone fails and ends run, so the window and its profile go first.
   await app?.closed
+  // A part of the playtest still on its way, as one can be when run stops some other way than Esc, is in the playtest once it has its answer.
+  await closing
   if (record !== undefined) yield savePlaytest({ file: record, dir, session: recording?.latest(page.build) })
   yield 'Stopped.'
 }

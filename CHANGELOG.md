@@ -9,6 +9,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - Esc quits `run` even when it comes while the page reloads after a save, before the page has run its script. Before, the page missed it, and the session went on.
 - On Node 22 and 24, `run` exits when it stops, even when the page's request to follow saves reaches it afterwards, on a connection the browser had opened ahead of it. Before, `run` printed `Stopped.` and went on running.
 - `run --record` exits when Ctrl-C, SIGTERM, or a closed terminal stops it while its page is sending part of the playtest. Before, if the page's next request came on that part's connection, `run` printed `Stopped.` and went on running.
+- When something other than Esc stops `run --record` while its page is sending part of the playtest, `run` waits up to a second for that part, so the playtest has it. Before, `run` could save the playtest without it, and a part whose body stopped halfway kept `run` running.
 
 ## [0.0.6](https://github.com/aksheyd/threejam/compare/v0.0.5...v0.0.6) - 2026-10-08
 

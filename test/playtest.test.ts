@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
+import { connect } from 'node:net'
 import { join } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 import { Recorder } from '../src/browser/playtest.ts'
@@ -190,4 +191,42 @@ test('run --record takes a playtest it saved before, and leaves it as it was whe
   assert.equal(await exited, 0)
   assert.equal(out.slice(out.indexOf('\n') + 1), `Saved no playtest to ${file}, since no tick ran after run started or a file was last saved.\nStopped.\n`)
   assert.equal(readFileSync(file, 'utf8'), earlier)
+})
+
+test('when a signal stops run --record, run waits a moment for the parts of the playtest still on their way: it saves one that gets its answer then, and stops waiting for one whose body stops halfway', SIGNALS, async (t) => {
+  const dir = folder({ 'game.ts': GAME })
+  const file = join(dir, 'playtest.ts')
+  const run = spawnCli(['run', dir, '--serve-only', '--record', file], t.signal)
+  let out = ''
+  run.stdout.on('data', (chunk) => (out += chunk))
+  run.stderr.on('data', (chunk) => (out += chunk))
+  const exited = new Promise((done) => run.once('close', done))
+  await until('run to serve the page', () => out.includes('\n'))
+  const url = new URL(out.slice(out.lastIndexOf(' ') + 1, -1))
+  const config = await (await fetch(url)).text()
+  const [token, build] = [/"token":"([\w-]+)"/.exec(config)?.[1] ?? '', /"build":(\d+)/.exec(config)?.[1] ?? '']
+  // A part on its way: its headers, which Node answers with 100 Continue once it has them, and all of its body but the last byte.
+  const begin = (query: Record<string, string | number>, body: string) => {
+    const part = { socket: connect(Number(url.port), '127.0.0.1'), answered: '', rest: body.slice(-1) }
+    part.socket.on('data', (chunk) => (part.answered += chunk)).on('error', () => {})
+    const search = new URLSearchParams(Object.entries(query).map(([name, value]) => [name, String(value)]))
+    part.socket.write(`POST /record?${search} HTTP/1.1\r\nHost: ${url.host}\r\nContent-Length: ${body.length}\r\nExpect: 100-continue\r\n\r\n${body.slice(0, -1)}`)
+    return part
+  }
+  const late = begin({ token, build, session: 'a', seed: 2, from: 0, ticks: 10 }, '[[1, ["W"]]]')
+  const stalled = begin({ token, build, session: 'a', seed: 2, from: 1, ticks: 20 }, '[[15, []]]')
+  try {
+    await until('run to take both parts', () => late.answered.includes('100 Continue') && stalled.answered.includes('100 Continue'))
+    run.kill('SIGTERM')
+    // Well past when run would save the playtest if it didn't wait.
+    await new Promise((done) => setTimeout(done, 200))
+    late.socket.write(late.rest)
+    const code = await Promise.race([exited, new Promise((done) => setTimeout(() => done('still running 10 s after its SIGTERM'), 10_000).unref())])
+    const statuses = (answered: string) => answered.split('\r\n').filter((line) => line.startsWith('HTTP/'))
+    assert.deepEqual({ code, late: statuses(late.answered), stalled: statuses(stalled.answered) }, { code: 0, late: ['HTTP/1.1 100 Continue', 'HTTP/1.1 204 No Content'], stalled: ['HTTP/1.1 100 Continue'] })
+    assert.match(out, new RegExp(`\nSaved the playtest, 10 ticks with seed 2, to ${file.replaceAll('.', '\\.')}; replay it with [^\n]+\nStopped\\.\n$`))
+  } finally {
+    late.socket.destroy()
+    stalled.socket.destroy()
+  }
 })
