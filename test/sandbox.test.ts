@@ -4,9 +4,10 @@ import { closeSync, constants, existsSync, mkdirSync, mkdtempSync, openSync, rea
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { after, test } from 'node:test'
+import { pathToFileURL } from 'node:url'
 import { real, within } from '../src/confine.ts'
 import { exportGame } from '../src/export.ts'
-import { sandboxEnv } from '../src/load.ts'
+import { BUNDLE_FLOOR, sandboxEnv, setBundleFloor } from '../src/load.ts'
 import { PORTABLE } from '../src/math.ts'
 import { ROOT } from '../src/package.ts'
 import { buildPage, bundlePage } from '../src/serve.ts'
@@ -320,10 +321,13 @@ function fifo(path: string): void {
   assert.equal(spawnSync('mkfifo', [path]).status, 0)
 }
 
-// Runs beside other commands, and is bounded here, since a bundle that waits for good would hold the test.
+// Has a command or server give each bundle 1 s at the least, rather than the 30 s users get, so one that waits on a FIFO fails within a second.
+const SHORT_BUNDLES = `--import=data:text/javascript,${encodeURIComponent(`import { setBundleFloor } from ${JSON.stringify(pathToFileURL(join(ROOT, 'src', 'load.ts')).href)}\nsetBundleFloor(1)`)}`
+
+// Runs beside other commands, with SHORT_BUNDLES, and is bounded here, since a bundle that waits for good would hold the test.
 function threejamAside(args: string[]): Promise<{ code: number | null; out: string }> {
   return new Promise((done) => {
-    const child = spawn(process.execPath, [CLI, ...args, '--format', 'json'], { cwd: ROOT, timeout: 30_000, killSignal: 'SIGKILL' })
+    const child = spawn(process.execPath, [SHORT_BUNDLES, CLI, ...args, '--format', 'json'], { cwd: ROOT, timeout: 30_000, killSignal: 'SIGKILL' })
     let out = ''
     child.stdout.setEncoding('utf8').on('data', (chunk: string) => (out += chunk))
     child.stderr.setEncoding('utf8').on('data', (chunk: string) => (out += chunk))
@@ -331,9 +335,12 @@ function threejamAside(args: string[]): Promise<{ code: number | null; out: stri
   })
 }
 
-const LATE_BUNDLE = 'bundling the game ran past the 1 s time limit; a file it reads may never end, like a FIFO, or allow more time with --timeout'
+const lateBundle = (seconds: number) => `bundling the game ran past its ${seconds} s time limit, the longer of 1 s and --timeout; a file it reads may never end, like a FIFO, or allow more time with a longer --timeout`
+const LATE_BUNDLE = lateBundle(1)
 
-test("a FIFO that esbuild reads for sim's bundle, as an import, the game.ts, or a package.json, tsconfig.json, or jsconfig.json in a folder it resolves through, fails the bundle with TIMEOUT at --timeout instead of holding it for good", FIFOS, async () => {
+test("a FIFO that esbuild reads for sim's bundle, as an import, the game.ts, or a package.json, tsconfig.json, or jsconfig.json in a folder it resolves through, fails the bundle with TIMEOUT at its limit, the longer of the floor and --timeout, instead of holding it for good", FIFOS, async () => {
+  const longer = folder({ 'game.ts': game("import './stall.ts'") })
+  fifo(join(longer.abs, 'stall.ts'))
   const cases = {
     import: folder({ 'game.ts': game("import './stall.ts'") }),
     game: folder({ 'notes.txt': '' }),
@@ -351,21 +358,39 @@ test("a FIFO that esbuild reads for sim's bundle, as an import, the game.ts, or 
   fifo(join(cases.above.abs, 'package.json'))
   fifo(join(cases.subfolder.abs, 'lib', 'package.json'))
   const dirs = Object.entries(cases).map(([name, { dir }]) => [name, name === 'above' ? join(dir, 'game') : dir] as const)
-  const ended = await Promise.all(dirs.map(async ([name, dir]) => [name, await threejamAside(['sim', dir, '--ticks', '1', '--timeout', '1'])] as const))
-  const late = { code: 1, out: JSON.stringify({ code: 'TIMEOUT', message: LATE_BUNDLE }, null, 2) }
-  assert.deepEqual(Object.fromEntries(ended), Object.fromEntries(dirs.map(([name]) => [name, late])))
+  const [ended, longerEnded] = await Promise.all([
+    Promise.all(dirs.map(async ([name, dir]) => [name, await threejamAside(['sim', dir, '--ticks', '1', '--timeout', '1'])] as const)),
+    threejamAside(['sim', longer.dir, '--ticks', '1', '--timeout', '2']),
+  ])
+  const late = (seconds: number) => ({ code: 1, out: JSON.stringify({ code: 'TIMEOUT', message: lateBundle(seconds) }, null, 2) })
+  assert.deepEqual({ ...Object.fromEntries(ended), longer: longerEnded }, { ...Object.fromEntries(dirs.map(([name]) => [name, late(1)])), longer: late(2) })
+})
+
+test('a game with a --timeout of 1 s still runs when its bundle takes longer than that, as one can on a busy machine, since a bundle gets 30 s at the least', () => {
+  const { dir } = folder({ 'game.ts': game("import { size } from './size.ts'\nvoid size"), 'size.ts': 'export const size = 0.1\n' })
+  // The resolve callback for the game's import, busy for 1.5 s the first time.
+  const hook = "import fs from 'node:fs'\nconst real = fs.realpathSync.native\nlet slow = true\nfs.realpathSync.native = (path, ...rest) => {\n  if (slow && String(path).endsWith('size.ts')) {\n    slow = false\n    for (const end = Date.now() + 1500; Date.now() < end; );\n  }\n  return real(path, ...rest)\n}"
+  const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(hook)}`, CLI, 'sim', dir, '--ticks', '1', '--timeout', '1', '--only', 'ball', '--fields', 'x', '--format', 'json'], { cwd: ROOT, encoding: 'utf8', timeout: 60_000, killSignal: 'SIGKILL' })
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  const { tick, entities } = JSON.parse(result.stdout)
+  assert.deepEqual({ tick, entities }, { tick: 1, entities: [{ name: 'ball', x: 0.01 }] })
 })
 
 test("a FIFO that only a page's bundle reads, like a view.ts, fails the page's first build for shot and for run, export's bundle, and check's at the time limit", FIFOS, async () => {
   const { abs } = folder({ 'game.ts': game('') })
   fifo(join(abs, 'view.ts'))
   const late = { name: 'LimitError', message: LATE_BUNDLE }
-  await Promise.all([
-    assert.rejects(buildPage({ dir: abs, config: { mode: 'shot' }, timeout: 1 }), late),
-    assert.rejects(buildPage({ dir: abs, config: { mode: 'run', seed: 0, token: 'token' }, onRebuild: () => {}, timeout: 1 }), late),
-    assert.rejects(exportGame({ dir: abs, out: join(abs, 'game.html'), timeout: 1 }), late),
-    assert.rejects(bundlePage(abs, 1), late),
-  ])
+  setBundleFloor(1)
+  try {
+    await Promise.all([
+      assert.rejects(buildPage({ dir: abs, config: { mode: 'shot' }, timeout: 1 }), late),
+      assert.rejects(buildPage({ dir: abs, config: { mode: 'run', seed: 0, token: 'token' }, onRebuild: () => {}, timeout: 1 }), late),
+      assert.rejects(exportGame({ dir: abs, out: join(abs, 'game.html'), timeout: 1 }), late),
+      assert.rejects(bundlePage(abs, 1), late),
+    ])
+  } finally {
+    setBundleFloor(BUNDLE_FLOOR)
+  }
 })
 
 // Writes text to a FIFO, unless nothing has it open to read, as when the esbuild service that read it has been killed: opening it to write then fails at once.
@@ -396,7 +421,7 @@ test("in an MCP server, a call whose bundle runs past its time limit leaves anot
   const waiting = folder({ 'game.ts': game("import { size } from './late.ts'\nvoid size") })
   const late = join(waiting.abs, 'late.ts')
   fifo(late)
-  const server = mcp(t.signal)
+  const server = mcp(t.signal, ROOT, { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} ${SHORT_BUNDLES}` })
   try {
     await server.ready
     const first = server.request('tools/call', { name: 'sim', arguments: { dir: stuck.dir, ticks: 1, timeout: 1 } })

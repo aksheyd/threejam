@@ -6,7 +6,7 @@ import { Cli, Errors, Formatter, z } from 'incur'
 import { FORMATS, commandLineRefusal } from './commandline.ts'
 import { BrowserError, BuildError, GameError, IoError, RunError, UsageError, quote, shellWord, show, type Code } from './errors.ts'
 import { exportGame, exportPath, scriptAddress } from './export.ts'
-import { DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, checkAssets, describe, gameFiles, isSystemError, runGame, runSeeds, typecheck, type SeedRun } from './load.ts'
+import { BUNDLE_FLOOR, DEFAULT_TIMEOUT, LimitError, MAX_TIMEOUT, checkAssets, describe, gameFiles, isSystemError, runGame, runSeeds, typecheck, type SeedRun } from './load.ts'
 import { createGame } from './new.ts'
 import { VERSION, mcpCommand } from './package.ts'
 import { playtestFile } from './playtest.ts'
@@ -93,7 +93,7 @@ const host = z.string({ error: hostError }).refine((value) => isIP(value) !== 0 
 const seconds = expected(`a number of seconds above 0, up to ${MAX_TIMEOUT}`)
 const timeout = digits(/^(\d+\.?\d*|\.\d+)$/, z.number({ error: seconds }).positive({ error: seconds }).max(MAX_TIMEOUT, { error: seconds }))
   .optional()
-  .describe(`Seconds the game's code may run, and each bundle of it may take, before the command stops it and fails with TIMEOUT (default ${DEFAULT_TIMEOUT}, at most ${MAX_TIMEOUT})`)
+  .describe(`Seconds the game's code may run before the command stops it and fails with TIMEOUT (default ${DEFAULT_TIMEOUT}, at most ${MAX_TIMEOUT}); each bundle of the game may take the longer of this and ${BUNDLE_FLOOR} s`)
 
 // Loading a game runs its code, and a driver's, so clients should treat these calls as running a program they didn't write.
 const runsGame = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }

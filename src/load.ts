@@ -690,8 +690,19 @@ process.on('exit', stopEsbuild)
 const bundling = new Set<Promise<unknown>>()
 const overdue = new Set<Promise<unknown>>()
 
-// esbuild reads each file a bundle takes in, and the package.json, tsconfig.json, and jsconfig.json files in the folders it resolves through, so one that never ends, like a FIFO nothing writes to, would hold the bundle for good. Past the time limit, the bundle fails, and esbuild's service is killed, which ends it.
-export function bundleWithin<T>(bundle: Promise<T>, seconds: number): Promise<T> {
+// The least time a bundle gets, however short --timeout is: on a busy machine a bundle can take seconds, and --timeout is for the game's code.
+export const BUNDLE_FLOOR = 30
+let bundleFloor = BUNDLE_FLOOR
+
+// Tests lower the floor, so a bundle that waits on a FIFO fails within a second; a test that runs the CLI does so through an --import of its own.
+export function setBundleFloor(seconds: number): void {
+  bundleFloor = seconds
+}
+
+// esbuild reads each file a bundle takes in, and the package.json, tsconfig.json, and jsconfig.json files in the folders it resolves through, so one that never ends, like a FIFO nothing writes to, would hold the bundle for good. Past its time limit, the longer of the floor and the command's --timeout, the bundle fails, and esbuild's service is killed, which ends it.
+export function bundleWithin<T>(bundle: Promise<T>, timeout: number): Promise<T> {
+  const seconds = Math.max(bundleFloor, timeout)
+  const floor = bundleFloor
   bundling.add(bundle)
   const ended = () => {
     bundling.delete(bundle)
@@ -702,7 +713,7 @@ export function bundleWithin<T>(bundle: Promise<T>, seconds: number): Promise<T>
   return new Promise((done, fail) => {
     const late = setTimeout(() => {
       overdue.add(bundle)
-      fail(new LimitError('TIMEOUT', `bundling the game ran past the ${seconds} s time limit; a file it reads may never end, like a FIFO, or allow more time with --timeout`))
+      fail(new LimitError('TIMEOUT', `bundling the game ran past its ${seconds} s time limit, the longer of ${floor} s and --timeout; a file it reads may never end, like a FIFO, or allow more time with a longer --timeout`))
       reclaim()
     }, Math.min(Math.ceil(seconds * 1000), 2 ** 31 - 1))
     bundle.then(
