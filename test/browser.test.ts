@@ -8,7 +8,6 @@ import { join, relative, sep } from 'node:path'
 import { after, test, type TestContext } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import type { BoundingBox, HTTPRequest, KeyInput, Page } from 'puppeteer-core'
-import asteroids from '../games/asteroids/game.ts'
 import pong from '../games/pong/game.ts'
 import { PITCH_RANGE } from '../src/assets.ts'
 import { parseGame, simulate } from '../src/engine.ts'
@@ -770,11 +769,30 @@ test('on a touch screen, a played page follows a finger dragged on the game unti
   assert.deepEqual(await tab.evaluate(() => (Reflect.get(window, 'seen') as string[]).filter((each) => each === 'pointerup' || each === 'pointercancel')), ['pointerup', 'pointercancel'])
 })
 
+// A game that asks about Space and the mouse until it starts, then about the keys that fly a ship, as Asteroids does, and keeps the keys and mouse buttons held and where the pointer is on each tick after, with nothing to draw.
+const FLIGHT = [
+  "import { defineGame, listOf } from 'threejam'",
+  '',
+  'export default defineGame({',
+  "  entities: { game: { started: false }, input: { ticks: listOf('') } },",
+  '  update({ game, input }, ctx) {',
+  '    if (!game.started) {',
+  "      game.started = ctx.input.pressed('Space') || ctx.input.pressed('Mouse')",
+  '      return',
+  '    }',
+  '    const { x, y } = ctx.input.pointer',
+  "    input.ticks.push(`${(['Left', 'Right', 'Up', 'A', 'D', 'W', 'Space', 'Mouse', 'MouseRight'] as const).filter((key) => ctx.input.held(key)).join(' ')} @ ${x} ${y}`)",
+  '  },',
+  '})',
+  '',
+].join('\n')
+
 test("on a touch screen, a played page shows a key for each keyboard key the game reads, once it reads it, below or beside the game and never on it, which fingers hold as the keyboard would and never as the mouse, so the page reaches sim's state; without touch it shows none", { skip: !chrome && 'needs Chrome' }, async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'threejam-export-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
-  const file = join(dir, 'asteroids.html')
-  await exportGame({ dir: 'games/asteroids', out: file })
+  const dir = mkdtempSync(join(TMP, 'flight-'))
+  made.push(dir)
+  writeFileSync(join(dir, 'game.ts'), FLIGHT)
+  const file = join(dir, 'flight.html')
+  await exportGame({ dir, out: file })
   const tab = await newTab(t)
   await tab.setViewport({ width: 393, height: 851, deviceScaleFactor: 1, isMobile: true, hasTouch: true })
   // A key stops the events of the fingers on it, so they're watched before they reach it.
@@ -801,7 +819,7 @@ test("on a touch screen, a played page shows a key for each keyboard key the gam
     return { lift: async () => (await touch.end(), await saw(`pointerup ${key}`)) }
   }
 
-  // Asteroids asks about Space and the mouse until a game starts, then about the keys that fly the ship.
+  // The game asks about Space and the mouse until it starts, then about the keys that fly a ship.
   await step()
   await tab.waitForSelector('button[data-key="Space"]')
   assert.deepEqual(await keys(), ['Space'])
@@ -819,7 +837,8 @@ test("on a touch screen, a played page shows a key for each keyboard key the gam
   await step()
   await up.lift()
   await step()
-  const expected = simulate(asteroids, { seed: 3, ticks: 15, hold: ['Space@2', 'Left@4-13', 'Up@8-14'] }).snapshots[0].entities
+  const flight = parseGame(Reflect.get(await import(pathToFileURL(join(dir, 'game.ts')).href), 'default'))
+  const expected = simulate(flight, { seed: 3, ticks: 15, hold: ['Space@2', 'Left@4-13', 'Up@8-14'] }).snapshots[0].entities
   assert.deepEqual(await tab.evaluate(() => window.engine.state()), expected)
   // Held upright, the keys sit below the game, and turned on its side, beside it.
   const clearOfTheGame = async () => {
