@@ -9,7 +9,7 @@ import type { Browser, Page } from 'puppeteer-core'
 import { BrowserError, GameError, IoError, UsageError, quote } from './errors.ts'
 import { LimitError, STOPS, endBy, gameFailure, isSystemError, timeLimit } from './load.ts'
 import { makeFolder, saveFile } from './output.ts'
-import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, endGroup, findChrome, killGroup, removeProfile, removeSocketFolders, serve, socketFolder, socketFolders, tmpdirHint, type Server } from './serve.ts'
+import { NO_DEVTOOLS_PORT, buildPage, chromeEnv, endGroup, findChrome, howEnded, killGroup, removeProfile, removeSocketFolders, serve, socketFolder, socketFolders, tmpdirHint, type Server } from './serve.ts'
 import type { ResetOptions } from './browser/client.ts'
 
 export interface ShotOptions {
@@ -106,7 +106,9 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
     if (!(error instanceof Error && error.name === 'TargetCloseError')) throw new BrowserError(`Chrome at ${where} didn't start: ${firstLine(error)}; set CHROME_PATH to a working Chrome or Chromium`)
     const hint = tmpdirHint(env.TMPDIR)
     if (hint !== undefined) removeSocketFolders(env.TMPDIR, before)
-    throw new BrowserError(`Chrome at ${where} didn't start: it exited as soon as it started${hint === undefined ? '; set CHROME_PATH to a working Chrome or Chromium' : `, ${hint}`}`)
+    // Chrome's exit can come in after the connection closes.
+    const ended = launched !== undefined && (await within(2000, gone(launched))) ? ` (${howEnded(launched.exitCode, launched.signalCode)})` : ''
+    throw new BrowserError(`Chrome at ${where} didn't start: it exited as soon as it started${ended}${hint === undefined ? '; set CHROME_PATH to a working Chrome or Chromium' : `, ${hint}`}`)
   } finally {
     unsubscribe('child_process', spot)
   }

@@ -33,6 +33,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - On macOS and Linux, when Chrome itself crashes during `shot`, `shot` kills the processes Chrome started before it removes Chrome's profile. Before, it waited up to 10 s for them to exit on their own, and on a busy machine, where they could take longer, it then removed the profile while they could still write to it.
 - `check` works when the temporary folder is a relative path, like `TMPDIR=tmp`. Before, unless it ran in ThreeJam's own folder, it failed with `TYPE_ERROR`, saying the `tsconfig.json` its type check writes in the temporary folder didn't exist.
 - `check`, or an MCP server, killed with SIGKILL partway through a type check removes the folder the type check reads, on macOS and Linux. Before, a `threejam-check-*` folder stayed in the temporary folder.
+- When Chrome exits as soon as it starts, `shot`'s error says how it ended, like `(exit code 127)` or `(signal SIGABRT)`, and so does `run`'s warning when a `TMPDIR` too long for Chrome's socket is why. Before, they said only that it exited, and Chrome's own output, which can say why, goes nowhere.
 
 ## [0.0.6](https://github.com/aksheyd/threejam/compare/v0.0.5...v0.0.6) - 2026-10-08
 

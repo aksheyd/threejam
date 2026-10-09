@@ -600,9 +600,17 @@ test("on Linux, a TMPDIR too long for Chrome's socket gets shot and run's window
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: ROOT, env, encoding: 'utf8', timeout: 45_000, killSignal: 'SIGKILL' })
   const hint = `as Chrome on Linux does in a TMPDIR over 62 bytes, where its socket goes, and ${temp} is ${Buffer.byteLength(temp)}; set TMPDIR to a shorter folder, like /tmp`
   const [shot, leftByShot] = result.stdout.trim().split('\n')
+  // Which signal or exit code Chrome ends with there depends on its build.
+  const ended = (message: string | undefined) => message?.replace(/ \((exit code \d+|signal SIG[A-Z0-9]+)\),/, ' (how it ended),')
   assert.deepEqual(
-    { status: result.status, shot, leftByShot: JSON.parse(leftByShot ?? 'null'), run: result.stderr.trim(), left: readdirSync(temp) },
-    { status: 0, shot: `Chrome at ${window} didn't start: it exited as soon as it started, ${hint}`, leftByShot: ['org.chromium.Chromium.others'], run: `Chrome at ${window} exited as soon as it started, ${hint}.`, left: ['org.chromium.Chromium.others'] },
+    { status: result.status, shot: ended(shot), leftByShot: JSON.parse(leftByShot ?? 'null'), run: ended(result.stderr.trim()), left: readdirSync(temp) },
+    {
+      status: 0,
+      shot: `Chrome at ${window} didn't start: it exited as soon as it started (how it ended), ${hint}`,
+      leftByShot: ['org.chromium.Chromium.others'],
+      run: `Chrome at ${window} exited as soon as it started (how it ended), ${hint}.`,
+      left: ['org.chromium.Chromium.others'],
+    },
   )
 })
 
@@ -616,14 +624,14 @@ test("a new socket folder goes only when its socket's path would pass the 107 by
   assert.deepEqual({ length: temp.length, left: readdirSync(temp) }, { length: 66, left: ['com.google.Chrome.abc123'] })
 })
 
-test('a Chrome that exits as it starts fails with one line naming it, though over a pipe its own output is lost, and a folder or a file that runs nothing says so', { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {
+test('a Chrome that exits as it starts fails with one line naming it and how it ended, though over a pipe its own output is lost, and a folder or a file that runs nothing says so', { skip: process.platform === 'win32' && 'the stand-in Chrome is a shell script' }, async () => {
   const dir = mkdtempSync(join(TMP, 'exits-'))
   made.push(dir)
   const fake = join(dir, 'chrome')
   writeFileSync(fake, '#!/bin/sh\necho "no display" >&2\nexit 3\n', { mode: 0o755 })
-  await assert.rejects(launchChrome(fake), {
+  await assert.rejects(launchChrome(fake, { profile: join(dir, 'profile') }), {
     name: 'BrowserError',
-    message: `Chrome at ${fake} didn't start: it exited as soon as it started; set CHROME_PATH to a working Chrome or Chromium`,
+    message: `Chrome at ${fake} didn't start: it exited as soon as it started (exit code 3); set CHROME_PATH to a working Chrome or Chromium`,
   })
   await assert.rejects(launchChrome(dir), { name: 'BrowserError', message: `${dir} is a folder; set CHROME_PATH to the executable file of Chrome or Chromium, or Edge on Windows` })
   writeFileSync(join(dir, 'notes.txt'), 'not a program', { mode: 0o644 })
@@ -638,7 +646,7 @@ test('a Chrome that exits as it starts takes the processes it started with it, s
   // Like a zygote still starting as Chrome exits, its helper holds none of the pipe to Puppeteer, and makes the profile's folder whenever it's missing.
   const fake = join(dir, 'chrome')
   writeFileSync(fake, `#!/bin/sh\n(while [ -d ${sh(profile)} ]; do sleep 0.05; done; mkdir ${sh(profile)}) 3<&- 4<&- </dev/null &\nexit 3\n`, { mode: 0o755 })
-  await assert.rejects(launchChrome(fake, { profile }), { name: 'BrowserError', message: `Chrome at ${fake} didn't start: it exited as soon as it started; set CHROME_PATH to a working Chrome or Chromium` })
+  await assert.rejects(launchChrome(fake, { profile }), { name: 'BrowserError', message: `Chrome at ${fake} didn't start: it exited as soon as it started (exit code 3); set CHROME_PATH to a working Chrome or Chromium` })
   removeProfile(profile)
   await new Promise((wait) => setTimeout(wait, 1000))
   assert.equal(existsSync(profile), false)

@@ -514,6 +514,11 @@ function browserPaths(): string[] {
   return ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].flatMap((name) => folders.map((folder) => join(folder, name)))
 }
 
+// How a process ended, as a message gives it.
+export function howEnded(code: number | null, signal: NodeJS.Signals | null): string {
+  return signal === null ? `exit code ${code}` : `signal ${signal}`
+}
+
 export interface AppWindow {
   readonly exited: Promise<void>
   // Settles once Chrome and every process it started that can write to its profile are gone, and its profile with them.
@@ -543,7 +548,7 @@ export function openWindow(url: string, { grace = 2000 }: { grace?: number } = {
     const hint = closing || (code === 0 && signal === null) ? undefined : tmpdirHint(env.TMPDIR)
     if (hint === undefined) return
     removeSocketFolders(env.TMPDIR, before)
-    process.stderr.write(`Chrome at ${chrome} exited as soon as it started, ${hint}.\n`)
+    process.stderr.write(`Chrome at ${chrome} exited as soon as it started (${howEnded(code, signal)}), ${hint}.\n`)
   })
   const exited = new Promise<void>((done) => child.once('exit', () => done()))
   child.once('error', (error) => {
