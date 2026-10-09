@@ -679,7 +679,7 @@ subscribe('child_process', (message) => {
 })
 
 // esbuild's service shares this process's stderr, and while it watches files or has a build under way it can outlive this process, holding that stderr and even writing to it, so it goes as this process exits or a signal ends it. It's killed before esbuild.stop closes its stdin, since partway through a build that alone can leave it deadlocked, and then it prints so.
-function stopEsbuild(): void {
+export function stopEsbuild(): void {
   service?.kill('SIGKILL')
   void esbuild.stop()
 }

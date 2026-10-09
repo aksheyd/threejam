@@ -365,6 +365,23 @@ test("a command that exits partway through a bundle takes esbuild's service with
   assert.deepEqual({ status: result.status, stdout: result.stdout, stderr: result.stderr }, { status: 0, stdout: '', stderr: '' })
 })
 
+test('run stops even while a rebuild waits on a file that never ends, like a FIFO a save brought in', { skip: process.platform === 'win32' && 'FIFOs are made with mkfifo, which Windows lacks' }, async (t) => {
+  const dir = folder({ 'game.ts': game({ update: '' }) })
+  assert.equal(spawnSync('mkfifo', [join(ROOT, dir, 'stall.ts')]).status, 0)
+  const run = spawnCli(['run', dir, '--serve-only'], t.signal)
+  let out = ''
+  let ended: number | string | undefined
+  run.stdout.on('data', (chunk) => (out += chunk))
+  run.once('exit', (code, signal) => (ended = signal ?? code ?? undefined))
+  await until('run to serve the page', () => out.includes('\n') || ended !== undefined)
+  writeFileSync(join(ROOT, dir, 'game.ts'), `import './stall.ts'\n${game({ update: '' })}`)
+  // Time for esbuild's watch to notice the save and start the rebuild that waits on the FIFO.
+  await new Promise((wait) => setTimeout(wait, 3000))
+  run.kill('SIGTERM')
+  await until('run to stop', () => ended !== undefined)
+  assert.deepEqual({ ended, stopped: out.endsWith('Stopped.\n') }, { ended: 0, stopped: true })
+})
+
 test("a command that exits ends only its own esbuild's service, not another child whose arguments look like a service's", ESBUILD_UNTIED, () => {
   // A child with the --service argument of another esbuild version.
   const lines = [

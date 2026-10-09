@@ -11,7 +11,7 @@ import { mediaType } from './assets.ts'
 import { confinePlugin, confineRoots } from './confine.ts'
 import { BuildError, UsageError } from './errors.ts'
 import { STAND_INS } from './guard.ts'
-import { assetsIn, bundleWithin, gameFiles, spawnTied, timeLimit, type GameFiles } from './load.ts'
+import { assetsIn, bundleWithin, gameFiles, spawnTied, stopEsbuild, timeLimit, type GameFiles } from './load.ts'
 import { NAME, engineFile } from './package.ts'
 import { Recording, savePlaytest, type Taken } from './playtest.ts'
 import type { Config } from './browser/client.ts'
@@ -681,6 +681,8 @@ export async function* play({ dir, seed = randomInt(2 ** 31), window, record, ho
   await done
   app?.close()
   const closing = server.close()
+  // A rebuild waiting on a file that never ends, like a FIFO a save brought in, would hold dispose for good, so esbuild's service goes first.
+  stopEsbuild()
   await page.dispose()
   // Writing to a terminal that's gone fails and ends run, so the window and its profile go first.
   await app?.closed
