@@ -1291,8 +1291,10 @@ test("a played page decodes each of the game's sound files on its own, telling t
 })
 
 // A small real file of each type check takes by how it starts, made with ffmpeg, each named for its type with the extension of another, since the page reads a file's own type; CUR is the ICO with its type set to 2.
+// rf64.mp3 and bw64.ogg are one WAV under each of those headers, and padded.wav is frames.wav's MP3 after 64 zero bytes.
 const SAMPLES = join(ROOT, 'test', 'samples')
-const SAMPLE_FILES = ['png.jpg', 'jpg.png', 'gif.webp', 'webp.gif', 'avif.png', 'avis.jpeg', 'bmp.png', 'ico.gif', 'cur.webp', 'id3.ogg', 'frames.wav', 'vorbis.mp3', 'opus.wav', 'flac.ogg', 'm4a.mp3', 'webm.wav']
+// The M4A is AAC, which only a Chrome with that codec plays: Chrome and Chrome for Testing have it, and a Chromium built without it doesn't.
+const SAMPLE_FILES = ['png.jpg', 'jpg.png', 'gif.webp', 'webp.gif', 'avif.png', 'avis.jpeg', 'bmp.png', 'ico.gif', 'cur.webp', 'id3.ogg', 'frames.wav', 'padded.wav', 'vorbis.mp3', 'opus.wav', 'flac.ogg', 'm4a.mp3', 'webm.wav', 'rf64.mp3', 'bw64.ogg']
 
 test('every type of image and sound file check takes, by how it starts, is one a played page draws or plays, even under the name of another type', { skip: !chrome && 'needs Chrome' }, async (t) => {
   assert.deepEqual(readdirSync(SAMPLES).toSorted(), SAMPLE_FILES.toSorted())

@@ -77,17 +77,26 @@ function isSvg(head: Uint8Array): boolean {
   return new TextDecoder(encoding).decode(head).trimStart().startsWith('<')
 }
 
-// An MP3 starts with its ID3 tag, or with the 11 set bits that begin each of its frames, and a WebM with the header of Matroska, which it is.
+// A WAV starts as RIFF does, or as RF64 and BW64 do, which hold WAVs past 4 GB; an MP3 starts with its ID3 tag, or with the 11 set bits that begin each of its frames, and Chrome also plays an MP3 or AAC whose first frame comes after zero bytes; and a WebM starts with the header of Matroska, which it is.
 function isSound(head: Uint8Array): boolean {
+  const frame = head.findIndex((byte) => byte !== 0)
   return (
-    (has(head, 0, 'RIFF') && has(head, 8, 'WAVE')) ||
+    (['RIFF', 'RF64', 'BW64'].some((id) => has(head, 0, id)) && has(head, 8, 'WAVE')) ||
     has(head, 0, 'ID3') ||
     (head[0] === 0xff && (head[1] & 0xe0) === 0xe0) ||
+    (frame > 0 && frame + 2 < head.length && head[frame] === 0xff && playsFrame(head[frame + 1], head[frame + 2])) ||
     has(head, 0, 'OggS') ||
     has(head, 0, 'fLaC') ||
     brands(head).length > 0 ||
     has(head, 0, [0x1a, 0x45, 0xdf, 0xa3])
   )
+}
+
+// Whether the two bytes after a frame's FF open one Chrome plays: an MP3 frame, with the rest of its sync bits, Layer III, and a defined version, bitrate, and sample rate, or an AAC's ADTS frame, with a defined sample rate. After zeros, a looser rule would take junk and headerless samples, whose FF is no frame.
+function playsFrame(second: number, third: number): boolean {
+  const mp3 = (second & 0xe0) === 0xe0 && (second & 0x06) === 0x02 && (second & 0x18) !== 0x08 && third >> 4 !== 0 && third >> 4 !== 15 && (third & 0x0c) !== 0x0c
+  const adts = (second & 0xf6) === 0xf0 && ((third >> 2) & 0x0f) < 13
+  return mp3 || adts
 }
 
 // What an image may name: a file in the game's folder, or a sprite the game declares, whose name has no dot.

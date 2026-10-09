@@ -76,6 +76,9 @@ test("check reads the start of every image and sound file in the folder, which t
     'beep.wav': 'RIFF\x24\x00\x00\x00WAVEfmt ',
     'tune.mp3': MP3,
     'loop.ogg': 'OggS\x00\x02',
+    'long.wav': Buffer.concat([Buffer.from('RF64'), Buffer.alloc(4, 0xff), Buffer.from('WAVEds64')]),
+    'late.mp3': Buffer.concat([Buffer.alloc(16), MP3]),
+    'aac.mp3': Buffer.concat([Buffer.alloc(32), Buffer.from([0xff, 0xf1, 0x50, 0x80, 0x00, 0x1f, 0xfc])]),
   }
   assert.deepEqual(threejam('check', folder(good)), { code: 0, out: 'ok: true\nentities: 1\n' })
   const bad = {
@@ -86,11 +89,19 @@ test("check reads the start of every image and sound file in the folder, which t
     'beep.wav': '',
     'drum.ogg': 'FORM\x00\x00\x00\x1eAIFFCOMM',
     'tune.mp3': '<!doctype html>',
+    'hum.wav': Buffer.concat([Buffer.alloc(32), Buffer.from([0xff, 0xff, 0xfe, 0xff])]),
+    'blank.mp3': Buffer.concat([Buffer.alloc(32), Buffer.from([0xff, 0xe0]), Buffer.alloc(32)]),
+    'cut.ogg': Buffer.concat([Buffer.alloc(32), Buffer.from([0xff, 0xf1])]),
+    'half.mp3': Buffer.concat([Buffer.alloc(32), Buffer.from([0xff, 0x02, 0x90, 0x64])]),
   }
   const { code, out } = threejam('check', folder(bad), '--format', 'json')
   const message = [
     `sound "beep.wav" in the game's folder is empty, so the page can't play it`,
+    `sound "blank.mp3" in the game's folder doesn't start like a WAV, MP3, Ogg, FLAC, MP4, or WebM sound`,
+    `sound "cut.ogg" in the game's folder doesn't start like a WAV, MP3, Ogg, FLAC, MP4, or WebM sound`,
     `sound "drum.ogg" in the game's folder doesn't start like a WAV, MP3, Ogg, FLAC, MP4, or WebM sound`,
+    `sound "half.mp3" in the game's folder doesn't start like a WAV, MP3, Ogg, FLAC, MP4, or WebM sound`,
+    `sound "hum.wav" in the game's folder doesn't start like a WAV, MP3, Ogg, FLAC, MP4, or WebM sound`,
     `image "logo.svg" in the game's folder isn't an SVG image, which starts with "<", so the page can't draw it`,
     `image "photo.png" in the game's folder doesn't start like a PNG, JPEG, GIF, WebP, AVIF, BMP, ICO, or CUR image`,
     `image "tile.png" in the game's folder doesn't start like a PNG, JPEG, GIF, WebP, AVIF, BMP, ICO, or CUR image`,
