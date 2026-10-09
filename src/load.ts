@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { ChildProcess, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { subscribe } from 'node:diagnostics_channel'
 import { setMaxListeners } from 'node:events'
 import { accessSync, closeSync, constants, existsSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { SourceMap } from 'node:module'
@@ -665,8 +666,27 @@ const MAX_TSC_BYTES = 1024 * 1024
 // Ctrl-C, SIGTERM, and the SIGHUP of a closed terminal, which can come twice.
 export const STOPS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
 
+// esbuild's service, which its API starts without saying which child it is. Node announces a child before it has its arguments.
+let service: ChildProcess | undefined
+subscribe('child_process', (message) => {
+  if (typeof message !== 'object' || message === null || !('process' in message) || !(message.process instanceof ChildProcess)) return
+  const child = message.process
+  child.once('spawn', () => {
+    if (child.spawnargs.some((arg) => arg.startsWith('--service='))) service = child
+  })
+})
+
+// esbuild's service shares this process's stderr, and while it watches files or has a build under way it can outlive this process, holding that stderr and even writing to it, so it goes as this process exits or a signal ends it. It's killed before esbuild.stop closes its stdin, since partway through a build that alone can leave it deadlocked, and then it prints so.
+function stopEsbuild(): void {
+  service?.kill('SIGKILL')
+  void esbuild.stop()
+}
+
+process.on('exit', stopEsbuild)
+
 // Ends this process as the signal would have, once what else listens for it, like shots cleaning up after it, is done and calls this again. On macOS and Linux the signal this process sends itself does that. On Windows a process can't send itself SIGHUP, and SIGINT or SIGTERM end it at once with 1, so there what else listens hears the signal from here, and once nothing does, the process exits with the code a shell gives a process the signal ended.
 export function endBy(signal: NodeJS.Signals): void {
+  stopEsbuild()
   if (process.platform !== 'win32') process.kill(process.pid, signal)
   else if (process.listenerCount(signal) > 0) process.emit(signal, signal)
   else process.exit(128 + osConstants.signals[signal])

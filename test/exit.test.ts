@@ -296,3 +296,33 @@ test("a signal during a type check and a shot removes the type check's folder, w
   ]
   assert.deepEqual({ ...isolated(lines), left: readdirSync(tmp) }, { ended: TERMINATED, printed: 'shot cleaned up\n', left: [] })
 })
+
+// esbuild's service shares the command's stderr. Busy past one of its pings, a command leaves the service waiting on an answer that never comes.
+const ESBUILD_UNTIED = { skip: process.platform === 'win32' && "on Windows, the job object libuv puts children in ends esbuild's service with the command" }
+
+test("a command that exits partway through a bundle takes esbuild's service with it, so nothing holds or writes to its stderr afterwards, even with one of the service's pings unanswered", ESBUILD_UNTIED, () => {
+  const dir = folder({ 'game.ts': `import { size } from './size.ts'\n${game({ fields: 'w: size, h: size', update: '' })}`, 'size.ts': 'export const size = 0.1\n' })
+  // The resolve callback esbuild's service waits on for the game's import, busy for 1.5 s, then exiting.
+  const hook = "import fs from 'node:fs'\nconst real = fs.realpathSync.native\nfs.realpathSync.native = (path, ...rest) => {\n  if (String(path).endsWith('size.ts')) {\n    for (const end = Date.now() + 1500; Date.now() < end; );\n    process.exit(0)\n  }\n  return real(path, ...rest)\n}"
+  const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(hook)}`, CLI, 'sim', dir, '--ticks', '1'], { cwd: ROOT, encoding: 'utf8', timeout: 30_000, killSignal: 'SIGKILL' })
+  assert.deepEqual({ status: result.status, stdout: result.stdout, stderr: result.stderr }, { status: 0, stdout: '', stderr: '' })
+})
+
+test("a run that crashes takes esbuild's service, which watches the game, with it, so nothing holds run's stderr once it has exited, even with one of the service's pings unanswered", ESBUILD_UNTIED, async (t) => {
+  // On SIGUSR2, run is busy for 1.5 s, then throws, as a crash would.
+  const crash = "process.on('SIGUSR2', () => { for (const end = Date.now() + 1500; Date.now() < end; ); throw new Error('crashed') })"
+  const env = { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=data:text/javascript,${encodeURIComponent(crash)}` }
+  const run = spawnCli(['run', folder({ 'game.ts': game({ update: '' }) }), '--serve-only'], t.signal, ROOT, env)
+  let [out, errors, closed] = ['', '', false]
+  let ended: number | string | undefined
+  run.stdout.on('data', (chunk) => (out += chunk))
+  run.stderr.on('data', (chunk) => (errors += chunk))
+  run.once('exit', (code, signal) => (ended = signal ?? code ?? undefined))
+  run.once('close', () => (closed = true))
+  await until('run to serve the page', () => out.includes('\n') || ended !== undefined)
+  run.kill('SIGUSR2')
+  await until('run to crash', () => ended !== undefined)
+  await until(`run's stderr to close once run had exited; it printed ${JSON.stringify(errors)}`, () => closed)
+  assert.equal(ended, 1)
+  assert.match(errors, /Error: crashed/)
+})
