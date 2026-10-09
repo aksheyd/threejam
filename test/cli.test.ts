@@ -92,7 +92,7 @@ test("a shell's tab completion, which calls back as COMPLETE=bash threejam -- th
   assert.deepEqual({ code, candidates: out.split('\v') }, { code: 0, candidates: ['sim'] })
 })
 
-test("every command, built-in, subcommand, alias, shell, and global flag that incur's own help and manifest list gets past the check ThreeJam makes before incur reads the command line", () => {
+test("every command, built-in, subcommand, alias, shell, global flag in each of its forms and with each value it names, and flag of mcp add that incur's own help and manifest list gets past the check ThreeJam makes before incur reads the command line", () => {
   // The rows of a help section, like Commands:, each a name, or flags, and a description.
   const rows = (help: string, title: string) => {
     const start = help.split('\n').indexOf(`${title}:`)
@@ -114,13 +114,18 @@ test("every command, built-in, subcommand, alias, shell, and global flag that in
     const takes = usage === 'command' ? rows(help, 'Commands') : usage.split('|')
     for (const name of names) for (const next of [undefined, ...takes]) for (const words of [[name], [NAME, name]]) passes(...words, ...(next === undefined ? [] : [next]))
   }
-  // Each global flag goes before the command, where the check would take one it doesn't know for the command, with a value for its placeholder, then a flag, which is how incur tells --version from a command's own.
-  const values: Readonly<Record<string, string>> = { n: '5', keys: 'log' }
-  for (const row of rows(root, 'Global Options')) {
+  // Each form of a help row's flag, like --command, -c <string>, with each value its placeholder names, or one like it when the placeholder names a kind of value.
+  const samples: Readonly<Record<string, string>> = { n: '5', keys: 'log' }
+  const forms = (row: string) => {
     const placeholder = /<([^>]+)>$/.exec(row)?.[1]
-    const value = placeholder === undefined ? [] : [values[placeholder] ?? placeholder.split('|')[0]]
-    for (const flag of row.split(/, | <[^>]*>$/).filter((part) => part.startsWith('--'))) passes(flag, ...value, '--format', 'toon', 'sim', 'games/pong', '--ticks', '1')
+    const values = placeholder === undefined ? [] : placeholder.includes('|') ? placeholder.split('|') : [samples[placeholder] ?? 'value']
+    const flags = row.replace(/ <[^>]*>$/, '').split(', ')
+    return flags.flatMap((flag) => (values.length === 0 ? [[flag]] : values.map((value) => [flag, value])))
   }
+  // Each global flag goes before the command, where the check would take one it doesn't know for the command, then a flag, which is how incur tells --version from a command's own.
+  for (const row of rows(root, 'Global Options')) for (const form of forms(row)) passes(...form, '--format', 'toon', 'sim', 'games/pong', '--ticks', '1')
+  // mcp add reads its own flags, and the check lets through only those its help shows.
+  for (const row of rows(threejam('mcp', 'add', '--help').out, 'Options')) for (const form of forms(row)) passes('mcp', 'add', ...form)
 })
 
 test("--help names the value of every number flag <number>, as the manifest's types say, and no flag's value <value>", () => {
