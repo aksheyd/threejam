@@ -350,25 +350,26 @@ function child(settings: { key: string; bundle: string }): void {
 const CHILD = `(${child.toString()})(${JSON.stringify({ key: SANDBOX, bundle: BUNDLE })})`
 
 const SHELL = '/bin/sh'
-// The shell forks a watcher into the child's new process group, then becomes the child. Only this process holds the other end of the watcher's pipe, so it closes when this process ends, however it ends, and the watcher then kills its group, which lasts as long as the watcher does, so the kill can't reach another process.
+// The shell forks a watcher into the child's new process group, then becomes the child. Only this process holds the other end of the watcher's pipe, so it closes when this process ends, however it ends, and the watcher then removes the folder it was given, if any, and kills its group, which lasts as long as the watcher does, so the kill can't reach another process.
 // kill 0 is safe only because detached gives the shell a session and process group of its own; without it, the watcher would kill whoever started this process.
 // A shell also exports PWD, which the child isn't given; bash's exec adds SHLVL=0, which tells it nothing. fd 3 closes on a line of its own, since bash 3.2, macOS's sh, keeps a copy of it at fd 10 through exec "$@" 3<&-.
-const TIED = '(read -r _ <&3; kill -KILL 0) </dev/null >/dev/null 2>&1 &\nunset PWD\nexec 3<&-\nexec "$@"'
+const TIED = 'remove=$1\nshift\n(read -r _ <&3; [ -z "$remove" ] || rm -rf -- "$remove"; kill -KILL 0) </dev/null >/dev/null 2>&1 &\nunset PWD\nexec 3<&-\nexec "$@"'
 
 // bash, macOS's sh, takes exported functions, options, and a timeout for read from its environment, so a function named kill or read, SHELLOPTS=noexec, or TMOUT could change what the watcher does, or keep the child from running at all; the child needs none of them.
 const BASH_IMPORTS = /^(BASH_FUNC_.*|SHELLOPTS|BASHOPTS|TMOUT)$/
 
-type Tie = { readonly env?: NodeJS.ProcessEnv; readonly cwd?: string }
+// remove is a folder the watcher removes as it ends the child, so that one this process would remove after the child goes even when this process is killed.
+type Tie = { readonly env?: NodeJS.ProcessEnv; readonly cwd?: string; readonly remove?: string }
 
 // A child that ends when this process does, even by SIGKILL, which on macOS and Linux would otherwise leave it running, along with every process it starts that stays in its process group. Windows does this already: libuv puts every child in a job object that ends with this process. A system with no /bin/sh still starts the child, untied, and so does a command that names no file the child can run, so that it fails as a spawn does rather than as the shell's exec.
 export function spawnTied(command: string, args: readonly string[], options: Tie): ChildProcessWithoutNullStreams
 // A tied child whose standard streams go nowhere.
 export function spawnTied(command: string, args: readonly string[], options: Tie & { readonly stdio: 'ignore' }): ChildProcess
-export function spawnTied(command: string, args: readonly string[], { stdio = 'pipe', ...options }: Tie & { readonly stdio?: 'pipe' | 'ignore' }): ChildProcess {
+export function spawnTied(command: string, args: readonly string[], { stdio = 'pipe', remove = '', ...options }: Tie & { readonly stdio?: 'pipe' | 'ignore' }): ChildProcess {
   const file = process.platform === 'win32' || !existsSync(SHELL) ? undefined : located(command, options.env ?? process.env, options.cwd)
   if (file === undefined) return spawn(command, args, { ...options, stdio, windowsHide: true })
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter(([name]) => !BASH_IMPORTS.test(name)))
-  const tied = spawn(SHELL, ['-c', TIED, 'sh', file, ...args], { ...options, env, stdio: [stdio, stdio, stdio, 'pipe'], detached: true })
+  const tied = spawn(SHELL, ['-c', TIED, 'sh', remove, file, ...args], { ...options, env, stdio: [stdio, stdio, stdio, 'pipe'], detached: true })
   // Once the child has exited, closing the watcher's pipe ends the watcher, and anything still left in the group with it.
   const release = () => void tied.stdio[3]?.destroy()
   tied.once('exit', release).once('error', release)
@@ -692,7 +693,7 @@ export function endBy(signal: NodeJS.Signals): void {
   else process.exit(128 + osConstants.signals[signal])
 }
 
-// The folders of the type checks still running, which this process removes if it ends first: as it exits, as an MCP server does when its client closes stdin, or on Ctrl-C, SIGTERM, or the SIGHUP of a closed terminal, which then end it as they would have. SIGKILL leaves them.
+// The folders of the type checks still running, which this process removes if it ends first: as it exits, as an MCP server does when its client closes stdin, or on Ctrl-C, SIGTERM, or the SIGHUP of a closed terminal, which then end it as they would have. After a SIGKILL, each type check's watcher removes its folder, on macOS and Linux.
 const checking = new Set<string>()
 
 function removeChecking(): void {
@@ -726,14 +727,14 @@ function stopChecking(config: string): void {
 
 // paths is only a tsconfig.json setting, so each check writes one for its file, where only this user can read it; a type that never terminates is stopped at the time limit.
 async function runTsc({ compilerOptions, file, timeout }: { compilerOptions: object; file: string; timeout: number }): Promise<Tsc> {
-  // tsc runs in ROOT, where a relative TMPDIR would lead it to another folder.
+  // tsc and its watcher, which removes the folder, run in ROOT, where a relative TMPDIR would lead them to another folder.
   const config = mkdtempSync(join(resolve(tmpdir()), 'threejam-check-'))
   startChecking(config)
   try {
     const project = join(config, 'tsconfig.json')
     writeFileSync(project, JSON.stringify({ compilerOptions, files: [file] }), { mode: 0o600, flag: 'wx' })
     return await new Promise((done, fail) => {
-      const tsc = spawnTied(process.execPath, [typescriptEntry(), '-p', project, '--pretty', 'false', '--listFiles'], { cwd: ROOT })
+      const tsc = spawnTied(process.execPath, [typescriptEntry(), '-p', project, '--pretty', 'false', '--listFiles'], { cwd: ROOT, remove: config })
       const out: Buffer[] = []
       const errors: Buffer[] = []
       let bytes = 0

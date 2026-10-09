@@ -76,10 +76,10 @@ function stalledCheck(): string {
   return dir
 }
 
-test("an MCP server killed with SIGKILL takes the sandbox running a game, and check's type check, with it, instead of leaving them to run on", { skip: process.platform === 'win32' && "Windows ends a process's children with it, since libuv puts each in a job object" }, async (t) => {
+test("an MCP server killed with SIGKILL takes the sandbox running a game, and check's type check, with it, instead of leaving them to run on, and the folder the type check reads goes too", { skip: process.platform === 'win32' && "Windows ends a process's children with it, since libuv puts each in a job object" }, async (t) => {
   const loop = folder({ 'game.ts': game({ update: 'for (;;) {}' }) })
   const stalled = stalledCheck()
-  // A killed server can't remove the folder its type check reads, so its temporary files go in a folder of the test's.
+  // The server's temporary files go in a folder of the test's, where the type check's watcher must remove the one it reads.
   const tmp = mkdtempSync(join(TMP, 'tmp-'))
   made.push(tmp)
   const server = mcp(t.signal, ROOT, { ...process.env, TMPDIR: tmp })
@@ -90,8 +90,10 @@ test("an MCP server killed with SIGKILL takes the sandbox running a game, and ch
   void server.request('tools/call', { name: 'check', arguments: { dir: stalled, timeout: 60 } })
   const children = [sandbox, await started(server.pid, /--listFiles/)]
   try {
+    assert.equal(readdirSync(tmp).filter((name) => name.startsWith('threejam-check-')).length, 1)
     server.kill('SIGKILL')
     await until('the sandbox and the type check to end with their server', () => children.every(ended))
+    await until(`the folder the type check reads to go with its server; the temporary folder holds ${readdirSync(tmp).join(', ')}`, () => readdirSync(tmp).length === 0)
   } finally {
     for (const pid of children) if (!ended(pid)) process.kill(pid, 'SIGKILL')
   }
