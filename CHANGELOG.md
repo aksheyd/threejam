@@ -2,7 +2,9 @@
 
 Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest first. Until 1.0, a release can break a game or a script that worked with the one before, and each one that does says how under Breaking changes.
 
-## Unreleased
+## [0.0.7](https://github.com/aksheyd/threejam/compare/v0.0.6...v0.0.7) - 2026-10-08
+
+`check` reads the start of every image and sound file in a game's folder and fails on one the page couldn't use, `run --port` and `--host` serve the page where you choose, and command lines that incur refused with its own codes, and MCP calls the MCP SDK refused with none, fail as `USAGE`, in ThreeJam's words. A sound's `pitch` must now be from 1/16 to 16. `run`, `shot`, `check`, `sim`, and the MCP server stop cleanly in more cases, and a file that never ends, like a FIFO, can't hold a command for good. From [#33](https://github.com/aksheyd/threejam/pull/33) through [#57](https://github.com/aksheyd/threejam/pull/57).
 
 ### Breaking changes
 

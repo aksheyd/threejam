@@ -77,7 +77,7 @@ Then ask your agent for a game. Starting from an empty folder instead? `npx thre
 The short `npx skills add aksheyd/threejam` takes the skill from `main`, where it matches the latest release. To pin it to a release, add it from that release's tag instead. A skill installed from a tag stays on that version, so after you upgrade ThreeJam, run `npx skills add` again with the new tag:
 
 ```bash
-npx skills add https://github.com/aksheyd/threejam/tree/v0.0.6/skills/threejam
+npx skills add https://github.com/aksheyd/threejam/tree/v0.0.7/skills/threejam
 ```
 
 ## Docs
