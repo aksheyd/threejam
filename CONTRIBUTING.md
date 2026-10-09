@@ -4,7 +4,7 @@ ThreeJam is a prototype, and issues and pull requests are welcome. [`AGENTS.md`]
 
 ## Setting up
 
-You need Node 22.18 or later, and Chrome or Chromium for the page tests, found the way `shot` finds it. [`.nvmrc`](.nvmrc) names Node 26, the version CI runs on every OS:
+You need Node 22.18 or later, and Chrome or Chromium for the page tests, found the way `shot` finds it. On Linux, point `CHROME_PATH` at Chrome for Testing, as CI does: `npx @puppeteer/browsers install chrome@stable` downloads it and prints the path. Run it outside the clone, or pass `--path` with a folder outside it, since otherwise it downloads to a `chrome` folder where it runs, which would sit untracked in the clone. Google Chrome 154 and later, and recent Chromium builds, leave a `url_fetcher` folder in `TMPDIR` each time `shot` runs, which fails the tests that check that `shot` leaves nothing there. [`.nvmrc`](.nvmrc) names Node 26, the version CI runs on every OS:
 
 ```bash
 git clone https://github.com/aksheyd/threejam
