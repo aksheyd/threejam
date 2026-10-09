@@ -520,7 +520,8 @@ export function howEnded(code: number | null, signal: NodeJS.Signals | null): st
 }
 
 export interface AppWindow {
-  readonly exited: Promise<void>
+  // Settles with how Chrome ended, once it has exited.
+  readonly exited: Promise<string>
   // Settles once Chrome and every process it started that can write to its profile are gone, and its profile with them.
   readonly closed: Promise<void>
   close(): void
@@ -550,7 +551,7 @@ export function openWindow(url: string, { grace = 2000 }: { grace?: number } = {
     removeSocketFolders(env.TMPDIR, before)
     process.stderr.write(`Chrome at ${chrome} exited as soon as it started (${howEnded(code, signal)}), ${hint}.\n`)
   })
-  const exited = new Promise<void>((done) => child.once('exit', () => done()))
+  const exited = new Promise<string>((done) => child.once('exit', (code, signal) => done(howEnded(code, signal))))
   child.once('error', (error) => {
     process.stderr.write(`Couldn't start ${chrome} (${error.message}), so the default browser opens the game.\n`)
     openBrowser(url)

@@ -705,6 +705,9 @@ function pidIn(file: string): number | undefined {
   return Number.isInteger(pid) && pid > 0 ? pid : undefined
 }
 
+// Which of its files a launcher wrote, which says how far it got before Chrome.
+const launcherWrote = (dir: string) => ['pid', 'env', 'args', 'holder'].filter((name) => existsSync(join(dir, name))).join(', ') || 'none of its files'
+
 const wrapped = { skip: (!chrome && 'needs Chrome') || (process.platform === 'win32' && 'wrapper scripts are for macOS and Linux'), timeout: 60_000 }
 
 // An X display with nothing behind it, as SSH or a container can leave one. Chrome given a Wayland display too draws even when neither works, so the tests give it none.
@@ -768,12 +771,12 @@ test("run's window opens no DevTools port even when a wrapper script asks for on
   Object.assign(process.env, GONE_DISPLAY)
   delete process.env.WAYLAND_DISPLAY
   const app = openWindow(page.url)
-  let exited = false
-  void app?.exited.then(() => (exited = true))
+  let exited: string | undefined
+  void app?.exited.then((how) => (exited = how))
   try {
     assert.ok(app)
-    await until('Chrome to load the page', () => page.loaded() || exited)
-    assert.equal(exited, false, 'Chrome exited before it loaded the page')
+    await until('Chrome to load the page', () => page.loaded() || exited !== undefined)
+    assert.equal(exited, undefined, `Chrome exited before it loaded the page (${exited}); the launcher wrote ${launcherWrote(dir)}`)
     const { env, args, profile } = given(dir)
     await assert.rejects(fetch(`http://127.0.0.1:${port}/json/version`))
     assert.deepEqual(
@@ -811,14 +814,14 @@ async function windowed(dir: string, chrome: string, test: (window: { app: AppWi
   const { CHROME_PATH } = process.env
   process.env.CHROME_PATH = chrome
   const app = openWindow(page.url, options)
-  let exited = false
+  let exited: string | undefined
   let closed = false
-  void app?.exited.then(() => (exited = true))
+  void app?.exited.then((how) => (exited = how))
   void app?.closed.then(() => (closed = true))
   try {
     assert.ok(app)
-    await until('Chrome to load the page', () => page.loaded() || exited)
-    assert.equal(exited, false, 'Chrome exited before it loaded the page')
+    await until('Chrome to load the page', () => page.loaded() || exited !== undefined)
+    assert.equal(exited, undefined, `Chrome exited before it loaded the page (${exited}); the launcher wrote ${launcherWrote(dir)}`)
     const { profile } = given(dir)
     assert.ok(profile)
     const socket = dirname(readlinkSync(join(profile, 'SingletonSocket')))
