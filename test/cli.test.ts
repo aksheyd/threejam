@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative, sep } from 'node:path'
+import { delimiter, join, relative, sep } from 'node:path'
 import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import pong from '../games/pong/game.ts'
 import { simulate } from '../src/engine.ts'
 import { crashed, describe } from '../src/load.ts'
-import { ENGINE, ROOT, VERSION, mcpCommand } from '../src/package.ts'
+import { ENGINE, ROOT, VERSION, mcpCommand, runningNode } from '../src/package.ts'
 import { playtestSource } from '../src/playtest.ts'
 import { findChrome } from '../src/serve.ts'
 import { callLimit, framePaths } from '../src/shot.ts'
@@ -496,15 +496,60 @@ test("check still type-checks a game when its environment holds what bash, macOS
   assert.match(typo.out, /^code: TYPE_ERROR\nmessage: "?test\/\.tmp\/game-\w+\/game\.ts:6: Property 'vxx' does not exist/)
 })
 
-test('mcp add registers node with this CLI from a clone or an install, and npx for a copy in npx\'s cache or an install on a path with a space', () => {
-  const command = (cli: string) => mcpCommand({ cli, version: '1.2.3' })
-  assert.equal(command('/work/threejam/src/cli.ts'), 'node /work/threejam/src/cli.ts --mcp')
-  assert.equal(command('/work/my games/threejam/src/cli.ts'), 'node "/work/my games/threejam/src/cli.ts" --mcp')
-  assert.equal(command('/usr/local/lib/node_modules/threejam/lib/cli.js'), 'node /usr/local/lib/node_modules/threejam/lib/cli.js --mcp')
+test("mcp add registers the Node running it with this CLI from a clone or an install, or node when that Node's path has a space, and npx for a copy in npx's cache or an install on a path with a space", () => {
+  const command = (cli: string, node = '/opt/homebrew/bin/node') => mcpCommand({ cli, version: '1.2.3', node })
+  assert.equal(command('/work/threejam/src/cli.ts'), '/opt/homebrew/bin/node /work/threejam/src/cli.ts --mcp')
+  assert.equal(command('/work/my games/threejam/src/cli.ts'), '/opt/homebrew/bin/node "/work/my games/threejam/src/cli.ts" --mcp')
+  assert.equal(command('/usr/local/lib/node_modules/threejam/lib/cli.js'), '/opt/homebrew/bin/node /usr/local/lib/node_modules/threejam/lib/cli.js --mcp')
+  assert.equal(command('C:\\games\\node_modules\\threejam\\lib\\cli.js', 'C:\\Program Files\\nodejs\\node.exe'), 'node C:\\games\\node_modules\\threejam\\lib\\cli.js --mcp')
   assert.equal(command('C:\\Users\\Ada Byron\\game\\node_modules\\threejam\\lib\\cli.js'), 'npx -y threejam@1.2.3 --mcp')
   assert.equal(command('/home/ada/.npm/_npx/2c3b1a/node_modules/threejam/lib/cli.js'), 'npx -y threejam@1.2.3 --mcp')
   assert.equal(command('C:\\Users\\Ada Byron\\AppData\\Local\\npm-cache\\_npx\\2c3b1a\\node_modules\\threejam\\lib\\cli.js'), 'npx -y threejam@1.2.3 --mcp')
-  assert.equal(mcpCommand(), mcpCommand({ cli: CLI, version: VERSION }))
+  assert.equal(mcpCommand(), mcpCommand({ cli: CLI, version: VERSION, node: runningNode() }))
+})
+
+// runningNode passes over links in the temporary folder, so a checkout there can't hold a link it would take.
+const linksTaken = (process.platform === 'win32' && 'making a link takes an administrator on Windows') || (!relative(realpathSync(tmpdir()), realpathSync(TMP)).startsWith('..') && 'the checkout is in the temporary folder')
+
+test("the Node mcp add registers is a name on the PATH that leads to the running Node, which an upgrade keeps, or else the running Node's own path, and never a name a relative PATH entry gives", { skip: linksTaken }, () => {
+  const [linked, other] = [mkdtempSync(join(TMP, 'bin-')), mkdtempSync(join(TMP, 'bin-'))]
+  made.push(linked, other)
+  symlinkSync(process.execPath, join(linked, 'node'))
+  writeFileSync(join(other, 'node'), '#!/bin/sh\n', { mode: 0o755 })
+  assert.deepEqual(
+    { found: runningNode([join(TMP, 'missing'), other, linked].join(delimiter)), none: runningNode(other), empty: runningNode(''), relative: runningNode(relative(process.cwd(), linked)) },
+    { found: join(linked, 'node'), none: process.execPath, empty: process.execPath, relative: process.execPath },
+  )
+})
+
+test("mcp add never registers a link to the running Node that lasts one shell or session, like fnm's in fnm_multishells, or one in the temporary folder or XDG_RUNTIME_DIR, which logout clears, but the running Node's own path", { skip: linksTaken }, () => {
+  const base = mkdtempSync(join(TMP, 'fnm-'))
+  const runtime = mkdtempSync(join(TMP, 'runtime-'))
+  const temporary = mkdtempSync(join(tmpdir(), 'threejam-bin-'))
+  made.push(base, runtime, temporary)
+  // fnm links a folder for each shell to the version's folder, and puts that link's bin first on the PATH.
+  mkdirSync(join(base, 'installation', 'bin'), { recursive: true })
+  symlinkSync(process.execPath, join(base, 'installation', 'bin', 'node'))
+  mkdirSync(join(base, 'fnm_multishells'))
+  symlinkSync(join(base, 'installation'), join(base, 'fnm_multishells', '12345_1696000000000'))
+  for (const folder of [runtime, temporary]) symlinkSync(process.execPath, join(folder, 'node'))
+  const shell = join(base, 'fnm_multishells', '12345_1696000000000', 'bin')
+  const runtimeDir = process.env.XDG_RUNTIME_DIR
+  process.env.XDG_RUNTIME_DIR = runtime
+  try {
+    assert.deepEqual(
+      { fnm: runningNode(shell), runtime: runningNode(runtime), temporary: runningNode(temporary), lasting: runningNode([shell, join(base, 'installation', 'bin')].join(delimiter)) },
+      { fnm: process.execPath, runtime: process.execPath, temporary: process.execPath, lasting: join(base, 'installation', 'bin', 'node') },
+    )
+  } finally {
+    if (runtimeDir === undefined) delete process.env.XDG_RUNTIME_DIR
+    else process.env.XDG_RUNTIME_DIR = runtimeDir
+  }
+})
+
+test("mcp add registers plain node for a snap's Node, whose folder is one revision's, which snapd removes a few refreshes later, while node on the PATH starts the snap's launcher", () => {
+  assert.equal(runningNode('/snap/bin', '/snap/node/123/bin/node'), 'node')
+  assert.equal(mcpCommand({ cli: '/work/threejam/src/cli.ts', version: '1.2.3', node: runningNode('/snap/bin', '/snap/node/123/bin/node') }), 'node /work/threejam/src/cli.ts --mcp')
 })
 
 test("mcp add takes only the forms its help shows, refusing any other word, or a flag without its value, that incur would skip and so register with every agent", () => {

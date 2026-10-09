@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { dirname, extname, join, resolve } from 'node:path'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { delimiter, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const NAME = 'threejam'
@@ -25,12 +26,48 @@ function version(path: string): string {
   throw new Error(`${path} has no version`)
 }
 
-// How agents start the MCP server: node with this CLI from a clone or an install, and npx for a copy in npx's cache, which npm cleans out.
-export function mcpCommand({ cli = engineFile('cli'), version = VERSION }: { cli?: string; version?: string } = {}): string {
+// The Node running this process, which is the file a link to it leads to, so a name on the PATH that leads there comes first, since an upgrade keeps a name like Homebrew's /opt/homebrew/bin/node and removes the versioned file behind it. A snap's Node is in a folder of one revision, which snapd removes a few refreshes later, while its node on the PATH, /snap/bin/node, starts the snap's launcher, so it's plain node.
+export function runningNode(path = process.env.PATH ?? '', running = realpathSync(process.execPath)): string {
+  if (running.startsWith('/snap/')) return 'node'
+  const name = process.platform === 'win32' ? 'node.exe' : 'node'
+  for (const folder of path.split(delimiter)) {
+    if (!isAbsolute(folder)) continue
+    const found = join(folder, name)
+    try {
+      if (realpathSync(found) === running && !fleeting(folder)) return found
+    } catch {
+      // A folder on the PATH without node, or one that can't be read.
+    }
+  }
+  return process.execPath
+}
+
+// A PATH folder that lasts one shell or session: fnm's link for one shell, in a folder named fnm_multishells, or anything in the temporary folder or XDG_RUNTIME_DIR, which logout clears. fnm's link leads out of them, so the folder counts as the PATH names it too.
+function fleeting(folder: string): boolean {
+  if (folder.split(/[\\/]/).includes('fnm_multishells')) return true
+  const roots = [tmpdir(), process.env.XDG_RUNTIME_DIR].flatMap((root) => (root !== undefined && isAbsolute(root) ? [root, resolved(root)] : []))
+  return [folder, resolved(folder)].some((path) => roots.some((root) => inside(root, path)))
+}
+
+function resolved(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    return path
+  }
+}
+
+function inside(root: string, path: string): boolean {
+  const rest = relative(root, path)
+  return rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest)
+}
+
+// How agents start the MCP server: this Node with this CLI from a clone or an install, since an agent's PATH may find another Node or none, and npx for a copy in npx's cache, which npm cleans out.
+export function mcpCommand({ cli = engineFile('cli'), version = VERSION, node = runningNode() }: { cli?: string; version?: string; node?: string } = {}): string {
   const folders = cli.split(/[\\/]/)
-  // add-mcp splits a command at every space, so an install on a path with one starts the same version through npx.
+  // add-mcp splits a command at every space, so an install on a path with one starts the same version through npx, and a Node on a path with one is found on the PATH.
   if (folders.includes('_npx') || (cli.includes(' ') && folders.includes('node_modules'))) return `npx -y ${NAME}@${version} --mcp`
-  return `node ${cli.includes(' ') ? `"${cli}"` : cli} --mcp`
+  return `${node.includes(' ') ? 'node' : node} ${cli.includes(' ') ? `"${cli}"` : cli} --mcp`
 }
 
 export interface Manifest {

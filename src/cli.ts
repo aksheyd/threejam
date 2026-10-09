@@ -257,7 +257,10 @@ const cli = Cli.create('threejam', {
   description: 'ThreeJam: make games from TypeScript files, test them without a window, and play them in a browser',
   version: VERSION,
   mcp: {
-    command: mcpCommand(),
+    // incur reads this only for mcp add, so only mcp add looks through the PATH, whose folders may be slow to reach, like one on a network drive.
+    get command() {
+      return mcpCommand()
+    },
     tools: { discovery: 'direct' },
     instructions:
       'A ThreeJam game is a folder with a game.ts that exports defineGame({ entities, start, update }), plus any images and sounds it uses; new starts one. ' +
