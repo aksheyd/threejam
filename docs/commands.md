@@ -62,7 +62,7 @@ Every command that loads a game bundles it first, for the sandbox described belo
 
 `run` picks a free port unless `--port N` names one, and fails with `USAGE` when that port is taken. Only this machine reaches `127.0.0.1`, so to play from another machine, or from the host of a Docker container `run` is in, give `--host` an address of the machine, like `0.0.0.0` for all of its IPv4 addresses. `run` warns when it does, since anyone who can reach the page can play the game, read its files, and end the session. A request may then name any IP address, or `localhost`, at `run`'s port, but no other name, so publish a container's port as the same one, as `docker run -p 8000:8000` does with `--port 8000`.
 
-`shot` and `run` start Chrome with no DevTools port and only the environment variables a browser needs. ThreeJam's switches come last and override a wrapper script's, like the `google-chrome` launchers on Linux, but a wrapper can still add switches that have no opposite, like `--no-sandbox`.
+`shot` and `run` start Chrome with no DevTools port and only the environment variables a browser needs, which for `shot`'s headless Chrome leaves out the display, so `shot` works even where `DISPLAY` names one that's gone or refuses it, as over SSH. ThreeJam's switches come last and override a wrapper script's, like the `google-chrome` launchers on Linux, but a wrapper can still add switches that have no opposite, like `--no-sandbox`.
 
 On Linux, Chrome can't start in a `TMPDIR` over 62 bytes, or 66 for Google Chrome, since the socket it makes there would pass the 107 bytes Linux allows; `shot` and `run` then say to set `TMPDIR` to a shorter folder, like `/tmp`.
 

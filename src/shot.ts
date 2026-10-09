@@ -69,7 +69,8 @@ export async function launchChrome(chrome: string, { protocolTimeout, profile, t
     const features = arg.slice('--disable-features='.length).split(',')
     return `--disable-features=${features.filter((feature) => feature !== 'IsolateSandboxedIframes').join(',')}`
   })
-  const env = temp === undefined ? chromeEnv() : { ...chromeEnv(), TMPDIR: temp, TMP: temp, TEMP: temp }
+  const headless = chromeEnv({ display: false })
+  const env = temp === undefined ? headless : { ...headless, TMPDIR: temp, TMP: temp, TEMP: temp }
   if (temp !== undefined) makeFolder(temp)
   const before = socketFolders(env.TMPDIR)
   // Puppeteer hands back Chrome's process only once Chrome has answered it, so a launch cut short finds the process here, to wait for it.

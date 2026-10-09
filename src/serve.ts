@@ -427,12 +427,14 @@ const CHROME_ENV = [
   'XDG_RUNTIME_DIR', 'XDG_SESSION_TYPE', 'XDG_CURRENT_DESKTOP', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_CONFIG_DIRS', 'XDG_DATA_DIRS',
   'SystemRoot', 'SystemDrive', 'windir', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'ProgramData', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432',
 ]
+// Of those, what it needs only for a window: headless Chrome given a display still tries it, and can't make a WebGL context when the display is gone or refuses it.
+const DISPLAY_ENV = ['DISPLAY', 'XAUTHORITY', 'WAYLAND_DISPLAY']
 
-export function chromeEnv(): Record<string, string> {
+export function chromeEnv({ display }: { display: boolean }): Record<string, string> {
   const env: Record<string, string> = {}
   for (const name of CHROME_ENV) {
     const value = process.env[name]
-    if (value !== undefined) env[name] = value
+    if (value !== undefined && (display || !DISPLAY_ENV.includes(name))) env[name] = value
   }
   return env
 }
@@ -531,7 +533,7 @@ export function openWindow(url: string, { grace = 2000 }: { grace?: number } = {
   }
   const profile = mkdtempSync(join(tmpdir(), 'threejam-profile-'))
   const args = [`--app=${url}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=800,628', NO_DEVTOOLS_PORT]
-  const env = chromeEnv()
+  const env = chromeEnv({ display: true })
   const before = socketFolders(env.TMPDIR)
   // On macOS and Linux, Chrome leads a process group of its own, tied to this process so that the group ends however run does, even by SIGKILL. The group holds every process Chrome starts that can write to its profile, and Chrome's output goes nowhere: its crash handlers share that output from outside the group, keeping their reports elsewhere, and on macOS something has held it open for seconds after Chrome exited. On Windows, where libuv's job object already ends Chrome with run, close comes once nothing holds Chrome's stderr.
   const child = GROUPS ? spawnTied(chrome, args, { env, stdio: 'ignore' }) : spawn(chrome, args, { stdio: ['ignore', 'ignore', 'pipe'], env })

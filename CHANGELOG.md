@@ -15,6 +15,7 @@ Every release of [`threejam`](https://www.npmjs.com/package/threejam), newest fi
 - On Node 22 and 24, `run` exits when it stops, even when the page's request to follow saves reaches it afterwards, on a connection the browser had opened ahead of it. Before, `run` printed `Stopped.` and went on running.
 - `run --record` exits when Ctrl-C, SIGTERM, or a closed terminal stops it while its page is sending part of the playtest. Before, if the page's next request came on that part's connection, `run` printed `Stopped.` and went on running.
 - When something other than Esc stops `run --record` while its page is sending part of the playtest, `run` waits up to a second for that part, so the playtest has it. Before, `run` could save the playtest without it, and a part whose body stopped halfway kept `run` running.
+- `shot` works when `DISPLAY` names a display that's gone or that refuses it, as over SSH or in a container. Before, its headless Chrome tried that display, and `shot` failed with `GAME_ERROR`, saying it couldn't create a WebGL context.
 
 ## [0.0.6](https://github.com/aksheyd/threejam/compare/v0.0.5...v0.0.6) - 2026-10-08
 

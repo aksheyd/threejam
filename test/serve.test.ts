@@ -689,18 +689,25 @@ function given(dir: string): { env: string[]; args: string[]; profile: string | 
 
 const wrapped = { skip: (!chrome && 'needs Chrome') || (process.platform === 'win32' && 'wrapper scripts are for macOS and Linux'), timeout: 60_000 }
 
-test("shot's Chrome talks over a pipe, opens no DevTools port even when a wrapper script asks for one, sees none of our environment but what it needs, and leaves Ctrl-C, SIGTERM, and SIGHUP to shot", wrapped, async () => {
+// An X display with nothing behind it, as SSH or a container can leave one. Chrome given a Wayland display too draws even when neither works, so the tests give it none.
+const GONE_DISPLAY = { DISPLAY: ':98', XAUTHORITY: join(TMP, 'no-xauthority') }
+const displayIn = (env: readonly string[]) => env.filter((line) => /^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY)=/.test(line)).sort()
+
+test("shot's Chrome talks over a pipe, opens no DevTools port even when a wrapper script asks for one, sees none of our environment but what it needs, which leaves out the display, so one it can't use doesn't stop it drawing, and leaves Ctrl-C, SIGTERM, and SIGHUP to shot", wrapped, async () => {
   const dir = mkdtempSync(join(TMP, 'wrapper-'))
   made.push(dir)
   const port = await freePort()
   process.env.THREEJAM_CANARY = 'secret'
+  const { DISPLAY, XAUTHORITY, WAYLAND_DISPLAY } = process.env
+  Object.assign(process.env, GONE_DISPLAY)
+  delete process.env.WAYLAND_DISPLAY
   // Puppeteer's own listeners would end the process on Ctrl-C before shot has cleaned up.
   const listening = () => (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map((signal) => process.listenerCount(signal))
   const before = listening()
   try {
     const { browser, close } = await testChrome(wrapper(dir, [`--remote-debugging-port=${port}`, `--user-data-dir=${join(dir, 'profile')}`]))
     try {
-      await browser.newPage()
+      const tab = await browser.newPage()
       const { env, args, profile } = given(dir)
       await assert.rejects(fetch(`http://127.0.0.1:${port}/json/version`))
       assert.deepEqual(
@@ -713,27 +720,35 @@ test("shot's Chrome talks over a pipe, opens no DevTools port even when a wrappe
           unsafeSwiftShader: args.includes('--enable-unsafe-swiftshader'),
           isolationOff: args.some((arg) => arg.startsWith('--disable-features=') && arg.split(/[=,]/).includes('IsolateSandboxedIframes')),
           canary: env.some((line) => line.startsWith('THREEJAM_CANARY=')),
+          display: displayIn(env),
+          webgl: await tab.evaluate(() => document.createElement('canvas').getContext('webgl2') !== null),
           listening: listening(),
         },
-        { endpoint: '', pipe: true, port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, unsafeSwiftShader: false, isolationOff: false, canary: false, listening: before },
+        { endpoint: '', pipe: true, port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, unsafeSwiftShader: false, isolationOff: false, canary: false, display: [], webgl: true, listening: before },
       )
     } finally {
       await close()
     }
   } finally {
     delete process.env.THREEJAM_CANARY
+    for (const [name, value] of Object.entries({ DISPLAY, XAUTHORITY, WAYLAND_DISPLAY })) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
   }
 })
 
-test("run's window opens no DevTools port even when a wrapper script asks for one, sees none of our environment but what it needs, and leaves nothing behind when it's stopped", wrapped, async (t) => {
+test("run's window opens no DevTools port even when a wrapper script asks for one, sees none of our environment but what it needs, the display among it, and leaves nothing behind when it's stopped", wrapped, async (t) => {
   const dir = mkdtempSync(join(TMP, 'wrapper-'))
   made.push(dir)
   const port = await freePort()
   const page = await loadingPage()
-  const { CHROME_PATH } = process.env
-  // Headless, so the window needs no display.
+  const { CHROME_PATH, DISPLAY, XAUTHORITY, WAYLAND_DISPLAY } = process.env
+  // Headless, so the window needs no display, and the page it loads draws nothing.
   process.env.CHROME_PATH = wrapper(dir, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${join(dir, 'profile')}`])
   process.env.THREEJAM_CANARY = 'secret'
+  Object.assign(process.env, GONE_DISPLAY)
+  delete process.env.WAYLAND_DISPLAY
   const app = openWindow(page.url)
   let exited = false
   void app?.exited.then(() => (exited = true))
@@ -749,8 +764,9 @@ test("run's window opens no DevTools port even when a wrapper script asks for on
         activePort: profile !== undefined && existsSync(join(profile, 'DevToolsActivePort')),
         wrapperProfile: existsSync(join(dir, 'profile')),
         canary: env.some((line) => line.startsWith('THREEJAM_CANARY=')),
+        display: displayIn(env),
       },
-      { port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, canary: false },
+      { port: NO_DEVTOOLS_PORT, activePort: false, wrapperProfile: false, canary: false, display: [`DISPLAY=${GONE_DISPLAY.DISPLAY}`, `XAUTHORITY=${GONE_DISPLAY.XAUTHORITY}`] },
     )
     assert.ok(profile)
     // Esc stops the window with a signal, which leaves Chrome's socket and its folder for run to remove.
@@ -763,8 +779,10 @@ test("run's window opens no DevTools port even when a wrapper script asks for on
     app?.close()
     await app?.exited
     page.close()
-    if (CHROME_PATH === undefined) delete process.env.CHROME_PATH
-    else process.env.CHROME_PATH = CHROME_PATH
+    for (const [name, value] of Object.entries({ CHROME_PATH, DISPLAY, XAUTHORITY, WAYLAND_DISPLAY })) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
     delete process.env.THREEJAM_CANARY
   }
 })
